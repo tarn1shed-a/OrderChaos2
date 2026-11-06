@@ -104,9 +104,13 @@ python3 -m venv .venv
 # APK 分析额外依赖 Androguard
 .venv/bin/python -m pip install -r tools/requirements-analysis.txt
 .venv/bin/python tools/analyze_apk.py /path/to/game.apk
+
+# 已确认构建的 ARM64 原生资源读取函数：静态反汇编，不执行 APK
+.venv/bin/python -m pip install -r tools/requirements-native.txt
+.venv/bin/python tools/analyze_native_resources.py /path/to/game.apk
 ```
 
-转换入口按需校验和提取 15,119 个文件；当前样例生成 20 个模型、23 张 PNG 和一块地图。原始包不修改，生成文件保存在被忽略的本地目录。
+转换入口校验原始配套索引，使用恢复的名称查找规则提取当前样例必需的 55 个源文件，生成 20 个模型、23 张 PNG 和一块地图。原始包不修改，生成文件保存在被忽略的本地目录。
 
 ## 文档与当前验证
 

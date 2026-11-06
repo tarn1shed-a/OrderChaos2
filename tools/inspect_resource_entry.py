@@ -32,14 +32,16 @@ def index_records(path):
 
 def index_checks(record, header_offset, entry):
     """Only test fields whose interpretation can be checked against the pack."""
-    _, start, _, packed, size, compressed, reserved = record
+    name_hash, start, name_offset, packed, size, compressed, flags = record
     return {
+        'native_name_hash_matches': name_hash == entry['name_hash'],
+        'name_table_offset_matches': name_offset == entry['name_offset'],
         'local_header_offset_matches': start == header_offset,
         'data_offset_matches': start + (packed & 0xffff) == entry['offset'],
         'compression_method_matches': packed >> 16 == entry['method'],
         'uncompressed_length_matches': size == entry['size'],
         'compressed_length_matches': compressed == entry['compressed'],
-        'last_field_is_zero': reserved == 0,
+        'zip_flags_match': flags == entry['flags'],
     }
 
 
@@ -101,8 +103,9 @@ def inspect_entry(source, pack_name, entry_name):
                 'compression_method_high_16_bits': record[3] >> 16,
                 'uncompressed_length': record[4],
                 'compressed_length': record[5],
-                'unknown_field_0': record[0],
-                'unknown_field_2': record[2],
+                'native_name_hash': record[0],
+                'name_table_offset': record[2],
+                'zip_flags': record[6],
             },
             'checks': checks,
         })

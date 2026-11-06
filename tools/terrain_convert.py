@@ -104,8 +104,8 @@ def normal_agreement(tile):
     return sum(dots) / len(dots) if dots else 0
 
 
-def convert(world, tile_x, tile_z, side, destination):
-    base = EXTRACTED / 'world' / world
+def convert(world, tile_x, tile_z, side, destination, source=EXTRACTED):
+    base = Path(source) / 'world' / world
     tiles = {}
     for dz in range(side):
         for dx in range(side):

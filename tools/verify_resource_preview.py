@@ -65,10 +65,15 @@ def verify(output=OUT):
     for url in m['textures'].values():
         with Image.open(asset(url, output)) as image: image.verify()
     effects = json.loads(asset(m['effects']['url'], output).read_text())
-    assert effects['format'] == 'oc2-combat-effects-v1'
+    assert effects['format'] == 'oc2-combat-effects-v2'
     assert set(effects['effects']) == {'fireCast','fireMissile','fireHit','frostHit'}
     for effect in effects['effects'].values():
-        assert effect['format'] == 'beff9-texture-dependencies-v1'
+        assert effect['format'] == 'beff9-particle-system-v2'
+        assert effect['verification']['completePayload']
+        assert effect['verification']['fileSize'] == effect['verification']['bytesConsumed']
+        for emitter in effect['emitters']:
+            assert emitter['particle']['material']['id'] == emitter['particle']['materialId']
+            assert emitter['particle']['texture'] in effect['textureURLs']
         assert len(effect['sourceSHA256']) == 64
         assert set(effect['textureURLs']) == set(effect['textures'])
         for name, url in effect['textureURLs'].items(): assert m['textures'][name] == url and asset(url, output).is_file()

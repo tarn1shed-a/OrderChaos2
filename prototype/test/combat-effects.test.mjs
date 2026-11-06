@@ -2,24 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createCombatEffects } from '../public/combat-effects.js';
+import {emitter,definition}from './particle-fixture.mjs';
 
 function fixture() {
-  const names={fireCast:['fire_015','fx_sun'],fireMissile:['jpg_s_fire012e','blur_a'],fireHit:['fire03_xulie4x4','fx_stick'],frostHit:['quan_02','ray045','fx_iceblock01','ice06']};
-  const effects={},textures=new Map();
-  for(const [key,list]of Object.entries(names)) {
-    effects[key]={durationMs:key==='fireHit'?766:key==='frostHit'?633:null,textures:[],textureURLs:{}};
-    for(const name of list){const path=`texture/${name}.tga`,url=`/assets/${name}.png`;effects[key].textures.push(path);effects[key].textureURLs[path]=url;textures.set(url,new THREE.Texture());}
+  const effects={},textures=new Map([['/assets/test.png',new THREE.Texture()]]);
+  for(const key of ['fireCast','fireMissile','fireHit','frostHit']) {
+    const e=emitter();if(key.startsWith('fire')&&!key.endsWith('Hit'))e.durationFrames=-1;
+    effects[key]={...definition([e]),durationMs:key==='fireHit'?766:key==='frostHit'?633:null};
   }
   const scene=new THREE.Scene(),views=new Map(['p','wolf'].map((id,index)=>{
     const root=new THREE.Group(),body=new THREE.Group();root.position.set(index*4,0,index*3);root.add(body);scene.add(root);
     return[id,{root,body,alive:true}];
   }));
-  const renderer=createCombatEffects(THREE,{scene,data:{format:'oc2-combat-effects-v1',effects},textures,findView:id=>views.get(id),position:(x,y)=>new THREE.Vector3(x,0,y)});
+  const camera=new THREE.PerspectiveCamera();
+  const renderer=createCombatEffects(THREE,{scene,camera,data:{format:'oc2-combat-effects-v2',effects},textures,findView:id=>views.get(id),position:(x,y)=>new THREE.Vector3(x,0,y)});
   return {renderer,scene,views};
 }
 const cast={id:'p:1',skillId:'fireball',startedAt:1000,releaseAt:1500,impactAt:1850,origin:{x:0,y:0},target:{x:4,y:3},targetId:'wolf'};
 const event={action:'skill-cast',attackerId:'p',targetId:'wolf',serverTime:1000,cast};
-function transforms(scene){const out=[];scene.traverse(n=>{if(n.isSprite||n.isMesh)out.push([n.visible,n.position.toArray(),n.scale.toArray(),n.material.opacity]);});return out;}
+function transforms(scene){const out=[];scene.traverse(n=>{if(n.isSprite||n.isMesh)out.push([n.visible,n.position.toArray(),n.scale.toArray(),n.material.uniforms?.primary?.value.toArray()]);});return out;}
 
 test('two views sample confirmed source-texture effects on the same timeline without replaying snapshots',()=>{
   const a=fixture(),b=fixture();
@@ -45,11 +46,12 @@ test('cancellation and death remove casts, impact uses confirmed coordinates, an
   renderer.handle({action:'player-hit',targetId:'p',targetHp:0},1250);assert.equal(renderer.state().active,0);
   renderer.handle({action:'skill-hit',skillId:'fireball',castId:'p:3',serverTime:2000,position:{x:8,y:9}},2000);
   renderer.update(2383);
-  const effect=scene.children.find(n=>n.name==='combat-effect:fireHit');assert(effect);assert.deepEqual(effect.position.toArray(),[8,0,9]);
-  const atlas=effect.children[0].material.map;assert.equal(atlas.repeat.x,.25);assert(atlas.offset.x>=0&&atlas.offset.y>=0);
-  let materialsDisposed=0,mapDisposed=0;for(const node of effect.children)node.material.addEventListener('dispose',()=>materialsDisposed++);
-  atlas.addEventListener('dispose',()=>mapDisposed++);
-  renderer.update(2766);assert.equal(renderer.state().active,0);assert.equal(materialsDisposed,2);assert.equal(mapDisposed,1);
+  const effect=scene.children.find(n=>n.name==='combat-effect:fireHit');assert(effect);
+  const meshes=[];effect.traverse(n=>{if(n.isMesh)meshes.push(n);});assert(meshes.length>0);
+  assert.deepEqual(meshes[0].position.toArray(),[8,.54,9]);
+  assert.equal(meshes[0].material.uniforms.rect.value.x,0);
+  let materialsDisposed=0;for(const node of meshes)node.material.addEventListener('dispose',()=>materialsDisposed++);
+  renderer.update(2766);assert.equal(renderer.state().active,0);assert.equal(materialsDisposed,meshes.length);
   renderer.dispose();
 });
 

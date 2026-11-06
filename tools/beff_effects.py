@@ -1,12 +1,8 @@
-"""Recover the verified v9 BEFF header and 2D texture dependency table.
-
-This is deliberately not an implementation of Gameloft's particle runtime.
-Emitter curves, material/shader flags and attachment transforms remain opaque.
-The web renderer can reuse these original textures with its own choreography.
-"""
+"""Recover v9 BEFF dependencies and complete emitter/particle parameter streams."""
 import hashlib
 import struct
 from pathlib import Path, PurePosixPath
+from beff_particles import decode_particle_payload
 
 
 EFFECT_SOURCES = {
@@ -55,21 +51,25 @@ def decode_effect(data):
         raise ValueError('Unsupported BEFF dependency table')
     if at >= len(data):
         raise ValueError('Missing BEFF emitter payload')
+    particles = decode_particle_payload(data, at, names, struct.unpack_from('<I',data,20)[0])
     return {
-        'format': 'beff9-texture-dependencies-v1',
+        'format': 'beff9-particle-system-v2',
+        'headerWords': list(struct.unpack_from('<12I',data)),
         'sourceSHA256': hashlib.sha256(data).hexdigest(),
         'durationMs': None if duration == 0xffffffff else duration,
         'loop': duration == 0xffffffff,
+        'emitters':particles['emitters'], 'sampleRate':30, 'keySampling':particles['keySampling'],
         'textures': ['texture/' + name for name in names if name != '.'],
         'verification': {
             'version': version, 'dependencyCount': count,
-            'textureTableEnd': at, 'opaquePayloadBytes': len(data) - at,
+            'textureTableEnd': at, 'opaquePayloadBytes': 0,
+            **particles['verification'],
             'durationFieldOffset': 24,
-            'durationInterpretation': 'Finite milliseconds or 0xffffffff unbounded header lifetime; individual emitter timing is not decoded.',
+            'durationInterpretation': 'Finite milliseconds or 0xffffffff unbounded effect; emitter and particle times use 30 FPS frame counts.',
         },
         'limitations': [
-            'Emitter curves, shader/material flags, UV animation rate and attachment transforms are not recovered.',
-            'Web particle trajectories, scale and blend choreography are local adaptations, not the original effect runtime.',
+            'Native random sequence, complete shaders/HDR and original skill attachment transforms are not reproduced.',
+            'Unidentified header words and auxiliary curves are retained without inventing semantics.',
         ],
     }
 

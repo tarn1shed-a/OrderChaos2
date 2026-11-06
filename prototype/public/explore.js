@@ -237,7 +237,7 @@ async function init() {
     const effectData=await json(assets.effects.url),effectTextures=new Map();
     const effectURLs=[...new Set(Object.values(effectData.effects).flatMap(effect=>Object.values(effect.textureURLs)))];
     await Promise.all(effectURLs.map(async url=>effectTextures.set(url,await texture(url))));
-    combatEffects=createCombatEffects(THREE,{scene,data:effectData,textures:effectTextures,findView:id=>avatars.get(id)||monsterViews.get(id),position:localPosition});
+    combatEffects=createCombatEffects(THREE,{scene,camera,data:effectData,textures:effectTextures,findView:id=>avatars.get(id)||monsterViews.get(id),position:localPosition});
     // Only explicit converted scene references are served, never raw game data.
     const staticModels = new Map();
     for (const item of assets.scenery || []) {
@@ -467,6 +467,7 @@ function draw(now) {
   if(Date.now()>feedbackUntil)$('combat-feedback').classList.remove('combat-flash');
   combatEffects?.update(Date.now()+serverOffset);
   if(combatEffects)canvas.dataset.effects=combatEffects.state().types.join(',');
+  if(combatEffects)canvas.dataset.particles=String(combatEffects.particleCount());
   renderer.render(scene,camera); requestAnimationFrame(draw);
 }
 init();

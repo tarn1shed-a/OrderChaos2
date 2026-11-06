@@ -44,7 +44,7 @@ def verify(output=OUT):
                 assert all(math.isfinite(weight) and 0 <= weight <= 1 for weight in skin['skinWeights'])
                 assert all(abs(sum(skin['skinWeights'][at:at+4])-1)<1e-5 for at in range(0,n*4,4))
                 assert skin['verification']['maximumRestBindShapeError'] < 1e-5
-            assert {clip['name'] for clip in data['clips']} == {'idle','walk_forward'}
+            assert {clip['name'] for clip in data['clips']} == {'idle','walk_forward','attack','hurt','death'}
             for clip in data['clips']:
                 for track in clip['tracks']:
                     components = 4 if track['type'] == 'quaternion' else 3

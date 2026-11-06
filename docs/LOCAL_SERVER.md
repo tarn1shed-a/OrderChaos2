@@ -49,7 +49,7 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
 
 更新时先停止服务，拉取匹配版本的代码、更新依赖，并另行同步对应版本的 `converted/`，然后启动。不要同步正在变化的整个工作目录，也不要复制 `node_modules/` 或 `.venv/`；Intel 与 Apple Silicon 机器应各自安装依赖。
 
-骨骼动画版本需要新的 `converted/models/forest-elf.json` 与 `manifest.json`，建议整体复制本次构建的 `converted/`。只有旧静态资源时，三维页会明确要求重建；在拥有原始包的开发机执行 `.venv/bin/python tools/build_resource_preview.py` 即可，再把产物单独传给正式服。角色存档不随资源重建改变。
+战斗动画版本需要新的 `converted/models/forest-elf.json`、`wolf.json` 与 `manifest.json`，建议整体复制本次构建的 `converted/`。只有旧资源时，三维页会明确要求重建；在拥有原始包的开发机执行 `.venv/bin/python tools/build_resource_preview.py` 即可，再把产物单独传给正式服。更新代码与资源后重启服务，让战斗消息和快照包含动作时间。角色存档不随资源重建改变。
 
 当前角色进度保存在根目录 `runtime/characters.json`，始终不进 Git。奖励立即保存，移动定期保存，离开和正常关闭服务会保存最新状态。异常强制断电时，尚未落盘的短时间移动可能丢失；正常关闭请使用 Control-C。
 

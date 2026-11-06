@@ -18,11 +18,11 @@ export class CombatRoom {
     if (!walkable(spawn.x, spawn.y, world)) spawn = { ...world.spawn };
     this.spawn = spawn;
     this.monster = { id: `${key}:wolf-1`, kind: 'wolf', name: '营地野狼', ...spawn, hp: COMBAT.monsterHp, maxHp: COMBAT.monsterHp,
-      alive: true, respawnAt: 0, attackAt: 0 };
+      alive: true, respawnAt: 0, attackAt: 0, animation: { attackAt: null, hitAt: null, deathAt: null } };
     this.contributors = new Set();
   }
 
-  snapshot() { return [{ ...this.monster }]; }
+  snapshot() { return [{ ...this.monster, animation: { ...this.monster.animation } }]; }
 
   attack(ws, targetId, now) {
     const m = this.monster;
@@ -32,9 +32,13 @@ export class CombatRoom {
     if (Math.hypot(ws.player.x - m.x, ws.player.y - m.y) > this.range) return this.notice(ws, '距离太远，先靠近野狼');
     if (now - ws.player.attackAt < COMBAT.playerCooldownMs) return this.notice(ws, '攻击尚在冷却中');
     ws.player.attackAt = now;
+    ws.player.animation ||= { attackAt: null, hitAt: null, deathAt: null };
+    ws.player.animation.attackAt = now;
     this.contributors.add(ws.player.id);
     const damage = Math.min(COMBAT.playerDamage, m.hp); m.hp -= damage;
-    this.emit({ type: 'combat', action: 'hit', attackerId: ws.player.id, targetId: m.id, damage });
+    m.animation.hitAt = now;
+    if (m.hp <= 0) m.animation.deathAt = now;
+    this.emit({ type: 'combat', action: 'hit', attackerId: ws.player.id, targetId: m.id, damage, targetHp: m.hp, serverTime: now });
     if (m.hp > 0) return;
 
     // Mark death before awarding. Further messages cannot perform a second living→dead transition.
@@ -51,7 +55,7 @@ export class CombatRoom {
       this.changed(recipient, true);
       this.notice(recipient, `击败野狼：经验 +30，金币 +10，狼皮 +1${c.level > oldLevel ? `；升至 ${c.level} 级，生命恢复` : ''}`);
     }
-    this.emit({ type: 'combat', action: 'kill', attackerId: ws.player.id, targetId: m.id, rewards: { ...COMBAT.reward } });
+    this.emit({ type: 'combat', action: 'kill', attackerId: ws.player.id, targetId: m.id, targetHp: 0, serverTime: now, rewards: { ...COMBAT.reward } });
     this.contributors.clear();
   }
 
@@ -60,15 +64,17 @@ export class CombatRoom {
       if (ws.player.hp <= 0 && ws.player.deadUntil && now >= ws.player.deadUntil) {
         ws.character.hp = ws.character.maxHp; syncPlayerStats(ws);
         ws.player.x = this.world.spawn.x; ws.player.y = this.world.spawn.y; ws.player.deadUntil = 0;
+        ws.player.animation = { attackAt: null, hitAt: null, deathAt: null };
         ws.input = { x: 0, y: 0 }; this.changed(ws, true);
-        this.emit({ type: 'combat', action: 'respawn', attackerId: null, targetId: ws.player.id });
+        this.emit({ type: 'combat', action: 'respawn', attackerId: null, targetId: ws.player.id, targetHp: ws.player.hp, serverTime: now });
       }
     }
     const m = this.monster;
     if (!m.alive) {
       if (now >= m.respawnAt) {
-        Object.assign(m, this.spawn, { hp: m.maxHp, alive: true, respawnAt: 0, attackAt: 0 }); this.contributors.clear();
-        this.emit({ type: 'combat', action: 'respawn', attackerId: null, targetId: m.id });
+        Object.assign(m, this.spawn, { hp: m.maxHp, alive: true, respawnAt: 0, attackAt: 0,
+          animation: { attackAt: null, hitAt: null, deathAt: null } }); this.contributors.clear();
+        this.emit({ type: 'combat', action: 'respawn', attackerId: null, targetId: m.id, targetHp: m.hp, serverTime: now });
       }
       return;
     }
@@ -89,11 +95,15 @@ export class CombatRoom {
     }
     if (now - m.attackAt < COMBAT.monsterCooldownMs) return;
     m.attackAt = now;
+    m.animation.attackAt = now;
     const victim = target.ws;
     const damage = Math.min(victim.character.hp, COMBAT.monsterDamage);
     victim.character.hp -= damage; syncPlayerStats(victim);
+    victim.player.animation ||= { attackAt: null, hitAt: null, deathAt: null };
+    victim.player.animation.hitAt = now;
+    if (victim.player.hp <= 0) victim.player.animation.deathAt = now;
     if (victim.player.hp <= 0) { victim.player.deadUntil = now + COMBAT.playerRespawnMs; victim.input = { x: 0, y: 0 }; }
     this.changed(victim, victim.player.hp <= 0);
-    this.emit({ type: 'combat', action: 'player-hit', attackerId: m.id, targetId: victim.player.id, damage });
+    this.emit({ type: 'combat', action: 'player-hit', attackerId: m.id, targetId: victim.player.id, damage, targetHp: victim.player.hp, serverTime: now });
   }
 }

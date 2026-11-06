@@ -114,3 +114,29 @@ test('dead, disconnected and nonparticipating characters do not receive a kill r
   assert.equal(disconnected.character.gold, 0);
   assert.equal(winner.character.gold, 10);
 });
+
+test('only accepted server results publish animation clocks, fatal HP and fresh life metadata', () => {
+  const a=adventurer('attacker'),b=adventurer('fragile',{hp:6});
+  const {room,events}=encounter(new Map([[a.player.id,a],[b.player.id,b]]));
+  room.attack(a,room.monster.id,1000);
+  assert.equal(a.player.animation.attackAt,1000);
+  assert.equal(room.monster.animation.hitAt,1000);
+  assert.equal(events.at(-1).targetHp,40);assert.equal(events.at(-1).serverTime,1000);
+  room.attack(a,room.monster.id,1001);
+  assert.equal(a.player.animation.attackAt,1000,'Rejected cooldown attempts do not restart the animation');
+  const oldSnapshot=room.snapshot()[0];
+  room.attack(b,room.monster.id,1750);
+  assert.equal(oldSnapshot.animation.hitAt,1000,'A captured public snapshot cannot be mutated by later hits');
+  a.player.x=room.monster.x+200;
+  room.tick(2000,.05);
+  const fatal=events.find(event=>event.action==='player-hit'&&event.targetId===b.player.id);
+  assert.equal(fatal.targetHp,0);assert.equal(fatal.serverTime,2000);assert.equal(b.player.animation.deathAt,2000);
+  a.player.x=room.monster.x;a.player.y=room.monster.y;
+  room.attack(a,room.monster.id,2500);
+  assert.equal(room.monster.animation.deathAt,2500);
+  assert.equal(events.find(event=>event.action==='kill').serverTime,2500);
+  room.tick(6000,.05);
+  assert.deepEqual(b.player.animation,{attackAt:null,hitAt:null,deathAt:null});
+  room.tick(10500,.05);
+  assert.deepEqual(room.monster.animation,{attackAt:null,hitAt:null,deathAt:null});
+});

@@ -2,7 +2,8 @@ import * as THREE from '/vendor/three.module.js';
 import { RESOURCE_WORLD } from './world.js';
 import { sampleHeight } from './heightfield.js';
 import { webSocketEndpoint } from './network.js';
-import { createCharacterFactory, updateCharacterAnimation, disposeCharacterAnimation, snapshotMotion } from './character-animation.js';
+import { createCharacterFactory, updateCharacterAnimation, disposeCharacterAnimation, snapshotMotion, syncCharacterCombat, characterAnimationState } from './character-animation.js';
+import { applyCombatAnimations } from './combat-animation.js';
 import { restoreCredentials, rememberCharacter, lastCharacterName, characterSessionWarning } from './character-session.js';
 
 const $ = id => document.getElementById(id);
@@ -13,7 +14,7 @@ $('name').value ||= lastCharacterName();
 let renderer, scene, camera, terrainMeshes = [], terrainData, mapBounds, origin, heightGrid;
 let assets, modelTemplate, ready = false, world = RESOURCE_WORLD, snapshot = [], selfId, socket, connected = false;
 let wolfTemplate, monsterSnapshot = [], selectedMonsterId = null, character = null, nextAttackAt = 0, feedbackUntil = 0, saveAt = null;
-let attackRange = 32, cooldownMs = 700, serverOffset = 0;
+let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset = 0;
 const monsterViews = new Map();
 let target = null, keys = new Set(), avatars = new Map(), rosterSignature = '', generation = 0, retryTimer, manualExit = false;
 let azimuth = .65, elevation = .58, distance = 24, previous = performance.now(), pointer = null;
@@ -81,7 +82,7 @@ function attack() {
   canvas.focus({preventScroll:true});
   // This is only button feedback. Server cooldown and range decide the hit.
   nextAttackAt = Date.now() + cooldownMs;
-  $('attack').firstChild.textContent = '挥击中… ';
+  $('attack').firstChild.textContent = '攻击请求中… ';
   setTimeout(() => { $('attack').firstChild.textContent = '攻击野狼 '; },cooldownMs);
 }
 function prepareFighter(body) {
@@ -91,10 +92,6 @@ function prepareFighter(body) {
   });
 }
 function animateFighter(view, now) {
-  const swing=Math.max(0,(view.swingUntil||0)-now)/250;
-  const lunge=Math.sin(swing*Math.PI)*.28;
-  view.body.position.x=Math.sin(view.body.rotation.y)*lunge;
-  view.body.position.z=Math.cos(view.body.rotation.y)*lunge;
   view.body.traverse(obj=>{
     if(!obj.isMesh)return;
     for(const m of Array.isArray(obj.material)?obj.material:[obj.material]){
@@ -103,9 +100,8 @@ function animateFighter(view, now) {
   });
 }
 function handleCombat(event) {
-  const actor = avatars.get(event.attackerId) || monsterViews.get(event.attackerId);
+  applyCombatAnimations(event, id => avatars.get(id) || monsterViews.get(id), Date.now() + serverOffset);
   const victim = avatars.get(event.targetId) || monsterViews.get(event.targetId);
-  if (actor) actor.swingUntil = Date.now()+250;
   if (victim) victim.hitUntil = Date.now()+220;
   if (event.action === 'hit' && event.attackerId === selfId) flash(`命中 −${event.damage}`);
   else if (event.action === 'player-hit' && event.targetId === selfId) flash(`受到 ${event.damage} 点伤害`);
@@ -137,6 +133,7 @@ async function loadModel(entry) {
     return new THREE.MeshStandardMaterial({ map: tex, color: tex ? 0xffffff : 0xa7bda1, roughness: .93, metalness: 0, side: THREE.DoubleSide, alphaTest: .35 });
   }));
   if (entry.animated) {
+    if (entry.combatAnimations && !['attack','hurt','death'].every(name => data.clips?.some(clip => clip.name === name))) throw new Error('战斗动作资源版本不匹配，请重新构建本地资源');
     const create = createCharacterFactory(THREE, data, materials), root = create();
     modelFactories.set(root, create);
     return root;
@@ -189,7 +186,7 @@ async function init() {
     sun.shadow.mapSize.set(2048, 2048); sun.shadow.camera.left = -100; sun.shadow.camera.right = 100; sun.shadow.camera.top = 100; sun.shadow.camera.bottom = -100; sun.shadow.camera.far = 240; sun.shadow.normalBias = .025;
     scene.add(sun);
     assets = await json('/assets/manifest.json');
-    if (!assets.player?.animated) throw new Error('角色动画资源需要更新，请重新运行本地资源构建工具');
+    if (!assets.player?.combatAnimations) throw new Error('战斗动画资源需要更新，请重新运行本地资源构建工具');
     terrainData = await json(assets.map.url);
     mapBounds = [terrainData.bounds.min, terrainData.bounds.max];
     origin = new THREE.Vector3((mapBounds[0][0] + mapBounds[1][0]) / 2, mapBounds[0][1], (mapBounds[0][2] + mapBounds[1][2]) / 2);
@@ -208,7 +205,7 @@ async function init() {
       model.position.set(x - origin.x, heightAt(x, z) - origin.y, z - origin.z); model.rotation.y = -.8;
       scene.add(model);
     }
-    if (!wolfTemplate) throw new Error('转换资源中缺少野狼模型，无法开启战斗');
+    if (!wolfTemplate || !modelFactories.has(wolfTemplate)) throw new Error('野狼战斗动画缺失，请重新构建本地资源');
     // Only explicit converted scene references are served, never raw game data.
     const staticModels = new Map();
     for (const item of assets.scenery || []) {
@@ -256,35 +253,39 @@ function syncAvatars(serverTime = Date.now()) {
       const label = document.createElement('div'); label.className = 'player-label' + (p.id === selfId ? ' mine' : '');
       const name = document.createElement('span'), health = document.createElement('span'); health.className = 'label-health'; name.textContent = p.name + (p.id === selfId ? ' · 你' : ''); label.append(name,health); $('labels').append(label);
       avatars.set(p.id, { root, label, health, target: localPosition(p.x, p.y), body,
-        lastState: null, lastStateAt: serverTime, motion: { moving: false, speed: 0 } });
+        lastState: null, lastStateAt: serverTime, motion: { moving: false, speed: 0 }, attackSeconds: cooldownMs / 1000 });
     }
     const a = avatars.get(p.id); a.target.copy(localPosition(p.x, p.y));
     a.motion = snapshotMotion(a.lastState, p, (serverTime - a.lastStateAt) / 1000, (mapBounds[1][0] - mapBounds[0][0]) / world.width);
     a.lastState = { x: p.x, y: p.y }; a.lastStateAt = serverTime;
-    a.label.dataset.motion = a.motion.moving ? 'walk' : 'idle';
+    syncCharacterCombat(a.body, p, serverTime, a.attackSeconds);
     a.health.textContent = p.hp <= 0 ? '倒下了 · 即将恢复' : `${p.hp ?? 100} / ${p.maxHp ?? 100}`;
     a.label.classList.toggle('dead',p.hp <= 0);
-    a.body.visible = p.hp > 0;
+    a.body.visible = true;
     if (p.id === selfId && character && (p.hp !== character.hp || p.maxHp !== character.maxHp)) updateCharacter({ ...character, hp:p.hp, maxHp:p.maxHp });
   }
 }
 
-function syncMonsters() {
+function syncMonsters(serverTime = Date.now()) {
   const ids = new Set(monsterSnapshot.map(m => m.id));
-  for (const [id, view] of monsterViews) if (!ids.has(id)) { scene.remove(view.root); view.label.remove(); monsterViews.delete(id); }
+  for (const [id, view] of monsterViews) if (!ids.has(id)) { disposeCharacterAnimation(view.body); scene.remove(view.root); view.label.remove(); monsterViews.delete(id); }
   for (const m of monsterSnapshot) {
     if (!monsterViews.has(m.id)) {
-      const root = new THREE.Group(), body = wolfTemplate.clone(true); root.add(body);
+      const root = new THREE.Group(), body = modelFactories.get(wolfTemplate)(); root.add(body);
       prepareFighter(body);
       body.traverse(obj => { if (obj.isMesh) obj.userData.monsterId=m.id; });
       const ring = new THREE.Mesh(new THREE.RingGeometry(.65,.74,40),new THREE.MeshBasicMaterial({color:0xe1b872,side:THREE.DoubleSide,transparent:true,opacity:.8})); ring.rotation.x=-Math.PI/2; ring.position.y=.055;root.add(ring);
       root.position.copy(localPosition(m.x,m.y));scene.add(root);
       const label=document.createElement('div'),name=document.createElement('span'),bar=document.createElement('span'),fill=document.createElement('i'),health=document.createElement('span');
       label.className='monster-label';name.textContent=m.name;bar.className='monster-hp';bar.append(fill);health.className='monster-health';label.append(name,bar,health);$('labels').append(label);
-      monsterViews.set(m.id,{root,body,label,fill,health,ring,target:localPosition(m.x,m.y),alive:m.alive,height:wolfTemplate.userData.height});
+      monsterViews.set(m.id,{root,body,label,fill,health,ring,target:localPosition(m.x,m.y),alive:m.alive,height:wolfTemplate.userData.height,
+        lastState:null,lastStateAt:serverTime,motion:{moving:false,speed:0},attackSeconds:monsterCooldownMs/1000});
     }
-    const view=monsterViews.get(m.id);view.target.copy(localPosition(m.x,m.y));view.alive=m.alive;view.root.visible=m.alive;view.label.hidden=!m.alive;
-    view.fill.style.width=`${Math.max(0,m.hp/m.maxHp*100)}%`;view.health.textContent=`${m.hp} / ${m.maxHp}`;
+    const view=monsterViews.get(m.id);view.target.copy(localPosition(m.x,m.y));view.alive=m.alive;view.root.visible=true;
+    view.motion=snapshotMotion(view.lastState,m,(serverTime-view.lastStateAt)/1000,(mapBounds[1][0]-mapBounds[0][0])/world.width);
+    view.lastState={x:m.x,y:m.y};view.lastStateAt=serverTime;
+    syncCharacterCombat(view.body,m,serverTime,view.attackSeconds);
+    view.fill.style.width=`${Math.max(0,m.hp/m.maxHp*100)}%`;view.health.textContent=m.alive?`${m.hp} / ${m.maxHp}`:'已击败 · 等待重生';
   }
   updateTarget();
 }
@@ -307,6 +308,7 @@ function connect(name, room, retry = false) {
     if (msg.type === 'welcome') {
       $('field-attack').hidden=false;
       attackRange = msg.combat?.attackRange ?? 32; cooldownMs = msg.combat?.cooldownMs ?? 700; nextAttackAt = 0;
+      monsterCooldownMs = msg.combat?.monsterCooldownMs ?? 1000;
       selfId = msg.id; world = msg.world; connected = true; status(`营地 ${msg.room}`, true);
       rememberCharacter(msg.character,msg.resumeToken); updateCharacter(msg.character,msg.savedAt);
       $('join').firstElementChild.textContent = '已进入试炼'; $('invite').disabled = $('second').disabled = false; $('touch-controls').classList.add('active');
@@ -314,7 +316,7 @@ function connect(name, room, retry = false) {
       const restored = msg.restored ? '已恢复角色进度。' : '已创建角色，开始第一次试炼。';
       message(characterSessionWarning() || restored); logEvent(restored);
       const url = new URL(location.href); url.searchParams.set('room', msg.room); history.replaceState(null, '', url); canvas.focus({ preventScroll: true });
-    } else if (msg.type === 'state') { snapshot = msg.players;monsterSnapshot=msg.monsters||[]; if(msg.serverTime)serverOffset=msg.serverTime-Date.now(); updateRoster(); syncAvatars(msg.serverTime || Date.now());syncMonsters(); }
+    } else if (msg.type === 'state') { snapshot = msg.players;monsterSnapshot=msg.monsters||[]; if(msg.serverTime)serverOffset=msg.serverTime-Date.now(); updateRoster(); syncAvatars(msg.serverTime || Date.now());syncMonsters(msg.serverTime || Date.now()); }
     else if (msg.type === 'progress') {
       const before=character; updateCharacter(msg.character,msg.savedAt);
       if(before&&msg.character.gold>before.gold){const gain=`获得 ${msg.character.xp-before.xp} 经验、${msg.character.gold-before.gold} 金币和狼皮`;logEvent(gain,true);flash(gain);}
@@ -394,15 +396,22 @@ function draw(now) {
   const w=viewport.clientWidth,h=viewport.clientHeight;
   if(canvas.width!==Math.round(w*renderer.getPixelRatio())||canvas.height!==Math.round(h*renderer.getPixelRatio())){renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
   for(const [id,a] of avatars){
-    const delta=a.target.clone().sub(a.root.position); if(delta.length()>.01)a.body.rotation.y=Math.atan2(delta.x,delta.z);
+    updateCharacterAnimation(a.body, dt, a.motion, Date.now()+serverOffset);
+    const pose=characterAnimationState(a.body);a.label.dataset.motion=pose?.phase||'idle';
+    const delta=a.target.clone().sub(a.root.position);
+    if(pose?.phase==='attack'&&Number.isFinite(a.combatFacing))a.body.rotation.y=a.combatFacing;
+    else if(!pose?.dead&&delta.length()>.01)a.body.rotation.y=Math.atan2(delta.x,delta.z);
     a.root.position.lerp(a.target,1-Math.exp(-dt*16));
-    updateCharacterAnimation(a.body, dt, a.motion);
     animateFighter(a,Date.now());
     if(id===selfId){const dest=a.root.position.clone().add(new THREE.Vector3(0,1,0));focus.lerp(dest,1-Math.exp(-dt*7));$('position').textContent=`${(a.root.position.x+origin.x).toFixed(1)} E / ${(a.root.position.z+origin.z).toFixed(1)} N`;}
   }
   for(const [id,a] of monsterViews){
-    const delta=a.target.clone().sub(a.root.position);if(delta.length()>.005)a.body.rotation.y=Math.atan2(delta.x,delta.z);
-    a.root.position.lerp(a.target,1-Math.exp(-dt*16));a.ring.visible=id===selectedMonsterId;animateFighter(a,Date.now());
+    updateCharacterAnimation(a.body,dt,a.motion,Date.now()+serverOffset);
+    const pose=characterAnimationState(a.body);a.label.dataset.motion=pose?.phase||'idle';
+    const delta=a.target.clone().sub(a.root.position);
+    if(pose?.phase==='attack'&&Number.isFinite(a.combatFacing))a.body.rotation.y=a.combatFacing;
+    else if(!pose?.dead&&delta.length()>.005)a.body.rotation.y=Math.atan2(delta.x,delta.z);
+    a.root.position.lerp(a.target,1-Math.exp(-dt*16));a.ring.visible=a.alive&&id===selectedMonsterId;animateFighter(a,Date.now());
   }
   camera.position.copy(focus).add(new THREE.Vector3(Math.sin(azimuth)*Math.cos(elevation)*distance,Math.sin(elevation)*distance,Math.cos(azimuth)*Math.cos(elevation)*distance));camera.lookAt(focus);
   // Keep the camera above the heightfield when orbiting hills.
@@ -415,7 +424,7 @@ function draw(now) {
   }
   for(const a of monsterViews.values()){
     const projected=a.root.position.clone().add(new THREE.Vector3(0,a.height+.45,0)).project(camera);
-    a.label.hidden=!a.alive||projected.z>1||projected.z< -1;
+    a.label.hidden=projected.z>1||projected.z< -1;
     a.label.style.left=`${(projected.x*.5+.5)*w}px`;a.label.style.top=`${(-projected.y*.5+.5)*h}px`;
   }
   if(Date.now()>feedbackUntil)$('combat-feedback').classList.remove('combat-flash');

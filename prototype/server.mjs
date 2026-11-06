@@ -110,7 +110,8 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
         ws.player = { id: ws.character.id, name: ws.character.name,
           x: restorePosition ? position.x : world.spawn.x + index * 35,
           y: restorePosition ? position.y : world.spawn.y,
-          color: COLORS[index], deadUntil: 0, attackAt: -COMBAT.playerCooldownMs };
+          color: COLORS[index], deadUntil: 0, attackAt: -COMBAT.playerCooldownMs,
+          animation: { attackAt: null, hitAt: null, deathAt: null } };
         if (ws.character.hp <= 0) ws.character.hp = ws.character.maxHp;
         syncPlayerStats(ws);
         ws.input = { x: 0, y: 0 }; ws.inputAt = Date.now(); ws.roomId = roomKey; ws.world = world;
@@ -120,7 +121,7 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
         store.savePosition(ws.character, scene, ws.player); store.touch(ws.character); store.flush();
         send(ws, { type: 'welcome', id: ws.player.id, room: roomId, scene, world,
           character: characterView(ws.character), resumeToken: identity.resumeToken, restored: identity.restored,
-          savedAt: store.savedAt, combat: { attackRange: combatRooms.get(roomKey).range, cooldownMs: COMBAT.playerCooldownMs } });
+          savedAt: store.savedAt, combat: { attackRange: combatRooms.get(roomKey).range, cooldownMs: COMBAT.playerCooldownMs, monsterCooldownMs: COMBAT.monsterCooldownMs } });
       } else if (msg.type === 'input' && ws.player) {
         if (typeof msg.x !== 'number' || typeof msg.y !== 'number' || !Number.isFinite(msg.x) || !Number.isFinite(msg.y) || Math.abs(msg.x) > 1 || Math.abs(msg.y) > 1) return reject(ws, '无效移动输入');
         ws.input = { x: msg.x, y: msg.y }; ws.inputAt = Date.now();
@@ -158,7 +159,7 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
       }
       const encounter = combatRooms.get(roomKey);
       encounter.tick(clock(), 0.05);
-      const snapshot = { type: 'state', tick, serverTime: clock(), players: [...room.values()].map(ws => ({ ...ws.player })), monsters: encounter.snapshot() };
+      const snapshot = { type: 'state', tick, serverTime: clock(), players: [...room.values()].map(ws => ({ ...ws.player, animation: { ...ws.player.animation } })), monsters: encounter.snapshot() };
       for (const ws of room.values()) send(ws, snapshot);
     }
     } catch (error) { storageFailure(error); }

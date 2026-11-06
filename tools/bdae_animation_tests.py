@@ -174,6 +174,44 @@ class ElfAnimationIntegrationTests(unittest.TestCase):
             for row in rows:
                 self.assertAlmostEqual(sum(value*value for value in row), 1, places=5)
 
+    def test_staff_hit_and_death_source_ranges_are_readable(self):
+        result = BDAEAnimation(ELF).parse([
+            'combat_1h_scepter_npc_01', 'combat_2h_staff_npc_01',
+            'hurt_battle_01', 'die_ground', 'dead_ground'])
+        expected = [.8, 44/30, 14/30, 34/30, 1/30]
+        for clip, duration in zip(result['clips'], expected):
+            self.assertAlmostEqual(clip['duration'], duration)
+            self.assertEqual(len(clip['tracks']), 110)
+            self.assertTrue(all(track['times'][0] == 0 for track in clip['tracks']))
+            self.assertTrue(all(abs(track['times'][-1] - duration) < 1e-8 for track in clip['tracks']))
+        death, dead = result['clips'][-2:]
+        self.assert_death_pose_continuity(death, dead)
+
+    def assert_death_pose_continuity(self, death, dead):
+        death_tracks = {(track['node'], track['type']): track for track in death['tracks']}
+        for track in dead['tracks']:
+            width = 4 if track['type'] == 'quaternion' else 3
+            previous = death_tracks[(track['node'], track['type'])]['values'][-width:]
+            first = track['values'][:width]
+            if width == 4:
+                self.assertGreater(abs(sum(a*b for a, b in zip(previous, first))), .99999)
+            else:
+                # Source clips are authored separately: body offsets differ by
+                # < 0.1 mm, and the wolf's unweighted footstep locator by 9.6 mm.
+                limit = .01 if track['node'] == 'Bip001_Footsteps-node' else 1e-4
+                self.assertLess(max(abs(a-b) for a, b in zip(previous, first)), limit)
+            self.assertLess(max(abs(value - first[index % width])
+                                for index, value in enumerate(track['values'])), 1e-5)
+        root = next(track for track in death['tracks'] if track['node'] == 'Bip01-node' and track['type'] == 'position')
+        self.assertLess(root['values'][-2], root['values'][1] - .7)
+
+    def test_ambiguous_source_basename_requires_full_range_name(self):
+        animation = BDAEAnimation(ELF)
+        with self.assertRaisesRegex(ValueError, 'Expected one animation range'):
+            animation.parse(['combat_2h_polearm_npc_01'])
+        result = animation.parse(['combat_2h_polearm_npc_01-skill_rg_directed_release'])
+        self.assertAlmostEqual(result['clips'][0]['duration'], 20/30)
+
 
 @unittest.skipUnless(WOLF.exists(), 'Requires local original wolf animation bundle')
 class WolfAnimationIntegrationTests(unittest.TestCase):
@@ -183,6 +221,14 @@ class WolfAnimationIntegrationTests(unittest.TestCase):
         self.assertEqual(len(walk['tracks']), 58)
         self.assertAlmostEqual(walk['duration'], 32/30)
         self.assertAlmostEqual(idle['duration'], 50/30)
+
+    def test_wolf_attack_hit_and_death_keep_original_timing(self):
+        result = BDAEAnimation(WOLF).parse(['combat_01', 'hurt_battle_01', 'die_ground', 'dead_ground'])
+        for clip, duration in zip(result['clips'], [38/30, .9, 1, 1]):
+            self.assertAlmostEqual(clip['duration'], duration)
+            self.assertEqual(len(clip['tracks']), 58)
+        death, dead = result['clips'][-2:]
+        ElfAnimationIntegrationTests.assert_death_pose_continuity(self, death, dead)
 
 
 if __name__ == '__main__':

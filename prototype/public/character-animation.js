@@ -32,6 +32,9 @@ export function createCharacterFactory(THREE, data, materials) {
     return new THREE.VectorKeyframeTrack(name, track.times, track.values);
   })));
   if (!clips.some(clip => clip.name === 'idle') || !clips.some(clip => clip.name === 'walk_forward')) throw new Error('角色缺少待机或行走片段');
+  const combatClips = ['attack','hurt','death'].map(name => clips.find(clip => clip.name === name));
+  if (combatClips.some(Boolean) && !combatClips.every(Boolean)) throw new Error('角色战斗动画不完整，请重新构建本地资源');
+  const hurtClip = combatClips[1] ? THREE.AnimationUtils.makeClipAdditive(combatClips[1].clone()) : null;
 
   return function createCharacter() {
     const root = new THREE.Group(), group = new THREE.Group();
@@ -67,30 +70,111 @@ export function createCharacterFactory(THREE, data, materials) {
     const idle = mixer.clipAction(clips.find(clip => clip.name === 'idle')).play();
     const walk = mixer.clipAction(clips.find(clip => clip.name === 'walk_forward')).play();
     idle.setEffectiveWeight(1); walk.setEffectiveWeight(0);
-    controllers.set(root, { mixer, idle, walk, nodes, skeletons, weight: 0, moving: false });
+    const shots = {};
+    if (combatClips.every(Boolean)) for (const clip of [combatClips[0],hurtClip,combatClips[2]]) {
+      const action = mixer.clipAction(clip).setLoop(THREE.LoopOnce, 1).play();
+      action.clampWhenFinished = true; action.paused = true; action.setEffectiveWeight(0);
+      shots[clip.name] = action;
+    }
+    controllers.set(root, { mixer, idle, walk, nodes, skeletons, shots, weight: 0, moving: false,
+      now: 0, phase: 'idle', dead: false, lifeSince: -Infinity, lastSnapshotAt: -Infinity,
+      attackAt: -Infinity, hitAt: -Infinity, deathAt: null, attackSeconds: .7, attackWeight: 0, hurtWeight: 0 });
     mixer.update(0); root.updateMatrixWorld(true);
     return root;
   };
 }
 
-export function updateCharacterAnimation(root, seconds, motion) {
+export function playCharacterAction(root, kind, { at, now, attackSeconds } = {}) {
+  const c = controllers.get(root);
+  if (!c?.shots[kind]) return false;
+  now = Number.isFinite(now) ? now : c.now;
+  at = Number.isFinite(at) ? at : now;
+  if (at < c.lifeSince) return false;
+  c.now = Math.max(c.now, now);
+  if (kind === 'death') {
+    if (c.dead) return false;
+    c.dead = true; c.deathAt = at; c.attackWeight = 0; c.hurtWeight = 0;
+    return true;
+  }
+  if (c.dead) return false;
+  const field = kind === 'attack' ? 'attackAt' : 'hitAt';
+  if (at <= c[field]) return false;
+  c[field] = at;
+  if (kind === 'attack' && Number.isFinite(attackSeconds) && attackSeconds > 0) c.attackSeconds = attackSeconds;
+  return true;
+}
+
+export function respawnCharacterAnimation(root, { at, now } = {}) {
+  const c = controllers.get(root);
+  if (!c) return;
+  now = Number.isFinite(now) ? now : c.now;
+  at = Number.isFinite(at) ? at : now;
+  if (at <= c.lifeSince) return;
+  c.dead = false; c.deathAt = null; c.lifeSince = at;
+  c.attackAt = c.hitAt = -Infinity; c.attackWeight = c.hurtWeight = c.weight = 0;
+  for (const action of Object.values(c.shots)) { action.time = 0; action.setEffectiveWeight(0); }
+  c.idle.time = 0; c.walk.setEffectiveWeight(0); c.idle.setEffectiveWeight(1);
+  c.phase = 'idle'; c.now = Math.max(c.now, now); c.mixer.update(0);
+}
+
+export function syncCharacterCombat(root, snapshot, serverTime, attackSeconds) {
+  const c = controllers.get(root);
+  if (!c || !Number.isFinite(serverTime) || serverTime < c.lastSnapshotAt || serverTime < c.lifeSince) return;
+  c.lastSnapshotAt = serverTime; c.now = Math.max(c.now, serverTime);
+  const alive = snapshot.alive ?? snapshot.hp > 0;
+  const animation = snapshot.animation || {};
+  if (c.dead && alive && serverTime < c.deathAt) return;
+  if (!alive) {
+    playCharacterAction(root, 'death', { at: animation.deathAt, now: serverTime });
+    return;
+  }
+  if (c.dead) respawnCharacterAnimation(root, { at: serverTime, now: serverTime });
+  if (Number.isFinite(animation.attackAt)) playCharacterAction(root, 'attack', { at: animation.attackAt, now: serverTime, attackSeconds });
+  if (Number.isFinite(animation.hitAt)) playCharacterAction(root, 'hurt', { at: animation.hitAt, now: serverTime });
+}
+
+export function updateCharacterAnimation(root, seconds, motion, serverTime) {
   const controller = controllers.get(root);
   if (!controller) return;
   const dt = Math.max(0, Math.min(seconds, .1));
-  controller.moving = Boolean(motion?.moving);
+  controller.now = Number.isFinite(serverTime) ? Math.max(controller.now, serverTime) : controller.now + dt * 1000;
+  controller.moving = !controller.dead && Boolean(motion?.moving);
   const goal = controller.moving ? 1 : 0;
   controller.weight += (goal - controller.weight) * (1 - Math.exp(-dt * 20));
   if (Math.abs(goal - controller.weight) < 0.0001) controller.weight = goal;
-  controller.idle.setEffectiveWeight(1 - controller.weight);
-  controller.walk.setEffectiveWeight(controller.weight);
+  const c = controller, { attack, hurt, death } = c.shots;
+  const attackAge = (c.now - c.attackAt) / 1000;
+  const attacking = !c.dead && attack && attackAge >= 0 && attackAge < c.attackSeconds;
+  c.attackWeight += ((attacking ? 1 : 0) - c.attackWeight) * (1 - Math.exp(-dt * 30));
+  if (c.dead || c.attackWeight < .0001) c.attackWeight = 0;
+  if (attack) {
+    attack.time = attack.getClip().duration * Math.min(1, Math.max(0, attackAge / c.attackSeconds));
+    attack.setEffectiveWeight(c.attackWeight);
+  }
+  const hurtAge = (c.now - c.hitAt) / 1000;
+  const hurtDuration = hurt?.getClip().duration || 0;
+  const hurting = !c.dead && hurt && hurtAge >= 0 && hurtAge < hurtDuration;
+  c.hurtWeight = hurting ? Math.max(0, Math.min(1, hurtAge / .06, (hurtDuration - hurtAge) / .09)) : 0;
+  if (hurt) { hurt.time = Math.max(0, Math.min(hurtDuration, hurtAge)); hurt.setEffectiveWeight(c.hurtWeight); }
+  if (death) {
+    const age = c.dead ? Math.max(0, (c.now - c.deathAt) / 1000) : 0;
+    death.time = Math.min(death.getClip().duration, age); death.setEffectiveWeight(c.dead ? 1 : 0);
+    c.phase = c.dead ? (age < death.getClip().duration ? 'death' : 'dead') : attacking ? 'attack' : hurting ? 'hurt' : c.moving ? 'walk' : 'idle';
+  } else c.phase = c.moving ? 'walk' : 'idle';
+  const baseWeight = c.dead ? 0 : 1 - c.attackWeight;
+  controller.idle.setEffectiveWeight((1 - controller.weight) * baseWeight);
+  controller.walk.setEffectiveWeight(controller.weight * baseWeight);
   controller.walk.setEffectiveTimeScale(controller.moving ? Math.max(.5, Math.min(1.8, (motion.speed || 4.8) / 4.8)) : 1);
   controller.mixer.update(dt);
 }
 
 export function characterAnimationState(root) {
   const controller = controllers.get(root);
-  return controller ? { moving: controller.moving, walkWeight: controller.weight,
+  return controller ? { moving: controller.moving, walkWeight: controller.walk.getEffectiveWeight(),
     idleTime: controller.idle.time, walkTime: controller.walk.time,
+    phase: controller.phase, dead: controller.dead, attackWeight: controller.attackWeight,
+    hurtWeight: controller.hurtWeight, attackTime: controller.shots.attack?.time,
+    deathTime: controller.shots.death?.time, combatEnabled: Boolean(controller.shots.death),
     bones: controller.nodes, skeletons: controller.skeletons } : null;
 }
 

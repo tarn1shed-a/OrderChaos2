@@ -68,11 +68,12 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         except Exception as e:
             warnings.append({'texture':path,'error':str(e)})
             return None
-    def model(path, key, animated=False):
+    def model(path, key, animated=False, profile='player'):
         if animated:
-            animation_path = 'model/npc/character/elf/female/anim/animations.bdae'
-            animation_model = 'model/npc/character/elf/female/oc2_elf_f_body_01.bdae'
-            result = convert_character(extract(path), extract(animation_path), extract(animation_model))
+            animation_path = ('model/npc/creature/beast/wolf/anim/animations.bdae' if profile == 'wolf'
+                              else 'model/npc/character/elf/female/anim/animations.bdae')
+            animation_model = path if profile == 'wolf' else 'model/npc/character/elf/female/oc2_elf_f_body_01.bdae'
+            result = convert_character(extract(path), extract(animation_path), extract(animation_model), profile=profile)
             result['animationBinding']['source'] = animation_path
             result['animationBinding']['restSource'] = animation_model
         else:
@@ -87,6 +88,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         record = {'url':f'/assets/models/{key}.json','model':path,'vertices':sum(m['vertexCount'] for m in result['meshes']),'triangles':sum(m['triangleCount'] for m in result['meshes'])}
         if animated:
             record['animated'] = True
+            record['combatAnimations'] = True
         models[key] = record
         return record
     player = model('model/npc/creature/humanoid/forest_elf/forest_elf.bdae','forest-elf', animated=True)
@@ -95,7 +97,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         # Paths come from the observed archive index; reject ambiguity rather than guess.
         candidates = [e['path'] for e in entries if e['pack']=='res_npc.bin' and Path(e['path']).name==name+'.bdae']
         if len(candidates)!=1: raise ValueError(f'Ambiguous sample model {name}: {candidates}')
-        exhibits.append(model(candidates[0],name))
+        exhibits.append(model(candidates[0],name,animated=name=='wolf',profile='wolf' if name=='wolf' else 'player'))
     model('model/npc/character/human/male/oc2_human_m_body_01.bdae','human-male')
     grouped = collections.defaultdict(list)
     for instance in terrain['instances']:grouped[instance['model']].append(instance)

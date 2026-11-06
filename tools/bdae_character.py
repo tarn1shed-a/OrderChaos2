@@ -1,9 +1,16 @@
-"""Join recovered geometry, skinning and compatible source locomotion clips."""
+"""Join recovered geometry, skinning and compatible original action clips."""
 import math
 
 from bdae_convert import BDAE
 from bdae_skin import recover_skin, read_nodes
 from bdae_animation import BDAEAnimation
+
+ACTION_SOURCES = {
+    'player': {'idle': 'idle', 'walk_forward': 'walk_forward',
+               'attack': 'combat_1h_scepter_npc_01', 'hurt': 'hurt_battle_01', 'death': 'die_ground'},
+    'wolf': {'idle': 'idle', 'walk_forward': 'walk_forward',
+             'attack': 'combat_01', 'hurt': 'hurt_battle_01', 'death': 'die_ground'},
+}
 
 
 def quaternion_product(a, b):
@@ -25,12 +32,14 @@ def aliases(nodes):
     return result
 
 
-def convert_character(model_path, animation_path, animation_model_path):
+def convert_character(model_path, animation_path, animation_model_path, profile='player'):
     reader = BDAE(model_path)
     result = reader.parse()
     rig = recover_skin(reader, result)
     source_nodes = read_nodes(BDAE(animation_model_path))
-    animation = BDAEAnimation(animation_path).parse(['idle', 'walk_forward'])
+    actions = ACTION_SOURCES[profile]
+    animation = BDAEAnimation(animation_path).parse(list(actions.values()))
+    action_names = {source: action for action, source in actions.items()}
     target_map, source_map = aliases(rig['nodes']), aliases(source_nodes)
     skipped, clips = set(), []
     for clip in animation['clips']:
@@ -75,9 +84,11 @@ def convert_character(model_path, animation_path, animation_model_path):
                            'values': values, 'interpolation': track['interpolation']})
         if not tracks:
             raise ValueError('No animation channels bind to the target skeleton')
-        clips.append({'name': clip['name'], 'duration': clip['duration'], 'tracks': tracks})
+        clips.append({'name': action_names[clip['name']], 'sourceName': clip['sourceName'],
+                      'duration': clip['duration'], 'tracks': tracks})
     result.update({'format': 'bdae946-character-v1', 'rig': rig, 'clips': clips,
-                   'animationBinding': {'sourceSHA256': animation['sourceSHA256'],
+                   'animationBinding': {'sourceSHA256': animation['sourceSHA256'], 'profile': profile,
+                       'actions': actions,
                        'sampleRate': animation['sampleRate'], 'verification': animation['verification'],
                        'boundNodes': len({track['node'] for clip in clips for track in clip['tracks']}),
                        'ignoredSourceNodes': sorted(skipped),

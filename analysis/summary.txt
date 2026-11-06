@@ -1,0 +1,28 @@
+{
+  "sha256": "4a11628bfc0aa54f0f34a6de828e003ff760a7a2b4c132ddc156518618c73ebe",
+  "package": "com.gameloft.android.ANMP.GloftO2HM",
+  "version": "3.1.3a",
+  "version_code": "31320",
+  "main_activity": "com.gameloft.android.ANMP.GloftO2HM.MainActivity",
+  "permissions": [
+    "com.google.android.c2dm.permission.RECEIVE",
+    "android.permission.INTERNET",
+    "android.permission.RECEIVE_BOOT_COMPLETED",
+    "android.permission.GET_ACCOUNTS",
+    "android.permission.READ_EXTERNAL_STORAGE",
+    "android.permission.WRITE_EXTERNAL_STORAGE",
+    "glshare.permission.ACCESS_SHARED_DATA",
+    "android.permission.ACCESS_WIFI_STATE",
+    "android.permission.ACCESS_NETWORK_STATE",
+    "com.android.vending.BILLING",
+    "android.permission.WAKE_LOCK",
+    "android.permission.VIBRATE",
+    "com.gameloft.android.ANMP.GloftO2HM.permission.C2D_MESSAGE"
+  ],
+  "assets": [
+    "assets/GameOptions.json",
+    "assets/crashlytics-build.properties"
+  ],
+  "obb": []
+}
+Focused disassembly and resource strings saved to analysis/raw

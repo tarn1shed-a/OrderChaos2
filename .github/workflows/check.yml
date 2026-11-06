@@ -1,0 +1,32 @@
+name: Source checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  multiplayer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: npm install --global pnpm@11.25.0
+      - run: pnpm install --frozen-lockfile
+        working-directory: prototype
+      - run: pnpm test
+        working-directory: prototype
+  resource-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r tools/requirements-resources.txt
+      - run: python tools/resource_tests.py
+      - run: python tools/bdae_tests.py

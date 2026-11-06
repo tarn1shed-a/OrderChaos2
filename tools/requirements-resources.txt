@@ -1,0 +1,2 @@
+Pillow==13.0.0
+texture2ddecoder==1.0.6

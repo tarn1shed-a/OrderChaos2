@@ -32,10 +32,11 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
         ├── manifest.json
         ├── maps/
         ├── models/
+        ├── effects/
         └── textures/
 ```
 
-资源到位后打开 `http://localhost:8787/explore.html`。不需要把 APK、原始 960 MiB 数据包、解包目录或 Python 环境传到服务器，仅运行网页所需的转换产物约 14 MB（随转换内容变化）。
+资源到位后打开 `http://localhost:8787/explore.html`。不需要把 APK、原始 960 MiB 数据包、解包目录或 Python 环境传到服务器，仅运行网页所需的转换产物约 15 MB（随转换内容变化）。
 
 如需在目标机器重新研究或转换，才需要另传原始导出目录 `game-data/com.gameloft.android.ANMP.GloftO2HM/files/`，并安装 Python 3.12、创建 `.venv`、安装 `tools/requirements-resources.txt` 后运行 `tools/build_resource_preview.py`。
 
@@ -49,7 +50,7 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
 
 更新时先停止服务，拉取匹配版本的代码、更新依赖，并另行同步对应版本的 `converted/`，然后启动。不要同步正在变化的整个工作目录，也不要复制 `node_modules/` 或 `.venv/`；Intel 与 Apple Silicon 机器应各自安装依赖。
 
-战斗动画版本需要新的 `converted/models/forest-elf.json`、`wolf.json` 与 `manifest.json`，建议整体复制本次构建的 `converted/`。只有旧资源时，三维页会明确要求重建；在拥有原始包的开发机执行 `.venv/bin/python tools/build_resource_preview.py` 即可，再把产物单独传给正式服。更新代码与资源后重启服务，让战斗消息和快照包含动作时间。角色存档不随资源重建改变。
+技能特效版本需要匹配的 `converted/models/forest-elf.json`、`wolf.json`、`effects/combat.json`、新增特效贴图与 `manifest.json`，请整体复制本次构建的 `converted/`。只有旧资源时，三维页会明确要求重建；在拥有原始包的开发机执行 `.venv/bin/python tools/build_resource_preview.py` 即可，再把产物单独传给正式服。更新代码与资源后重启服务，让战斗消息和快照包含技能与动作时间。角色存档不随资源重建改变；待结算施法、技能冷却和怪物减速为当前会话/房间状态，不写入角色存档。
 
 当前角色进度保存在根目录 `runtime/characters.json`，始终不进 Git。奖励立即保存，移动定期保存，离开和正常关闭服务会保存最新状态。异常强制断电时，尚未落盘的短时间移动可能丢失；正常关闭请使用 Control-C。
 

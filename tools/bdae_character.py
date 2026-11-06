@@ -7,7 +7,8 @@ from bdae_animation import BDAEAnimation
 
 ACTION_SOURCES = {
     'player': {'idle': 'idle', 'walk_forward': 'walk_forward',
-               'attack': 'combat_1h_scepter_npc_01', 'hurt': 'hurt_battle_01', 'death': 'die_ground'},
+               'attack': 'combat_1h_scepter_npc_01', 'hurt': 'hurt_battle_01', 'death': 'die_ground',
+               'skill_fireball': 'skill_mg_directed_instant', 'skill_frost_blast': 'skill_mg_omni_release'},
     'wolf': {'idle': 'idle', 'walk_forward': 'walk_forward',
              'attack': 'combat_01', 'hurt': 'hurt_battle_01', 'death': 'die_ground'},
 }

@@ -6,6 +6,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { WORLD, RESOURCE_WORLD, advance, walkable } from './public/world.js';
 import { CharacterStore, characterView } from './game/character-store.mjs';
 import { CombatRoom, COMBAT, syncPlayerStats } from './game/combat.mjs';
+import { SKILLS } from './public/skills.js';
 
 const PUBLIC = fileURLToPath(new URL('./public/', import.meta.url));
 const CONVERTED = fileURLToPath(new URL('../game-data/converted/', import.meta.url));
@@ -111,7 +112,7 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
           x: restorePosition ? position.x : world.spawn.x + index * 35,
           y: restorePosition ? position.y : world.spawn.y,
           color: COLORS[index], deadUntil: 0, attackAt: -COMBAT.playerCooldownMs,
-          animation: { attackAt: null, hitAt: null, deathAt: null } };
+          animation: { attackAt: null, hitAt: null, deathAt: null }, cast: null, skillReadyAt: {} };
         if (ws.character.hp <= 0) ws.character.hp = ws.character.maxHp;
         syncPlayerStats(ws);
         ws.input = { x: 0, y: 0 }; ws.inputAt = Date.now(); ws.roomId = roomKey; ws.world = world;
@@ -121,12 +122,14 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
         store.savePosition(ws.character, scene, ws.player); store.touch(ws.character); store.flush();
         send(ws, { type: 'welcome', id: ws.player.id, room: roomId, scene, world,
           character: characterView(ws.character), resumeToken: identity.resumeToken, restored: identity.restored,
-          savedAt: store.savedAt, combat: { attackRange: combatRooms.get(roomKey).range, cooldownMs: COMBAT.playerCooldownMs, monsterCooldownMs: COMBAT.monsterCooldownMs } });
+          savedAt: store.savedAt, combat: { attackRange: combatRooms.get(roomKey).range, cooldownMs: COMBAT.playerCooldownMs, monsterCooldownMs: COMBAT.monsterCooldownMs, skills: SKILLS } });
       } else if (msg.type === 'input' && ws.player) {
         if (typeof msg.x !== 'number' || typeof msg.y !== 'number' || !Number.isFinite(msg.x) || !Number.isFinite(msg.y) || Math.abs(msg.x) > 1 || Math.abs(msg.y) > 1) return reject(ws, '无效移动输入');
         ws.input = { x: msg.x, y: msg.y }; ws.inputAt = Date.now();
       } else if (msg.type === 'attack' && ws.player) {
         combatRooms.get(ws.roomId).attack(ws, msg.targetId, clock());
+      } else if (msg.type === 'skill' && ws.player) {
+        combatRooms.get(ws.roomId).skill(ws, msg.skillId, msg.targetId, clock());
       } else if (msg.type === 'save' && ws.player) {
         changed(ws, true); notice(ws, '角色进度已保存');
       } else if (msg.type === 'ping' && ws.player) send(ws, { type: 'pong', at: msg.at });
@@ -154,12 +157,13 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
     try {
     for (const [roomKey, room] of rooms) {
       for (const ws of room.values()) {
-        if (ws.player.hp > 0) advance(ws.player, Date.now() - ws.inputAt > 350 ? { x: 0, y: 0 } : ws.input, 0.05, ws.world);
+        if (ws.player.hp > 0 && !combatRooms.get(roomKey).casts.has(ws.player.id)) advance(ws.player, Date.now() - ws.inputAt > 350 ? { x: 0, y: 0 } : ws.input, 0.05, ws.world);
         store.savePosition(ws.character, ws.scene, ws.player);
       }
       const encounter = combatRooms.get(roomKey);
       encounter.tick(clock(), 0.05);
-      const snapshot = { type: 'state', tick, serverTime: clock(), players: [...room.values()].map(ws => ({ ...ws.player, animation: { ...ws.player.animation } })), monsters: encounter.snapshot() };
+      const snapshot = { type: 'state', tick, serverTime: clock(), players: [...room.values()].map(ws => ({ ...ws.player, animation: { ...ws.player.animation },
+        skillReadyAt: { ...ws.player.skillReadyAt }, cast: ws.player.cast ? structuredClone(ws.player.cast) : null })), monsters: encounter.snapshot() };
       for (const ws of room.values()) send(ws, snapshot);
     }
     } catch (error) { storageFailure(error); }

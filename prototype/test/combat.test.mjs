@@ -250,3 +250,34 @@ test('a corrupt existing save fails visibly and is not overwritten', async t => 
   assert.throws(() => createGameServer({ saveFile }));
   assert.equal(await readFile(saveFile, 'utf8'), damaged);
 });
+
+test('two clients and a late observer receive the same server skill, impact and cooldown without trusting forged data', async t => {
+  const f=await fixture(t),a=await enter(f,'技能联机甲',{scene:'resources'}),b=await enter(f,'技能联机乙',{scene:'resources'});
+  const initial=await stateAfter(a,a.mark(),m=>m.players.length===2),target=wolf(initial);
+  const before=player(initial,a.id),markA=a.mark(),markB=b.mark();
+  a.send({type:'skill',skillId:'fireball',targetId:target.id,damage:999999,cooldownMs:0,castMs:0,x:target.x});
+  const [castA,castB]=await Promise.all([a.wait(m=>m.action==='skill-cast',{after:markA}),b.wait(m=>m.action==='skill-cast',{after:markB})]);
+  assert.deepEqual(castA,castB);assert.equal(castA.cast.impactAt-castA.serverTime,850);
+  a.send({type:'input',x:1,y:0});
+  const during=await stateAfter(a,a.mark(),m=>player(m,a.id)?.cast);
+  assert.equal(wolf(during).hp,60);assert.equal(player(during,a.id).x,before.x,'Cast lock is enforced on server movement');
+  const observer=await enter(f,'技能旁观',{scene:'resources'});
+  const late=await stateAfter(observer,observer.mark());
+  assert.equal(player(late,a.id).cast.id,castA.cast.id,'Late observer gets the original pending cast and timeline');
+  assert.equal(player(late,a.id).skillReadyAt.fireball,castA.serverTime+3000);
+  f.advance(850);
+  const impactA=await a.wait(m=>m.action==='skill-hit'),impactB=await b.wait(m=>m.action==='skill-hit');
+  assert.deepEqual(impactA,impactB);assert.equal(impactA.damage,30);assert.equal(impactA.targetHp,30);
+  const cooldownMark=a.mark();a.send({type:'skill',skillId:'fireball',targetId:target.id});
+  await a.wait(m=>m.type==='notice'&&m.message.includes('冷却'),{after:cooldownMark});
+  b.send({type:'skill',skillId:'frost_blast',targetId:target.id});await b.wait(m=>m.action==='skill-cast'&&m.cast.skillId==='frost_blast');
+  f.advance(700);
+  await stateAfter(a,a.mark(),m=>wolf(m).hp===10&&wolf(m).slowUntil>m.serverTime);
+  await moveNear(a,target,22);
+  a.send({type:'attack',targetId:target.id});
+  for(const c of [a,b]){
+    const progress=await c.wait(m=>m.type==='progress'&&m.character.kills===1);assert.equal(progress.character.gold,10);
+    publicStateHasNoCredentials(c,[a.welcome.resumeToken,b.welcome.resumeToken,observer.welcome.resumeToken]);
+  }
+  assert.equal(observer.messages.filter(m=>m.type==='progress'&&m.character.kills>0).length,0);
+});

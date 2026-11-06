@@ -44,7 +44,9 @@ def verify(output=OUT):
                 assert all(math.isfinite(weight) and 0 <= weight <= 1 for weight in skin['skinWeights'])
                 assert all(abs(sum(skin['skinWeights'][at:at+4])-1)<1e-5 for at in range(0,n*4,4))
                 assert skin['verification']['maximumRestBindShapeError'] < 1e-5
-            assert {clip['name'] for clip in data['clips']} == {'idle','walk_forward','attack','hurt','death'}
+            expected = {'idle','walk_forward','attack','hurt','death'}
+            if ref.get('skillAnimations'): expected |= {'skill_fireball','skill_frost_blast'}
+            assert {clip['name'] for clip in data['clips']} == expected
             for clip in data['clips']:
                 for track in clip['tracks']:
                     components = 4 if track['type'] == 'quaternion' else 3
@@ -62,8 +64,16 @@ def verify(output=OUT):
             mesh_count += 1
     for url in m['textures'].values():
         with Image.open(asset(url, output)) as image: image.verify()
+    effects = json.loads(asset(m['effects']['url'], output).read_text())
+    assert effects['format'] == 'oc2-combat-effects-v1'
+    assert set(effects['effects']) == {'fireCast','fireMissile','fireHit','frostHit'}
+    for effect in effects['effects'].values():
+        assert effect['format'] == 'beff9-texture-dependencies-v1'
+        assert len(effect['sourceSHA256']) == 64
+        assert set(effect['textureURLs']) == set(effect['textures'])
+        for name, url in effect['textureURLs'].items(): assert m['textures'][name] == url and asset(url, output).is_file()
     return {'status':'passed','terrainVertices':vertices,'terrainTriangles':len(terrain['indices'])//3,
-                     'modelsReferenced':len(refs),'meshes':mesh_count,'textures':len(m['textures']),
+                     'modelsReferenced':len(refs),'meshes':mesh_count,'textures':len(m['textures']), 'combatEffects':len(effects['effects']),
                      'sceneInstances':sum(len(s['instances']) for s in m['scenery']), 'warnings':m['warnings']}
 
 def main():

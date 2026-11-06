@@ -6,6 +6,7 @@ from pathlib import Path
 from resource_packs import index, ResourceArchive, normalize_resource_name, safe_output, DEFAULT_SOURCE
 from bdae_convert import BDAE
 from bdae_character import convert_character
+from beff_effects import recover_effect, EFFECT_SOURCES
 from terrain_convert import convert as terrain_convert
 from texture_decode import convert as texture_convert
 
@@ -89,6 +90,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         if animated:
             record['animated'] = True
             record['combatAnimations'] = True
+            if profile == 'player': record['skillAnimations'] = True
         models[key] = record
         return record
     player = model('model/npc/creature/humanoid/forest_elf/forest_elf.bdae','forest-elf', animated=True)
@@ -107,8 +109,20 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
             obj = model(path,f'scene-{i:02d}');obj['instances']=instances;scenery.append(obj)
         except Exception as e:warnings.append({'model':path,'error':str(e)})
     surface = texture('texture/tiles/textures/cliffside/cliffside_rock05.tga')
+    effects = {}
+    for key, path in EFFECT_SOURCES.items():
+        effect = recover_effect(extract(path))
+        effect['source'] = path
+        effect['textureURLs'] = {name: texture(name) for name in effect['textures']}
+        if not all(effect['textureURLs'].values()): raise ValueError(f'Missing original effect textures: {path}')
+        effects[key] = effect
+    effect_output = output/'effects/combat.json'
+    effect_output.parent.mkdir(parents=True, exist_ok=True)
+    effect_output.write_text(json.dumps({'format':'oc2-combat-effects-v1','effects':effects,
+        'adaptation':'Original decoded textures and finite effect lifetimes; locally authored billboards, trajectory, size and atlas playback. Original emitter curves, shaders and attachment transforms are not evaluated.'}, ensure_ascii=False, indent=2))
     manifest = {'format':'oc2-web-preview-v1','map':{'url':'/assets/maps/tutorial-preview.json','label':'新手区域 · 神殿遗迹','subtitle':'原作地形高程与场景摆放 · 地表使用单层材质预览','surfaceTexture':surface},
                 'player':player,'exhibits':exhibits,'scenery':scenery,'textures':textures,
+                'effects': {'url':'/assets/effects/combat.json','format':'oc2-combat-effects-v1'},
                 'summary':f'真实新手地图 3×3 地块；穿衣精灵、狼与熊；接入 {sum(len(s["instances"]) for s in scenery)} 个原作场景摆放。地表混合材质和多节点变换尚未完整恢复。',
                 'warnings':warnings}
     archive_names = {entry['pack'] for entry in entries}

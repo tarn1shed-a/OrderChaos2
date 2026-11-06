@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import * as THREE from 'three';
-import { createCharacterFactory, updateCharacterAnimation, characterAnimationState, disposeCharacterAnimation, snapshotMotion, playCharacterAction, syncCharacterCombat, respawnCharacterAnimation } from '../public/character-animation.js';
+import { createCharacterFactory, updateCharacterAnimation, characterAnimationState, disposeCharacterAnimation, snapshotMotion, playCharacterAction, syncCharacterCombat, respawnCharacterAnimation, playCharacterSkill, cancelCharacterSkill, characterAttachment } from '../public/character-animation.js';
 import { applyCombatAnimations } from '../public/combat-animation.js';
 
 function fixture() {
@@ -132,6 +132,32 @@ test('both views derive walking from server displacement and stop on idle, death
 
 const original = new URL('../../game-data/converted/models/forest-elf.json',import.meta.url);
 const originalWolf = new URL('../../game-data/converted/models/wolf.json',import.meta.url);
+test('original recovered skill clips deform vertices, follow hand bones and agree for late observers', {skip: !existsSync(original)},()=>{
+  const data=JSON.parse(readFileSync(original,'utf8'));
+  assert.equal(data.clips.find(c=>c.name==='skill_fireball').duration,.5);
+  assert.equal(data.clips.find(c=>c.name==='skill_frost_blast').duration,.7);
+  const create=createCharacterFactory(THREE,data,data.materials.map(()=>new THREE.MeshStandardMaterial()));
+  for(const [skillId,duration]of [['fireball',500],['frost_blast',700]]) {
+    const a=create(),b=create(),cast={id:skillId,skillId,startedAt:1000,releaseAt:1000+duration};
+    playCharacterSkill(a,cast,{now:1000});updateCharacterAnimation(a,.1,{moving:false},1000+duration*.4);
+    syncCharacterCombat(b,{hp:100,cast},1000+duration*.4,.7);updateCharacterAnimation(b,.1,{moving:false},1000+duration*.4);
+    assert.equal(characterAnimationState(a).phase,`skill_${skillId}`);
+    assert.equal(characterAnimationState(a).skillTime,characterAnimationState(b).skillTime);
+    a.updateMatrixWorld(true);b.updateMatrixWorld(true);
+    // Untouched source helpers keep float32 rest quaternions; comparing their raw
+    // angle assumes exact unit length even when both poses are byte-for-byte equal.
+    for(let i=0;i<data.rig.nodes.length;i++)assert.deepEqual(characterAnimationState(a).bones[i].quaternion.toArray(),characterAnimationState(b).bones[i].quaternion.toArray());
+    const hand=characterAttachment(a,'Bip01_R_Hand',new THREE.Vector3());assert(hand&&hand.toArray().every(Number.isFinite));
+    for(const mesh of skinnedMeshes(a))for(let vertex=0;vertex<mesh.geometry.attributes.position.count;vertex++) {
+      const point=mesh.getVertexPosition(vertex,new THREE.Vector3());assert(point.toArray().every(Number.isFinite));assert(point.length()<10);
+    }
+    cancelCharacterSkill(a,cast.id);updateCharacterAnimation(a,.1,{moving:false},1200);assert.equal(characterAnimationState(a).skillWeight,0);
+    syncCharacterCombat(a,{hp:100,cast},1250,.7);assert.equal(characterAnimationState(a).castId,undefined,'Cancelled cast does not replay from stale state');
+    playCharacterAction(b,'death',{at:1250,now:1250});updateCharacterAnimation(b,.1,{moving:false},1300);assert.equal(characterAnimationState(b).skillWeight,0);
+    respawnCharacterAnimation(b,{at:5000,now:5000});assert.equal(playCharacterSkill(b,cast,{now:5000}),false,'Old-life casts cannot revive');
+    disposeCharacterAnimation(a);disposeCharacterAnimation(b);
+  }
+});
 test('original player and wolf combat deform real vertices, hold corpses, and reset on authoritative revival', {skip: !existsSync(original)||!existsSync(originalWolf)}, () => {
   for(const path of [original,originalWolf]) {
     const data=JSON.parse(readFileSync(path,'utf8'));

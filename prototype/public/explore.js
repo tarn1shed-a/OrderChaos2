@@ -4,6 +4,8 @@ import { sampleHeight } from './heightfield.js';
 import { webSocketEndpoint } from './network.js';
 import { createCharacterFactory, updateCharacterAnimation, disposeCharacterAnimation, snapshotMotion, syncCharacterCombat, characterAnimationState } from './character-animation.js';
 import { applyCombatAnimations } from './combat-animation.js';
+import { SKILLS, skillById } from './skills.js';
+import { createCombatEffects } from './combat-effects.js';
 import { restoreCredentials, rememberCharacter, lastCharacterName, characterSessionWarning } from './character-session.js';
 
 const $ = id => document.getElementById(id);
@@ -15,6 +17,7 @@ let renderer, scene, camera, terrainMeshes = [], terrainData, mapBounds, origin,
 let assets, modelTemplate, ready = false, world = RESOURCE_WORLD, snapshot = [], selfId, socket, connected = false;
 let wolfTemplate, monsterSnapshot = [], selectedMonsterId = null, character = null, nextAttackAt = 0, feedbackUntil = 0, saveAt = null;
 let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset = 0;
+let combatEffects, nextSkillRequestAt = 0;
 const monsterViews = new Map();
 let target = null, keys = new Set(), avatars = new Map(), rosterSignature = '', generation = 0, retryTimer, manualExit = false;
 let azimuth = .65, elevation = .58, distance = 24, previous = performance.now(), pointer = null;
@@ -85,6 +88,26 @@ function attack() {
   $('attack').firstChild.textContent = '攻击请求中… ';
   setTimeout(() => { $('attack').firstChild.textContent = '攻击野狼 '; },cooldownMs);
 }
+function useSkill(id) {
+  const skill=skillById(id), me=snapshot.find(p=>p.id===selfId), now=Date.now()+serverOffset;
+  if(!skill||!connected||!me||me.hp<=0||me.cast||Date.now()<nextSkillRequestAt||now<(me.skillReadyAt?.[id]||0))return;
+  const enemy=chosenMonster();if(!enemy)return;
+  target=null;nextSkillRequestAt=Date.now()+200;
+  send({type:'skill',skillId:id,targetId:enemy.id});canvas.focus({preventScroll:true});
+}
+function updateSkills() {
+  const me=snapshot.find(p=>p.id===selfId),now=Date.now()+serverOffset;
+  const casting=me?.cast&&now<me.cast.impactAt;
+  for(const skill of Object.values(SKILLS)) {
+    const remaining=Math.max(0,(me?.skillReadyAt?.[skill.id]||0)-now);
+    const text=`${skill.name}${remaining>0?` · ${(remaining/1000).toFixed(1)}s`: ` · ${skill.hotkey}`}`;
+    for(const id of [`skill-${skill.id}`,`field-${skill.id}`]) {
+      const button=$(id);button.disabled=!connected||!chosenMonster()||!me||me.hp<=0||Boolean(casting)||remaining>0;
+      if(button.textContent!==text)button.textContent=text;
+      button.dataset.readyAt=String(me?.skillReadyAt?.[skill.id]||0);
+    }
+  }
+}
 function prepareFighter(body) {
   body.traverse(obj => {
     if (!obj.isMesh) return;
@@ -101,9 +124,13 @@ function animateFighter(view, now) {
 }
 function handleCombat(event) {
   applyCombatAnimations(event, id => avatars.get(id) || monsterViews.get(id), Date.now() + serverOffset);
+  combatEffects?.handle(event,Date.now()+serverOffset);
   const victim = avatars.get(event.targetId) || monsterViews.get(event.targetId);
-  if (victim) victim.hitUntil = Date.now()+220;
+  if (victim && ['hit','player-hit','skill-hit'].includes(event.action)) victim.hitUntil = Date.now()+220;
   if (event.action === 'hit' && event.attackerId === selfId) flash(`命中 −${event.damage}`);
+  else if(event.action==='skill-cast'&&event.attackerId===selfId) { flash(`${skillById(event.cast?.skillId)?.name||'技能'} · 施法中`);logEvent(`开始施放${skillById(event.cast?.skillId)?.name||'技能'}。`); }
+  else if(event.action==='skill-hit'&&event.attackerId===selfId) { flash(`${skillById(event.skillId)?.name||'技能'} −${event.damage}`);logEvent(`${skillById(event.skillId)?.name||'技能'}命中，造成 ${event.damage} 点伤害。`); }
+  else if(event.action==='skill-cancel'&&event.attackerId===selfId) { flash(event.message);message(event.message); }
   else if (event.action === 'player-hit' && event.targetId === selfId) flash(`受到 ${event.damage} 点伤害`);
   else if (event.action === 'kill') { flash('野狼已被击败'); logEvent('野狼倒下了。参与战斗者获得奖励。',true); }
   else if (event.action === 'respawn' && event.targetId === selfId) { logEvent('你已在营地恢复生命，继续出发。'); flash('生命已恢复'); }
@@ -134,6 +161,7 @@ async function loadModel(entry) {
   }));
   if (entry.animated) {
     if (entry.combatAnimations && !['attack','hurt','death'].every(name => data.clips?.some(clip => clip.name === name))) throw new Error('战斗动作资源版本不匹配，请重新构建本地资源');
+    if(entry.skillAnimations&&!Object.values(SKILLS).every(skill=>data.clips?.some(clip=>clip.name===skill.clip)))throw new Error('技能动作资源版本不匹配，请重新构建本地资源');
     const create = createCharacterFactory(THREE, data, materials), root = create();
     modelFactories.set(root, create);
     return root;
@@ -186,7 +214,7 @@ async function init() {
     sun.shadow.mapSize.set(2048, 2048); sun.shadow.camera.left = -100; sun.shadow.camera.right = 100; sun.shadow.camera.top = 100; sun.shadow.camera.bottom = -100; sun.shadow.camera.far = 240; sun.shadow.normalBias = .025;
     scene.add(sun);
     assets = await json('/assets/manifest.json');
-    if (!assets.player?.combatAnimations) throw new Error('战斗动画资源需要更新，请重新运行本地资源构建工具');
+    if (!assets.player?.skillAnimations||!assets.effects) throw new Error('技能与特效资源需要更新，请重新运行本地资源构建工具');
     terrainData = await json(assets.map.url);
     mapBounds = [terrainData.bounds.min, terrainData.bounds.max];
     origin = new THREE.Vector3((mapBounds[0][0] + mapBounds[1][0]) / 2, mapBounds[0][1], (mapBounds[0][2] + mapBounds[1][2]) / 2);
@@ -206,6 +234,10 @@ async function init() {
       scene.add(model);
     }
     if (!wolfTemplate || !modelFactories.has(wolfTemplate)) throw new Error('野狼战斗动画缺失，请重新构建本地资源');
+    const effectData=await json(assets.effects.url),effectTextures=new Map();
+    const effectURLs=[...new Set(Object.values(effectData.effects).flatMap(effect=>Object.values(effect.textureURLs)))];
+    await Promise.all(effectURLs.map(async url=>effectTextures.set(url,await texture(url))));
+    combatEffects=createCombatEffects(THREE,{scene,data:effectData,textures:effectTextures,findView:id=>avatars.get(id)||monsterViews.get(id),position:localPosition});
     // Only explicit converted scene references are served, never raw game data.
     const staticModels = new Map();
     for (const item of assets.scenery || []) {
@@ -220,7 +252,7 @@ async function init() {
     }
     $('map-title').textContent = assets.map.label; $('scene-subtitle').textContent = assets.map.subtitle;
     $('asset-detail').textContent = assets.summary;
-    $('load-note').textContent = '进入营地，靠近野狼，用空格或攻击按钮开始试炼';
+    $('load-note').textContent = '进入营地 · 空格攻击 · 1 火球术 · 2 冰霜爆破';
     focus.copy(localPosition(world.spawn.x, world.spawn.y)).add(new THREE.Vector3(0, 1, 0));
     ready = true; $('join').disabled = false; $('join').firstElementChild.textContent = '进入试炼'; status('资源已就绪'); message('同一浏览器填写原来的名字，可恢复服务器上的角色。');
     requestAnimationFrame(draw);
@@ -259,6 +291,7 @@ function syncAvatars(serverTime = Date.now()) {
     a.motion = snapshotMotion(a.lastState, p, (serverTime - a.lastStateAt) / 1000, (mapBounds[1][0] - mapBounds[0][0]) / world.width);
     a.lastState = { x: p.x, y: p.y }; a.lastStateAt = serverTime;
     syncCharacterCombat(a.body, p, serverTime, a.attackSeconds);
+    if(p.cast)a.combatFacing=Math.atan2(p.cast.target.x-p.cast.origin.x,p.cast.target.y-p.cast.origin.y);
     a.health.textContent = p.hp <= 0 ? '倒下了 · 即将恢复' : `${p.hp ?? 100} / ${p.maxHp ?? 100}`;
     a.label.classList.toggle('dead',p.hp <= 0);
     a.body.visible = true;
@@ -285,17 +318,18 @@ function syncMonsters(serverTime = Date.now()) {
     view.motion=snapshotMotion(view.lastState,m,(serverTime-view.lastStateAt)/1000,(mapBounds[1][0]-mapBounds[0][0])/world.width);
     view.lastState={x:m.x,y:m.y};view.lastStateAt=serverTime;
     syncCharacterCombat(view.body,m,serverTime,view.attackSeconds);
-    view.fill.style.width=`${Math.max(0,m.hp/m.maxHp*100)}%`;view.health.textContent=m.alive?`${m.hp} / ${m.maxHp}`:'已击败 · 等待重生';
+    view.fill.style.width=`${Math.max(0,m.hp/m.maxHp*100)}%`;view.health.textContent=m.alive?`${m.hp} / ${m.maxHp}${m.slowUntil>serverTime?' · 减速':''}`:'已击败 · 等待重生';
   }
   updateTarget();
 }
 
 function resetConnection() {
-  $('field-hud').hidden=true;$('field-attack').hidden=true;
+  $('field-hud').hidden=true;$('field-attack').hidden=true;$('field-actions').hidden=true;combatEffects?.clear();
   connected = false; snapshot = []; monsterSnapshot = []; selfId = null; keys.clear(); target = null; selectedMonsterId=null; updateRoster(); syncAvatars(); syncMonsters();
   for (const id of ['name', 'room']) $(id).disabled = false;
   $('join').disabled = !ready; $('join').firstElementChild.textContent = '进入试炼'; $('invite').disabled = $('second').disabled = true; $('leave').hidden = true;
   $('touch-controls').classList.remove('active');
+  updateSkills();
 }
 function connect(name, room, retry = false) {
   clearTimeout(retryTimer); const gen = ++generation; socket?.close(); manualExit = false;
@@ -306,17 +340,17 @@ function connect(name, room, retry = false) {
   ws.addEventListener('message', event => {
     if (generation !== gen) return; const msg = JSON.parse(event.data);
     if (msg.type === 'welcome') {
-      $('field-attack').hidden=false;
+      $('field-attack').hidden=false;$('field-actions').hidden=false;
       attackRange = msg.combat?.attackRange ?? 32; cooldownMs = msg.combat?.cooldownMs ?? 700; nextAttackAt = 0;
       monsterCooldownMs = msg.combat?.monsterCooldownMs ?? 1000;
       selfId = msg.id; world = msg.world; connected = true; status(`营地 ${msg.room}`, true);
       rememberCharacter(msg.character,msg.resumeToken); updateCharacter(msg.character,msg.savedAt);
       $('join').firstElementChild.textContent = '已进入试炼'; $('invite').disabled = $('second').disabled = false; $('touch-controls').classList.add('active');
-      $('load-note').textContent = '点击野狼选中 · 空格 / F 攻击 · 进度由服务器保存';
+      $('load-note').textContent = '空格 / F 攻击 · 1 火球术 · 2 冰霜爆破 · 施法时短暂停步';
       const restored = msg.restored ? '已恢复角色进度。' : '已创建角色，开始第一次试炼。';
       message(characterSessionWarning() || restored); logEvent(restored);
       const url = new URL(location.href); url.searchParams.set('room', msg.room); history.replaceState(null, '', url); canvas.focus({ preventScroll: true });
-    } else if (msg.type === 'state') { snapshot = msg.players;monsterSnapshot=msg.monsters||[]; if(msg.serverTime)serverOffset=msg.serverTime-Date.now(); updateRoster(); syncAvatars(msg.serverTime || Date.now());syncMonsters(msg.serverTime || Date.now()); }
+    } else if (msg.type === 'state') { snapshot = msg.players;monsterSnapshot=msg.monsters||[]; if(msg.serverTime)serverOffset=msg.serverTime-Date.now(); updateRoster(); syncAvatars(msg.serverTime || Date.now());syncMonsters(msg.serverTime || Date.now());combatEffects?.sync(snapshot,monsterSnapshot,msg.serverTime||Date.now());updateSkills(); }
     else if (msg.type === 'progress') {
       const before=character; updateCharacter(msg.character,msg.savedAt);
       if(before&&msg.character.gold>before.gold){const gain=`获得 ${msg.character.xp-before.xp} 经验、${msg.character.gold-before.gold} 金币和狼皮`;logEvent(gain,true);flash(gain);}
@@ -341,6 +375,7 @@ $('join-form').addEventListener('submit', event => {
 $('field-attack').addEventListener('click', attack);
 $('leave').addEventListener('click', () => { stop(); manualExit = true; generation++; clearTimeout(retryTimer); socket?.close(); resetConnection(); status('已离开'); message('已离开。使用相同浏览器和角色名字可恢复进度。'); });
 $('attack').addEventListener('click',attack);
+for(const skill of Object.values(SKILLS))for(const id of [`skill-${skill.id}`,`field-${skill.id}`])$(id).addEventListener('click',()=>useSkill(skill.id));
 function inviteURL() { const url = new URL(location.href); url.search = ''; url.searchParams.set('room', $('room').value.trim().toUpperCase()); return url.href; }
 $('invite').addEventListener('click', async () => { const url = inviteURL(); try { await navigator.clipboard.writeText(url); message('已复制实验场邀请链接。'); } catch { message(`邀请地址：${url}`); } });
 $('second').addEventListener('click', () => window.open(inviteURL(), '_blank', 'noopener'));
@@ -352,6 +387,8 @@ const codes = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', '
 window.addEventListener('keydown', e => {
   if(!connected||['INPUT','TEXTAREA'].includes(document.activeElement?.tagName))return;
   if(e.code==='Space'||e.code==='KeyF'){e.preventDefault();if(!e.repeat)attack();return;}
+  const skill=Object.values(SKILLS).find(skill=>skill.key===e.code);
+  if(skill){e.preventDefault();if(!e.repeat)useSkill(skill.id);return;}
   if(codes.has(e.code)){e.preventDefault();keys.add(e.code);target=null;}
 });
 window.addEventListener('keyup', e => keys.delete(e.code));
@@ -399,7 +436,7 @@ function draw(now) {
     updateCharacterAnimation(a.body, dt, a.motion, Date.now()+serverOffset);
     const pose=characterAnimationState(a.body);a.label.dataset.motion=pose?.phase||'idle';
     const delta=a.target.clone().sub(a.root.position);
-    if(pose?.phase==='attack'&&Number.isFinite(a.combatFacing))a.body.rotation.y=a.combatFacing;
+    if((pose?.phase==='attack'||pose?.phase?.startsWith('skill_'))&&Number.isFinite(a.combatFacing))a.body.rotation.y=a.combatFacing;
     else if(!pose?.dead&&delta.length()>.01)a.body.rotation.y=Math.atan2(delta.x,delta.z);
     a.root.position.lerp(a.target,1-Math.exp(-dt*16));
     animateFighter(a,Date.now());
@@ -428,6 +465,8 @@ function draw(now) {
     a.label.style.left=`${(projected.x*.5+.5)*w}px`;a.label.style.top=`${(-projected.y*.5+.5)*h}px`;
   }
   if(Date.now()>feedbackUntil)$('combat-feedback').classList.remove('combat-flash');
+  combatEffects?.update(Date.now()+serverOffset);
+  if(combatEffects)canvas.dataset.effects=combatEffects.state().types.join(',');
   renderer.render(scene,camera); requestAnimationFrame(draw);
 }
 init();

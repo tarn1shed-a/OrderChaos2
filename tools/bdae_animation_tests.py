@@ -212,6 +212,13 @@ class ElfAnimationIntegrationTests(unittest.TestCase):
         result = animation.parse(['combat_2h_polearm_npc_01-skill_rg_directed_release'])
         self.assertAlmostEqual(result['clips'][0]['duration'], 20/30)
 
+    def test_original_directed_and_omni_skill_ranges_preserve_timing(self):
+        result = BDAEAnimation(ELF).parse(['skill_mg_directed_instant', 'skill_mg_omni_release'])
+        for clip, duration in zip(result['clips'], [.5, .7]):
+            self.assertAlmostEqual(clip['duration'], duration)
+            self.assertEqual(len(clip['tracks']), 110)
+            self.assertTrue(all(track['times'][0] == 0 and abs(track['times'][-1]-duration) < 1e-8 for track in clip['tracks']))
+
 
 @unittest.skipUnless(WOLF.exists(), 'Requires local original wolf animation bundle')
 class WolfAnimationIntegrationTests(unittest.TestCase):

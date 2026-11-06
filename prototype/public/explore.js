@@ -6,6 +6,9 @@ import { createCharacterFactory, updateCharacterAnimation, disposeCharacterAnima
 import { applyCombatAnimations } from './combat-animation.js';
 import { SKILLS, skillById } from './skills.js';
 import { createCombatEffects } from './combat-effects.js';
+import { createSceneEnvironment } from './scene-environment.js';
+import { createRecoveredHDR } from './hdr-renderer.js';
+import { loadOriginalUI } from './original-ui.js';
 import { restoreCredentials, rememberCharacter, lastCharacterName, characterSessionWarning } from './character-session.js';
 
 const $ = id => document.getElementById(id);
@@ -17,7 +20,7 @@ let renderer, scene, camera, terrainMeshes = [], terrainData, mapBounds, origin,
 let assets, modelTemplate, ready = false, world = RESOURCE_WORLD, snapshot = [], selfId, socket, connected = false;
 let wolfTemplate, monsterSnapshot = [], selectedMonsterId = null, character = null, nextAttackAt = 0, feedbackUntil = 0, saveAt = null;
 let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset = 0;
-let combatEffects, nextSkillRequestAt = 0;
+let combatEffects, environment, hdrRenderer, nextSkillRequestAt = 0;
 const monsterViews = new Map();
 let target = null, keys = new Set(), avatars = new Map(), rosterSignature = '', generation = 0, retryTimer, manualExit = false;
 let azimuth = .65, elevation = .58, distance = 24, previous = performance.now(), pointer = null;
@@ -42,6 +45,7 @@ function updateCharacter(data, savedAt = null) {
   $('level').textContent = `Lv. ${data.level}`; $('hp-text').textContent = `${data.hp} / ${data.maxHp}`;
   $('hp').max = data.maxHp; $('hp').value = data.hp;
   $('field-hud').hidden=false;$('field-name').textContent=`${data.name} · Lv.${data.level}`;
+  $('field-level').textContent=data.level;
   $('field-hp').max=data.maxHp;$('field-hp').value=data.hp;
   $('field-stats').textContent=`生命 ${data.hp}/${data.maxHp} · 金币 ${data.gold}`;
   const xp = Number(data.xp) || 0, level = Number(data.level) || 1;
@@ -160,6 +164,7 @@ async function loadModel(entry) {
     return new THREE.MeshStandardMaterial({ map: tex, color: tex ? 0xffffff : 0xa7bda1, roughness: .93, metalness: 0, side: THREE.DoubleSide, alphaTest: .35 });
   }));
   if (entry.animated) {
+    if(Array.isArray(entry.attachmentPoints))for(const name of entry.attachmentPoints)if(!data.rig?.nodes.some(node=>node.name===name||node.aliases?.includes(name)))throw new Error(`原始挂点 ${name} 缺失，请更新模型资源`);
     if (entry.combatAnimations && !['attack','hurt','death'].every(name => data.clips?.some(clip => clip.name === name))) throw new Error('战斗动作资源版本不匹配，请重新构建本地资源');
     if(entry.skillAnimations&&!Object.values(SKILLS).every(skill=>data.clips?.some(clip=>clip.name===skill.clip)))throw new Error('技能动作资源版本不匹配，请重新构建本地资源');
     const create = createCharacterFactory(THREE, data, materials), root = create();
@@ -206,19 +211,22 @@ async function init() {
   try {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
-    scene = new THREE.Scene(); scene.background = new THREE.Color('#90aba6'); scene.fog = new THREE.Fog('#90aba6', 100, 310);
+    scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(48, 1, .1, 900);
     scene.add(new THREE.HemisphereLight('#dfecff', '#777f61', 3.1));
     const sun = new THREE.DirectionalLight('#fff1d0', 2.2); sun.position.set(50, 90, 35); sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048); sun.shadow.camera.left = -100; sun.shadow.camera.right = 100; sun.shadow.camera.top = 100; sun.shadow.camera.bottom = -100; sun.shadow.camera.far = 240; sun.shadow.normalBias = .025;
     scene.add(sun);
     assets = await json('/assets/manifest.json');
-    if (!assets.player?.skillAnimations||!assets.effects) throw new Error('技能与特效资源需要更新，请重新运行本地资源构建工具');
+    if (!assets.player?.attachmentPoints||!assets.effects||!assets.rendering||!assets.ui) throw new Error('原始挂点、光影与界面资源需要更新，请重新运行本地资源构建工具');
+    await loadOriginalUI(await json(assets.ui.url));
     terrainData = await json(assets.map.url);
     mapBounds = [terrainData.bounds.min, terrainData.bounds.max];
     origin = new THREE.Vector3((mapBounds[0][0] + mapBounds[1][0]) / 2, mapBounds[0][1], (mapBounds[0][2] + mapBounds[1][2]) / 2);
     heightGrid = terrainData.grid ? { width: terrainData.grid.width, depth: terrainData.grid.height, values: terrainData.grid.heights } : gridFromPositions(terrainData.positions);
+    const renderProfile=await json(assets.rendering.url);environment=createSceneEnvironment(THREE,renderProfile);
+    const spawn=localPosition(world.spawn.x,world.spawn.y);environment.update(spawn.x+origin.x,spawn.z+origin.z,scene);
+    hdrRenderer=createRecoveredHDR(THREE,renderer,renderProfile,await texture(renderProfile.lut.url));
     const tg = geometry(terrainData); tg.translate(-origin.x, -origin.y, -origin.z);
     const surfaceTexture = await texture(assets.map.surfaceTexture);
     if (surfaceTexture) { surfaceTexture.wrapS = surfaceTexture.wrapT = THREE.RepeatWrapping; surfaceTexture.repeat.set(36, 36); }
@@ -432,6 +440,7 @@ function draw(now) {
   const dt = Math.min((now-previous)/1000,.1); previous=now;
   const w=viewport.clientWidth,h=viewport.clientHeight;
   if(canvas.width!==Math.round(w*renderer.getPixelRatio())||canvas.height!==Math.round(h*renderer.getPixelRatio())){renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
+  hdrRenderer.setSize(canvas.width,canvas.height);
   for(const [id,a] of avatars){
     updateCharacterAnimation(a.body, dt, a.motion, Date.now()+serverOffset);
     const pose=characterAnimationState(a.body);a.label.dataset.motion=pose?.phase||'idle';
@@ -468,6 +477,10 @@ function draw(now) {
   combatEffects?.update(Date.now()+serverOffset);
   if(combatEffects)canvas.dataset.effects=combatEffects.state().types.join(',');
   if(combatEffects)canvas.dataset.particles=String(combatEffects.particleCount());
-  renderer.render(scene,camera); requestAnimationFrame(draw);
+  if(combatEffects)canvas.dataset.sockets=combatEffects.attachmentState();
+  const me=avatars.get(selfId),point=me?.root.position||localPosition(world.spawn.x,world.spawn.y);
+  const zone=environment.update(point.x+origin.x,point.z+origin.z,scene);environment.prepare(scene);
+  canvas.dataset.renderZone=String(zone.id);canvas.dataset.hdr='source-reinhardt-bloom';
+  hdrRenderer.render(scene,camera,zone); requestAnimationFrame(draw);
 }
 init();

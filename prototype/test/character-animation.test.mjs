@@ -188,7 +188,7 @@ test('original recovered character stays finite through repeated walk/idle cycle
   assert.equal(data.format,'bdae946-character-v1');
   const create=createCharacterFactory(THREE,data,data.materials.map(()=>new THREE.MeshStandardMaterial()));
   const character=create(),state=characterAnimationState(character),meshes=skinnedMeshes(character);
-  assert.equal(state.bones.length,52);assert.equal(meshes.length,2);
+  assert.equal(state.bones.length,55);assert.equal(meshes.length,2);
   let greatestMovement=0;
   const previous=state.bones.map(bone=>bone.quaternion.clone());
   for(let frame=0;frame<360;frame++) {

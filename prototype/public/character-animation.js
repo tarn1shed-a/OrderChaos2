@@ -94,6 +94,12 @@ export function characterAttachment(root, name, target) {
   return node.getWorldPosition(target);
 }
 
+export function characterAttachmentTransform(root, name, target) {
+  const node=controllers.get(root)?.namedNodes.get(name);if(!node)return null;
+  node.updateWorldMatrix(true,false);node.getWorldPosition(target.position);node.getWorldQuaternion(target.quaternion);node.getWorldScale(target.scale);
+  return target;
+}
+
 export function playCharacterAction(root, kind, { at, now, attackSeconds } = {}) {
   const c = controllers.get(root);
   if (!c?.shots[kind]) return false;

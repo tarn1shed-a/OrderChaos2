@@ -25,7 +25,8 @@ export function createParticleRenderer(THREE,{data,textures,camera}) {
         present.add(p.id);let mesh=nodes.get(p.id);
         if(!mesh){mesh=new THREE.Mesh(geometry,material(p));mesh.frustumCulled=false;mesh.renderOrder=3;mesh.name=`particle:${key}:${p.id}`;group.add(mesh);nodes.set(p.id,mesh);}
         const translation=(p.followFlags&1)?pose.position:birthPose.position,rotation=(p.followFlags&2)?pose.quaternion:birthPose.quaternion;
-        mesh.position.fromArray(p.position).applyQuaternion(rotation).add(translation);
+        const scale=((p.followFlags&2)?pose.scale:birthPose.scale)||new THREE.Vector3(1,1,1);
+        mesh.position.fromArray(p.position).multiply(scale).applyQuaternion(rotation).add(translation);
         const angles=new THREE.Quaternion().setFromEuler(new THREE.Euler(...p.angles,'ZYX'));
         if(p.type===0)mesh.quaternion.copy(camera.quaternion).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),p.angles[2]));
         else if(p.type===1){mesh.quaternion.copy(angles).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2));if(p.followFlags&2)mesh.quaternion.premultiply(rotation);}
@@ -35,7 +36,7 @@ export function createParticleRenderer(THREE,{data,textures,camera}) {
           if(u.lengthSq()<1e-10)u.set(v.y,v.x,v.z);u.normalize();
           const normal=new THREE.Vector3().crossVectors(u,v).normalize();mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(u,v,normal));
         }
-        mesh.scale.set(p.size[0],p.size[1],1);
+        mesh.scale.set(p.size[0]*scale.x,p.size[1]*(p.type===1?scale.z:scale.y),1);
         if(p.pivot[0])mesh.position.add(new THREE.Vector3((p.pivot[0]===1?.5:-.5)*p.size[0],0,0).applyQuaternion(mesh.quaternion));
         if(p.pivot[1])mesh.position.add(new THREE.Vector3(0,(p.pivot[1]===1?.5:-.5)*p.size[1],0).applyQuaternion(mesh.quaternion));
         const uniforms=mesh.material.uniforms;uniforms.primary.value.fromArray(p.color);uniforms.secondary.value.fromArray(p.color2);

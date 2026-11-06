@@ -32,6 +32,9 @@ __pycache__/
 *.tbl
 *.tga
 *.ttf
+*.woff
+*.woff2
+*.swf
 *.mp4
 
 # Local research output and screenshots, including rendered original artwork

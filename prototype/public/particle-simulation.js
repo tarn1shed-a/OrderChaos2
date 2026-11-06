@@ -29,6 +29,7 @@ function percentage(percent,unit,subtract=false) {const q=Math.floor(unit*(Math.
 
 export function sampleParticleSystem(definition, milliseconds, seed, {quality=0,maxParticles=256}={}) {
   const output=[];
+  const effectScale=definition.particleScale??1;
   if(milliseconds<0)return output;
   const emitters=definition.emitters;
   for(let emitterIndex=0;emitterIndex<emitters.length;emitterIndex++) {
@@ -62,15 +63,15 @@ export function sampleParticleSystem(definition, milliseconds, seed, {quality=0,
         let velocity=normalized([signed(5),signed(6),signed(7)]);
         const radial=emit('radialSpeed')*percentage(h[16],rnd(8)),directed=emit('directedSpeed')*percentage(h[17],rnd(9));
         const direction=normalized(emit('direction'));
-        velocity=rotate(velocity.map((v,i)=>v*radial+direction[i]*directed),angles);
-        let point=rotate(shape,angles).map((v,i)=>v+translation[i]);
+        velocity=rotate(velocity.map((v,i)=>(v*radial+direction[i]*directed)*effectScale),angles);
+        let point=rotate(shape,angles).map((v,i)=>(v+translation[i])*effectScale);
         // Native order: integrate with old velocity, then apply affectors. Fixed
         // 30 FPS steps make observers independent of requestAnimationFrame rate.
         for(let elapsed=0;elapsed<age-1e-7;) {
           const step=Math.min(1000/30,age-elapsed),dt=step/1000;
           point=point.map((v,i)=>v+velocity[i]*dt);
           for(const a of e.affectors) {
-            if(a.type===0){const dir=normalized(sampleParticleCurve(a.direction,elapsed));const strength=sampleParticleCurve(a.strength,elapsed);velocity=velocity.map((v,i)=>v+dir[i]*strength*step*.03);}
+            if(a.type===0){const dir=normalized(sampleParticleCurve(a.direction,elapsed));const strength=sampleParticleCurve(a.strength,elapsed)*effectScale;velocity=velocity.map((v,i)=>v+dir[i]*strength*step*.03);}
             else if(a.type===1){const factor=1+(sampleParticleCurve(a.strength,elapsed)-1)*step*.03;velocity=velocity.map(v=>v*factor);}
             else if(a.type===2){const dir=normalized([rnd(100+Math.round(elapsed)*3)*2-1,rnd(101+Math.round(elapsed)*3)*2-1,rnd(102+Math.round(elapsed)*3)*2-1]);velocity=velocity.map((v,i)=>v+dir[i]*a.parameters[i]);}
           }
@@ -79,7 +80,7 @@ export function sampleParticleSystem(definition, milliseconds, seed, {quality=0,
         const sizeFactor=percentage(p.sizeRandomPercent,rnd(10),true),heightFactor=p.keepXY?sizeFactor:percentage(p.sizeRandomPercent,rnd(11),true);
         output.push({id:`${emitterIndex}:${birth}:${ordinal}`,born,age,life,texture:p.texture,material:p.material,type:p.type,
           position:point,velocity,followFlags:p.followFlags,
-          size:[get('sizeX')*get('scaleX')*sizeFactor,get('sizeY')*get('scaleY')*heightFactor],
+          size:[get('sizeX')*get('scaleX')*sizeFactor*effectScale,get('sizeY')*get('scaleY')*heightFactor*effectScale],
           angles:p.baseAngles.map((v,i)=>v*percentage(p.baseAngleRandomPercent[i],rnd(12+i),true)+get(['rotateX','rotateY','rotateZ'][i])*percentage(p.rotationRandomPercent[i],rnd(16+i),true)),
           color:['red','green','blue','alpha'].map(name=>get(name)/255),color2:['secondaryRed','secondaryGreen','secondaryBlue'].map(name=>get(name)/255),
           uv:['uvLeft','uvTop','uvRight','uvBottom'].map(name=>get(name)),pivot:p.pivot,flipH:p.flipH,flipV:p.flipV});

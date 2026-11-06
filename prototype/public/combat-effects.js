@@ -1,20 +1,15 @@
 import { skillById } from './skills.js';
-import { characterAttachment } from './character-animation.js';
+import { resolveSkillAttachment } from './skill-attachments.js';
 import { createParticleRenderer } from './particle-renderer.js';
 
 export function createCombatEffects(THREE,{scene,data,textures,findView,position,camera}) {
-  if(data?.format!=='oc2-combat-effects-v2'||!['fireCast','fireMissile','fireHit','frostHit'].every(key=>data.effects?.[key]?.verification?.completePayload))throw new Error('原始粒子参数版本不匹配，请重新构建本地资源');
+  if(data?.format!=='oc2-combat-effects-v3'||!data.attachments?.slots||!['fireCast','fireMissile','fireHit','frostHit'].every(key=>data.effects?.[key]?.verification?.completePayload))throw new Error('原始粒子与挂点参数版本不匹配，请重新构建本地资源');
   const active=new Map(),seen=new Map(),particles=createParticleRenderer(THREE,{data,textures,camera});
   const statusGeometry=new THREE.RingGeometry(.72,.79,32);
   let disposed=false;
-  const pose=point=>({position:point,quaternion:new THREE.Quaternion()});
-  function anchor(id,fallback,hand=false) {
-    const view=findView(id);
-    if(view){
-      if(hand){view.root.updateMatrixWorld(true);const at=characterAttachment(view.body,'Bip01_R_Hand',new THREE.Vector3());if(at)return at;}
-      return view.root.position.clone().add(new THREE.Vector3(0,hand?1.1:(view.height||.9)*.6,0));
-    }
-    return position(fallback.x,fallback.y).add(new THREE.Vector3(0,hand?1.1:.6,0));
+  function attachment(slotName,actorId,targetId,fallback) {
+    const slot=data.attachments.slots[slotName],view=findView(slot.owner==='caster'?actorId:targetId);
+    return resolveSkillAttachment(THREE,slot,view,position(fallback.x,fallback.y));
   }
   function destroy(entry){for(const system of entry.systems.values())system.dispose();entry.marker?.material.dispose();scene.remove(entry.group);}
   function add(id,type,start,end,payload) {
@@ -28,7 +23,7 @@ export function createCombatEffects(THREE,{scene,data,textures,findView,position
     }
     return entry;
   }
-  function system(entry,key){if(!entry.systems.has(key)){const root=new THREE.Group();entry.group.add(root);entry.systems.set(key,particles.create(key,`${entry.id}:${key}`,root));}return entry.systems.get(key);}
+  function system(entry,key,slot=''){const id=`${key}:${slot}`;if(!entry.systems.has(id)){const root=new THREE.Group();entry.group.add(root);entry.systems.set(id,particles.create(key,`${entry.id}:${id}`,root));}return entry.systems.get(id);}
   function cast(event,now){
     const c=event.cast,skill=skillById(c?.skillId);
     if(!skill||!c?.id||![c.startedAt,c.releaseAt,c.impactAt,c.origin?.x,c.origin?.y,c.target?.x,c.target?.y].every(Number.isFinite)||c.startedAt>now+1000||c.impactAt<=now)return;
@@ -57,28 +52,33 @@ export function createCombatEffects(THREE,{scene,data,textures,findView,position
         // Only the fire cast/missile has a recovered source effect. Frost's source
         // bundle is an impact effect; do not invent a pre-cast particle layer.
         if(p.skillId!=='fireball')continue;
-        const from=anchor(p.attackerId,p.origin,true);
-        e.birthPose ||= pose(from.clone());
-        if(now<p.releaseAt){e.count=system(e,'fireCast').update(now-e.start,pose(from),e.birthPose);}
+        e.birthPoses ||= {};
+        if(now<p.releaseAt){for(const slot of data.attachments.effects.fireCast.slots){
+          const at=attachment(slot,p.attackerId,p.targetId,p.origin);if(!at)continue;
+          e.birthPoses[slot] ||= {position:at.position.clone(),quaternion:at.quaternion.clone(),scale:at.scale.clone()};
+          e.count+=system(e,'fireCast',slot).update(now-e.start,at,e.birthPoses[slot]);
+        }}
         else{
-          if(e.systems.has('fireCast')){e.systems.get('fireCast').dispose();e.systems.delete('fireCast');}
-          const to=anchor(p.targetId,p.target),t=Math.max(0,Math.min(1,(now-p.releaseAt)/(p.impactAt-p.releaseAt)));
+          for(const[id,value]of e.systems)if(id.startsWith('fireCast:')){value.dispose();e.systems.delete(id);}
+          const start=attachment('casterRHand',p.attackerId,p.targetId,p.origin),end=attachment(data.attachments.effects.fireMissile.slot,p.attackerId,p.targetId,p.target);
+          if(!start||!end)continue;e.releasePose ||= start;
+          const from=e.releasePose.position,to=end.position,t=Math.max(0,Math.min(1,(now-p.releaseAt)/(p.impactAt-p.releaseAt)));
           const q=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1,0,0),to.clone().sub(from).normalize());
-          e.count=system(e,'fireMissile').update(now-p.releaseAt,{position:from.clone().lerp(to,t),quaternion:q},e.birthPose);
+          const at={position:from.clone().lerp(to,t),quaternion:q,scale:new THREE.Vector3(1,1,1)};
+          e.count=system(e,'fireMissile',data.attachments.effects.fireMissile.slot).update(now-p.releaseAt,at,at);
         }
       }else if(e.type==='slow'){
         const view=findView(p.id);if(!view?.alive){destroy(e);active.delete(id);continue;}
         e.group.position.copy(view.root.position);e.marker.material.opacity=.3*Math.min(1,(e.end-now)/300);
       }else{
-        const origin=position(p.position.x,p.position.y);
-        if(e.type==='fireHit')origin.y+=(findView(p.targetId)?.height||.9)*.6;
-        else origin.y+=.02;
-        e.count=system(e,e.type).update(now-e.start,pose(origin));
+        e.hitPose ||= attachment(data.attachments.effects[e.type].slot,p.attackerId,p.targetId,p.position);
+        if(e.hitPose)e.count=system(e,e.type,data.attachments.effects[e.type].slot).update(now-e.start,e.hitPose);
       }
     }
   }
   function clear(){for(const e of active.values())destroy(e);active.clear();seen.clear();}
   return {handle,sync,update,clear,state:()=>({active:active.size,types:[...active.values()].map(e=>e.type),seen:seen.size}),
+    attachmentState:()=>[...active.values()].flatMap(e=>[...e.systems.keys()]).join(','),
     particleCount:()=>[...active.values()].reduce((n,e)=>n+e.count,0),
     dispose(){clear();particles.dispose();statusGeometry.dispose();disposed=true;}};
 }

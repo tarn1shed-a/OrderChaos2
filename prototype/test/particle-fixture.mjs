@@ -13,3 +13,13 @@ export function emitter(overrides={}) {
       material:{id:16,blend:'additive',twoColor:true},curves:pc},...overrides};
 }
 export function definition(emitters=[emitter()]) {return{emitters,verification:{completePayload:true},sampleRate:30,textures:['texture/test.tga'],textureURLs:{'texture/test.tga':'/assets/test.png'}};}
+export function socketCharacter() {
+  const names=['Root','Dummy_R_Hand','Dummy_L_Hand','Dummy_Chest'],positions=[[0,0,0],[.2,1,0],[-.2,1,0],[0,.5,0]];
+  return{format:'bdae946-character-v1',rig:{nodes:names.map((name,i)=>({name,aliases:[name+'-node'],parent:i?0:-1,position:positions[i],quaternion:[0,0,0,1],scale:[1,1,1]})),skins:[]},
+    meshes:[{positions:[-.5,0,0,.5,0,0,0,1,0],normals:[0,0,1,0,0,1,0,0,1],uvs:[0,0,1,0,.5,1],indices:[0,1,2],material:0}],
+    clips:[{name:'idle',duration:1,tracks:[]},{name:'walk_forward',duration:1,tracks:[]}]};
+}
+export const attachmentProfile={format:'oc2-skill-attachments-v1',slots:{
+  casterRHand:{owner:'caster',dummy:'Dummy_R_Hand',rotationMode:'dummy'},casterLHand:{owner:'caster',dummy:'Dummy_L_Hand',rotationMode:'dummy'},
+  targetChest:{owner:'target',dummy:'Dummy_Chest',rotationMode:'owner-facing'},targetGround:{owner:'target',dummy:null,groundOffset:.1,rotationMode:'owner-facing'}},
+  effects:{fireCast:{slots:['casterRHand','casterLHand']},fireMissile:{slot:'targetChest'},fireHit:{slot:'targetChest'},frostHit:{slot:'targetGround'}}};

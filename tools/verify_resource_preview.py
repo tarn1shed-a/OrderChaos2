@@ -4,6 +4,7 @@ import math
 import argparse
 from pathlib import Path
 from PIL import Image
+from fontTools.ttLib import TTFont
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT/'game-data/converted'
@@ -33,6 +34,7 @@ def verify(output=OUT):
         if ref.get('animated'):
             assert data['format'] == 'bdae946-character-v1'
             rig = data['rig']
+            assert set(ref['attachmentPoints']) <= {name for node in rig['nodes'] for name in [node['name'], *node.get('aliases', [])]}
             for index, node in enumerate(rig['nodes']):
                 assert -1 <= node['parent'] < index
                 assert all(math.isfinite(v) for key in ['position','quaternion','scale'] for v in node[key])
@@ -65,9 +67,13 @@ def verify(output=OUT):
     for url in m['textures'].values():
         with Image.open(asset(url, output)) as image: image.verify()
     effects = json.loads(asset(m['effects']['url'], output).read_text())
-    assert effects['format'] == 'oc2-combat-effects-v2'
+    assert effects['format'] == 'oc2-combat-effects-v3'
+    attachments = effects['attachments']
+    assert attachments['format'] == 'oc2-skill-attachments-v1'
     assert set(effects['effects']) == {'fireCast','fireMissile','fireHit','frostHit'}
-    for effect in effects['effects'].values():
+    for key, effect in effects['effects'].items():
+        assert effect['particleScale'] == attachments['effects'][key]['particleScale']
+        assert effect['particleScale'] > 0 and 0 <= effect['fogRate'] <= 1
         assert effect['format'] == 'beff9-particle-system-v2'
         assert effect['verification']['completePayload']
         assert effect['verification']['fileSize'] == effect['verification']['bytesConsumed']
@@ -77,9 +83,28 @@ def verify(output=OUT):
         assert len(effect['sourceSHA256']) == 64
         assert set(effect['textureURLs']) == set(effect['textures'])
         for name, url in effect['textureURLs'].items(): assert m['textures'][name] == url and asset(url, output).is_file()
+    rendering = json.loads(asset(m['rendering']['url'], output).read_text())
+    assert rendering['format'] == 'oc2-scene-render-v1'
+    assert rendering['defaultZoneId'] in {zone['id'] for zone in rendering['zones']}
+    assert rendering['hdr']['blurIterations'] == 2
+    with Image.open(asset(rendering['lut']['url'], output)) as lut:
+        assert lut.size == (512,16)
+    ui = json.loads(asset(m['ui']['url'], output).read_text())
+    assert ui['format'] == 'oc2-original-ui-v1' and not ui['provenance']['swfScriptExecution']
+    for entry in ui['assets'].values():
+        with Image.open(asset(entry['url'], output)) as image:
+            assert image.size == (entry['width'], entry['height'])
+    glyphs = 0
+    for face in ui['fonts']['faces'].values():
+        with TTFont(asset(face['url'], output)) as font:
+            assert set(font.getBestCmap()) == set(face['codePoints'])
+            glyphs += len(face['codePoints'])
+    assert ui['fonts']['faces']['leagueGothic']['completeDigits']
+    assert ui['fonts']['chineseStatus'] == 'incomplete-use-system-fallback'
     return {'status':'passed','terrainVertices':vertices,'terrainTriangles':len(terrain['indices'])//3,
                      'modelsReferenced':len(refs),'meshes':mesh_count,'textures':len(m['textures']), 'combatEffects':len(effects['effects']),
-                     'sceneInstances':sum(len(s['instances']) for s in m['scenery']), 'warnings':m['warnings']}
+                     'sceneInstances':sum(len(s['instances']) for s in m['scenery']),
+                     'renderZones':len(rendering['zones']), 'uiCrops':len(ui['assets']), 'fontGlyphs':glyphs, 'warnings':m['warnings']}
 
 def main():
     cli = argparse.ArgumentParser(description=__doc__)

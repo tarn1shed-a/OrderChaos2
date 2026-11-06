@@ -1,4 +1,6 @@
 import io
+import lzma
+import zlib
 import struct
 import tempfile
 import unittest
@@ -87,6 +89,19 @@ class ResourceTests(unittest.TestCase):
             for name in ['../outside','/absolute','folder/../../bad','x\\..\\bad','C:/bad']:
                 with self.assertRaises(ValueError):safe_output(root,name)
             self.assertEqual(safe_output(root,'model/npc/elf.bdae'),root/'model/npc/elf.bdae')
+
+    def test_no_eos_lzma_uses_declared_output_bound_and_still_requires_crc(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload=b'FTABLE bounded output\0'*40
+            filters=[{'id':lzma.FILTER_LZMA1,'dict_size':1<<23,'lc':3,'lp':0,'pb':2}]
+            packed=bytes([9,4,5,0,0x5d])+struct.pack('<I',1<<23)+lzma.compress(payload+b'x',format=lzma.FORMAT_RAW,filters=filters)
+            Path(tmp,'sample.bin').write_bytes(packed)
+            entry={'pack':'sample.bin','path':'table','offset':0,'compressed':len(packed),'size':len(payload),'crc':zlib.crc32(payload),'flags':0,'method':14}
+            self.assertEqual(read_entry(entry,Path(tmp)),payload)
+            with self.assertRaises(ValueError):read_entry({**entry,'crc':entry['crc']^1},Path(tmp))
+            with self.assertRaises(ValueError):read_entry({**entry,'flags':2},Path(tmp))
+            Path(tmp,'sample.bin').write_bytes(packed[:15])
+            with self.assertRaises((ValueError,lzma.LZMAError)):read_entry(entry,Path(tmp))
 
     def test_etc1_header_and_split_alpha(self):
         # ETC1 all-zero block yields an opaque near-black constant 4x4 image.

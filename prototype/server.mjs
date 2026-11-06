@@ -38,7 +38,7 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
       }
       const data = await readFile(path);
       res.writeHead(200, {
-        'Content-Type': ({ '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.glb': 'model/gltf-binary' })[extname(path)] || 'application/octet-stream',
+        'Content-Type': ({ '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.woff': 'font/woff', '.glb': 'model/gltf-binary' })[extname(path)] || 'application/octet-stream',
         'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache',
         'Content-Security-Policy': "default-src 'self'; connect-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'",
       });

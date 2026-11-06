@@ -4,6 +4,7 @@ import math
 from bdae_convert import BDAE
 from bdae_skin import recover_skin, read_nodes
 from bdae_animation import BDAEAnimation
+from skill_attachments import adapt_socket_nodes
 
 ACTION_SOURCES = {
     'player': {'idle': 'idle', 'walk_forward': 'walk_forward',
@@ -38,6 +39,8 @@ def convert_character(model_path, animation_path, animation_model_path, profile=
     result = reader.parse()
     rig = recover_skin(reader, result)
     source_nodes = read_nodes(BDAE(animation_model_path))
+    socket_nodes = adapt_socket_nodes(source_nodes, rig['nodes']) if profile == 'player' else []
+    rig['nodes'].extend(socket_nodes)
     actions = ACTION_SOURCES[profile]
     animation = BDAEAnimation(animation_path).parse(list(actions.values()))
     action_names = {source: action for action, source in actions.items()}
@@ -88,6 +91,9 @@ def convert_character(model_path, animation_path, animation_model_path, profile=
         clips.append({'name': action_names[clip['name']], 'sourceName': clip['sourceName'],
                       'duration': clip['duration'], 'tracks': tracks})
     result.update({'format': 'bdae946-character-v1', 'rig': rig, 'clips': clips,
+                   'attachmentBinding': {'adaptedNodes': len(socket_nodes),
+                       'mode': 'source-adapted' if socket_nodes else 'native',
+                       'referenceSource': animation_model_path.name},
                    'animationBinding': {'sourceSHA256': animation['sourceSHA256'], 'profile': profile,
                        'actions': actions,
                        'sampleRate': animation['sampleRate'], 'verification': animation['verification'],

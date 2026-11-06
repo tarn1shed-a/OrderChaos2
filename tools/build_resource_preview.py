@@ -8,6 +8,10 @@ from bdae_convert import BDAE
 from bdae_character import convert_character
 from beff_effects import recover_effect, EFFECT_SOURCES
 from beff_particles import recover_materials
+from bdae_skin import read_nodes
+from skill_attachments import recover_skill_attachments, REFERENCE_MODEL
+from recover_scene_render import build_scene_profile
+from ui_assets import recover_ui_assets
 from terrain_convert import convert as terrain_convert
 from texture_decode import convert as texture_convert
 
@@ -19,7 +23,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     source, extracted, output = Path(source), Path(extracted), Path(output)
     # Select archive namespaces explicitly while the complete native mounting
     # priority is still under investigation. Never guess between conflicting packs.
-    packs = {'res.bin','res_a.bin','res_npc.bin','res_scene.bin','res_scene_generator_temple_000.bin','res_t.bin',
+    packs = {'res.bin','res_a.bin','res_npc.bin','res_scene.bin','res_scene_generator_temple_000.bin','res_t.bin','res_t_upd15.bin','tables.bin','ui.bin',
              'tutorial.bin','tutorial_layer.bin','tutorial_lmap_1.bin',
              'selection.bin','selection_layer.bin','selection_lmap_1.bin',
              'dawnwatch.bin','dawnwatch_layer.bin','dawnwatch_lmap_1.bin'}
@@ -91,10 +95,15 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         if animated:
             record['animated'] = True
             record['combatAnimations'] = True
+            record['attachmentPoints']=['Dummy_R_Hand','Dummy_L_Hand','Dummy_Chest'] if profile=='player' else ['Dummy_Chest']
             if profile == 'player': record['skillAnimations'] = True
         models[key] = record
         return record
-    player = model('model/npc/creature/humanoid/forest_elf/forest_elf.bdae','forest-elf', animated=True)
+    player_path='model/npc/creature/humanoid/forest_elf/forest_elf.bdae'
+    wolf_path='model/npc/creature/beast/wolf/wolf.bdae'
+    attachments=recover_skill_attachments(lambda path:extract(path).read_bytes(),
+        read_nodes(BDAE(extract(REFERENCE_MODEL))),read_nodes(BDAE(extract(player_path))),read_nodes(BDAE(extract(wolf_path))))
+    player = model(player_path,'forest-elf', animated=True)
     exhibits = []
     for name in ['wolf','bear']:
         # Paths come from the observed archive index; reject ambiguity rather than guess.
@@ -115,6 +124,8 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     for key, path in EFFECT_SOURCES.items():
         effect = recover_effect(extract(path))
         effect['source'] = path
+        if attachments['effects'][key]['path'].lower()!=path.lower():raise ValueError('Skill attachment effect path mismatch')
+        effect['particleScale']=attachments['effects'][key]['particleScale']
         effect['textureURLs'] = {name: texture(name) for name in effect['textures']}
         for emitter in effect['emitters']:
             emitter['particle']['material'] = effect_materials[emitter['particle']['materialId']]
@@ -122,11 +133,21 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         effects[key] = effect
     effect_output = output/'effects/combat.json'
     effect_output.parent.mkdir(parents=True, exist_ok=True)
-    effect_output.write_text(json.dumps({'format':'oc2-combat-effects-v2','effects':effects,
-        'adaptation':'Recovered v9 emission schedules, particle curves, shape, motion and source material identities. Deterministic random seeds, attachment placements and skill flight path are web adaptations; original HDR/fog and full runtime are not reproduced.'}, ensure_ascii=False, indent=2))
+    effect_output.write_text(json.dumps({'format':'oc2-combat-effects-v3','effects':effects,'attachments':attachments,
+        'adaptation':'Recovered particle parameters, materials and source skill slots. Forest elf hand/chest dummies are adapted from the same animated reference model. Deterministic random seeds and overall skill flight path remain web adaptations.'}, ensure_ascii=False, indent=2))
+    rendering=build_scene_profile(extract)
+    rendering['format']='oc2-scene-render-v1'
+    rendering['defaultZoneId']=min(rendering['zones'],key=lambda zone:zone['priority'])['id']
+    rendering['lut']['url']=texture(rendering['lutPath'])
+    if not rendering['lut']['url']:raise ValueError('Source HDR lookup texture missing')
+    render_output=output/'rendering/tutorial.json';render_output.parent.mkdir(parents=True,exist_ok=True)
+    render_output.write_text(json.dumps(rendering,ensure_ascii=False,indent=2))
+    ui = recover_ui_assets(extract, output)
     manifest = {'format':'oc2-web-preview-v1','map':{'url':'/assets/maps/tutorial-preview.json','label':'新手区域 · 神殿遗迹','subtitle':'原作地形高程与场景摆放 · 地表使用单层材质预览','surfaceTexture':surface},
                 'player':player,'exhibits':exhibits,'scenery':scenery,'textures':textures,
-                'effects': {'url':'/assets/effects/combat.json','format':'oc2-combat-effects-v2'},
+                'effects': {'url':'/assets/effects/combat.json','format':'oc2-combat-effects-v3'},
+                'rendering':{'url':'/assets/rendering/tutorial.json','format':'oc2-scene-render-v1'},
+                'ui':{'url':'/assets/ui/profile.json','format':ui['format']},
                 'summary':f'真实新手地图 3×3 地块；穿衣精灵、狼与熊；接入 {sum(len(s["instances"]) for s in scenery)} 个原作场景摆放。地表混合材质和多节点变换尚未完整恢复。',
                 'warnings':warnings}
     archive_names = {entry['pack'] for entry in entries}

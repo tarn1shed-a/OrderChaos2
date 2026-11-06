@@ -62,8 +62,12 @@ class SkinIntegrationTests(unittest.TestCase):
     def test_locomotion_rebases_to_target_rest_and_cannot_move_server_root(self):
         result = convert_character(MODEL, ANIMATION, SOURCE)
         self.assertEqual(result['format'], 'bdae946-character-v1')
-        self.assertEqual(result['animationBinding']['boundNodes'], 42)
-        self.assertEqual(len(result['animationBinding']['ignoredSourceNodes']), 12)
+        self.assertEqual(result['animationBinding']['boundNodes'], 44)
+        self.assertEqual(len(result['animationBinding']['ignoredSourceNodes']), 10)
+        self.assertEqual(len(result['rig']['nodes']),55)
+        for name in ['Dummy_R_Hand','Dummy_L_Hand']:
+            index=aliases(result['rig']['nodes'])[name]
+            self.assertTrue(all(any(track['node']==index for track in clip['tracks']) for clip in result['clips']))
         for clip in result['clips']:
             for track in clip['tracks']:
                 node = result['rig']['nodes'][track['node']]

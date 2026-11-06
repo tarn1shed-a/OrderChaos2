@@ -20,6 +20,8 @@ def decode_effect(data):
     if version != 9:
         raise ValueError(f'Unsupported BEFF version: {version}')
     duration = struct.unpack_from('<I', data, 24)[0]
+    fog_rate=struct.unpack_from('<f',data,44)[0]
+    if not 0<=fog_rate<=1:raise ValueError('Unsupported effect fog rate')
     if duration != 0xffffffff and not 0 < duration <= 600000:
         raise ValueError('Unsupported BEFF duration header')
     count = struct.unpack_from('<I', data, 48)[0]
@@ -58,6 +60,7 @@ def decode_effect(data):
         'sourceSHA256': hashlib.sha256(data).hexdigest(),
         'durationMs': None if duration == 0xffffffff else duration,
         'loop': duration == 0xffffffff,
+        'fogRate':fog_rate,
         'emitters':particles['emitters'], 'sampleRate':30, 'keySampling':particles['keySampling'],
         'textures': ['texture/' + name for name in names if name != '.'],
         'verification': {

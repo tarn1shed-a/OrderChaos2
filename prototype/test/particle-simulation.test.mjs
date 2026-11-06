@@ -66,3 +66,13 @@ test('source follow flags distinguish world particles from emitter-local transla
   system.update(0,current,birth);assert.deepEqual(group.children[0].position.toArray(),[1,0,0]);assert(group.children[1].position.distanceTo(new THREE.Vector3(10,0,-1))<1e-6);
   system.dispose();factory.dispose();
 });
+
+test('native averaged effect scale changes spatial parameters but not lifetime, UV, color or disc spoke count',()=>{
+  const e=emitter();e.shape=2;e.curves.outerX=curve(2);e.curves.outerZ=curve(2);e.curves.outerY=curve(4);e.curves.volumeHigh=curve(4);e.curves.radialSpeed=curve(3);
+  const normal=sampleParticleSystem(definition([e]),34,'scale'),scaled=sampleParticleSystem({...definition([e]),particleScale:5.5/3},34,'scale');
+  assert.equal(normal.length,scaled.length);for(let i=0;i<normal.length;i++){
+    assert.deepEqual(normal[i].uv,scaled[i].uv);assert.deepEqual(normal[i].color,scaled[i].color);assert.equal(normal[i].life,scaled[i].life);
+    for(let axis=0;axis<3;axis++)assert(Math.abs(normal[i].position[axis]*(5.5/3)-scaled[i].position[axis])<1e-8);
+    assert(Math.abs(normal[i].size[0]*(5.5/3)-scaled[i].size[0])<1e-8);
+  }
+});

@@ -3,6 +3,7 @@ import argparse
 import bisect
 import collections
 import json
+import lzma
 import struct
 import zlib
 import zipfile
@@ -130,7 +131,20 @@ def read_entry(entry, source=DEFAULT_SOURCE):
     if method == 8:
         data = zlib.decompress(data, -15)
     elif method == 14:
-        data = zipfile.LZMADecompressor().decompress(data)
+        if entry['flags'] & 2:
+            data = zipfile.LZMADecompressor().decompress(data)
+        else:
+            # Native archives can omit the LZMA end marker. The native decoder
+            # stops at the declared output length; unbounded decoding may emit
+            # a spurious extra byte from range-coder padding. Keep size + CRC
+            # verification below, and never apply this to EOS-marked streams.
+            if len(data) < 9 or struct.unpack_from('<H', data, 2)[0] != 5:
+                raise ValueError('Unsupported ZIP LZMA properties')
+            prop = data[4]
+            if prop >= 225: raise ValueError('Invalid LZMA properties')
+            filters = [{'id':lzma.FILTER_LZMA1,'dict_size':struct.unpack_from('<I',data,5)[0],
+                        'lc':prop % 9,'lp':(prop//9)%5,'pb':prop//45}]
+            data = lzma.LZMADecompressor(lzma.FORMAT_RAW,filters=filters).decompress(data[9:],max_length=entry['size'])
     elif method != 0:
         raise ValueError(f'Unsupported method {method}')
     if len(data) != entry['size'] or zlib.crc32(data) & 0xffffffff != entry['crc']:

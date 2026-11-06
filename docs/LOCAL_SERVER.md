@@ -33,6 +33,8 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
         ├── maps/
         ├── models/
         ├── effects/
+        ├── rendering/
+        ├── ui/
         └── textures/
 ```
 
@@ -52,7 +54,7 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
 
 技能特效版本需要匹配的 `converted/models/forest-elf.json`、`wolf.json`、`effects/combat.json`、新增特效贴图与 `manifest.json`，请整体复制本次构建的 `converted/`。只有旧资源时，三维页会明确要求重建；在拥有原始包的开发机执行 `.venv/bin/python tools/build_resource_preview.py` 即可，再把产物单独传给正式服。更新代码与资源后重启服务，让战斗消息和快照包含技能与动作时间。角色存档不随资源重建改变；待结算施法、技能冷却和怪物减速为当前会话/房间状态，不写入角色存档。
 
-原始粒子参数版将特效格式升级为 `oc2-combat-effects-v2`，旧版只含贴图的 `effects/combat.json` 无法使用。原材质库由开发机转换时读取，运行机器只需转换后的 JSON/PNG，无须原 BEFF、BDAE、APK 或反汇编。页面升级后刷新加载新的渲染器；本次粒子升级不修改服务器战斗规则或存档格式。
+挂点与光影版将特效格式升级为 `oc2-combat-effects-v3`，另需 `rendering/tutorial.json`、原 LUT、`ui/profile.json`、9 张 UI 裁片和两个 WOFF 字体。请完整同步 `converted/`，旧版清单会明确要求重建。原材质库、源表和字体只由开发机转换时读取；运行机器只需转换后的 JSON/PNG/WOFF，无须 BEFF、BDAE、SWF、APK 或反汇编。更新后重启服务并刷新页面；本次更新不修改服务端规则或存档格式。中文继续使用系统字体回退。
 
 当前角色进度保存在根目录 `runtime/characters.json`，始终不进 Git。奖励立即保存，移动定期保存，离开和正常关闭服务会保存最新状态。异常强制断电时，尚未落盘的短时间移动可能丢失；正常关闭请使用 Control-C。
 

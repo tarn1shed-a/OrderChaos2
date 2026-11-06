@@ -2,8 +2,9 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#101b1e"><title>原作资源实验场 · 重返营地</title>
+  <meta name="theme-color" content="#101b1e"><title>微光试炼 · 重返营地</title>
   <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/explore.css">
+  <link rel="stylesheet" href="/field-hud.css">
   <script type="module" src="/explore.js"></script>
 </head>
 <body>
@@ -11,24 +12,36 @@
   <main class="explore-layout">
     <section id="viewport" class="scene-panel" aria-label="原作三维场景">
       <canvas id="scene" tabindex="0" aria-label="三维地形，进入后用方向键移动，右键拖动旋转，滚轮缩放"></canvas>
-      <div class="scene-title"><span class="eyebrow">A WORLD, REDISCOVERED</span><h1 id="map-title">重现一隅</h1><p id="scene-subtitle">从资源包到浏览器，让世界重新可见。</p></div>
+      <div class="scene-title"><span class="eyebrow">THE FIRST HUNT</span><h1 id="map-title">微光试炼</h1><p id="scene-subtitle">击败野狼，收获奖励，带着进度回来。</p></div>
       <div id="labels" aria-hidden="true"></div>
+      <div id="field-hud" class="field-hud" hidden><strong id="field-name">冒险者</strong><progress id="field-hp" max="100" value="100" aria-label="地图内角色生命"></progress><span id="field-stats"></span></div>
+      <button id="field-attack" class="field-attack" hidden disabled>攻击 · 空格 / F</button>
+      <div id="combat-feedback" aria-live="polite"></div>
       <div class="scene-notice" id="load-note" role="status">正在读取本地转换后的地形与模型…</div>
       <div class="scene-bottom"><span id="position">等待探索</span><button id="reset-view">⌖ 回到角色视角</button></div>
       <div id="touch-controls" aria-label="触屏方向控制"><button data-key="ArrowUp" aria-label="向上">↑</button><button data-key="ArrowLeft" aria-label="向左">←</button><button data-key="ArrowDown" aria-label="向下">↓</button><button data-key="ArrowRight" aria-label="向右">→</button></div>
     </section>
     <aside>
       <div class="chapter"><span>资源复原实验</span><span>Ⅱ</span></div>
-      <h2>走进真实的地形。</h2><p class="intro">使用本地解包的原作地形与角色网格，和朋友在同一片区域探索。</p>
+      <h2>第一场共同的战斗。</h2><p class="intro">靠近野狼，选中目标后攻击。参与击杀即可获得经验、金币和狼皮。</p>
       <form id="join-form"><label for="name">你的冒险者名字</label><input id="name" placeholder="例如：林间旅人" maxlength="16" required autocomplete="nickname"><label for="room">营地编号</label><input id="room" value="EXPLORE-01" pattern="[A-Za-z0-9\-]{3,16}" minlength="3" maxlength="16" required spellcheck="false"><button id="join" class="primary" disabled><span>等待资源就绪</span><span>↗</span></button></form>
       <p id="message" class="message" role="status">地形与模型载入后即可进入。</p>
+      <section id="character-panel" class="character-panel" hidden>
+        <div class="section-title"><h3 id="character-title">冒险者</h3><span id="level">Lv. 1</span></div>
+        <div class="stat-label"><span>生命</span><span id="hp-text">100 / 100</span></div><progress id="hp" max="100" value="100" aria-label="角色生命"></progress>
+        <div class="stat-label"><span>经验</span><span id="xp-text">0 / 60</span></div><progress id="xp" max="60" value="0" aria-label="升级经验"></progress>
+        <div class="reward-totals"><span>金币 <b id="gold">0</b></span><span>狼皮 <b id="pelts">0</b></span><span>击杀 <b id="kills">0</b></span></div>
+        <p id="save-status">角色进度由服务器保存</p>
+      </section>
+      <section class="combat-panel"><div class="section-title"><h3>战斗目标</h3><span id="target-name">等待进入</span></div><p id="target-detail">靠近野狼，按空格、F 或下方按钮攻击。</p><button id="attack" class="attack-button" disabled>攻击野狼 <kbd>Space</kbd></button><p id="combat-rule">服务器判定距离、伤害与冷却；野狼会反击。</p></section>
+      <section class="battle-log"><h3>冒险记录</h3><ol id="events"><li>完成第一次击杀，获得你的第一份奖励。</li></ol></section>
       <section class="party"><div class="section-title"><h3>同行者</h3><span id="count">0 / 8</span></div><ul id="players"><li class="empty">等待冒险者进入。</li></ul></section>
       <div class="invite-actions"><button id="invite" disabled>⌁ 复制邀请链接</button><button id="second" disabled>↗ 打开第二个玩家窗口</button></div>
-      <div class="controls"><h3>探索指南</h3><p>WASD / 方向键：相对视角移动</p><p>右键拖动：旋转镜头 · 滚轮：缩放</p><p>点击地面：直线移动 · 手机：方向按钮</p></div>
-      <section class="recovery"><h3>本次复原</h3><p id="asset-detail">正在核对资源…</p><p>静态模型，尚未接入骨骼动画、装备和原作物件碰撞。当前移动只限制在展示区域内。</p></section>
+      <div class="controls"><h3>探索指南</h3><p>WASD / 方向键：相对视角移动</p><p>点击野狼选中 · 空格 / F：攻击</p><p>右键拖动：旋转镜头 · 滚轮：缩放</p><p>点击地面：直线移动 · 手机：方向按钮</p></div>
+      <section class="recovery"><h3>资源与玩法</h3><p id="asset-detail">正在核对资源…</p><p>模型仍为静态姿势，攻击使用位移和闪光反馈。骨骼动画、装备和原作物件碰撞尚未接入。角色存档由本地服务器保存，恢复凭据保存在当前浏览器。</p></section>
       <button id="leave" class="leave" hidden>离开营地</button><a class="back-link" href="/">← 返回营地原型</a>
     </aside>
   </main>
-  <footer class="site-footer"><span>原作资源本地研究 · 不连接原游戏服务器</span><span id="network">场景与角色存档暂不保存</span></footer>
+  <footer class="site-footer"><span>原作资源本地研究 · 独立实现的本地玩法</span><span id="network">角色进度由本地服务器保存</span></footer>
 </body>
 </html>

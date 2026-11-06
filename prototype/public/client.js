@@ -1,5 +1,7 @@
 import { WORLD } from './world.js';
 import { webSocketEndpoint } from './network.js';
+import { restoreCredentials, rememberCharacter, characterSessionWarning } from './character-session.js';
+import { createCampCombat } from './camp-combat.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('world'), ctx = canvas.getContext('2d');
@@ -9,6 +11,7 @@ let socket, selfId, roomId, connected = false, generation = 0;
 let players = [], display = new Map(), keys = new Set(), target = null, view = { scale: 1, ox: 0, oy: 0 };
 let lastList = '', reconnect = null, intentional = false, lastFrame = performance.now(), dimensions = { w: 0, h: 0 };
 let roomName = '', playerName = '';
+const combat = createCampCombat({ send, getSelfId:()=>selfId, getPlayers:()=>players, connected:()=>connected, canvas });
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 function status(text, online = false) { $('status').textContent = text; $('lamp').classList.toggle('online', online); }
@@ -17,6 +20,7 @@ function send(data) { if (socket?.readyState === WebSocket.OPEN) socket.send(JSO
 function stop() { keys.clear(); target = null; if (connected) send({ type: 'input', x: 0, y: 0 }); }
 function reset() {
   connected = false; players = []; display.clear(); lastList = ''; selfId = null;
+  combat.enable(false);
   for (const id of ['name', 'room', 'join']) $(id).disabled = false;
   $('invite').disabled = $('second').disabled = true; $('leave').hidden = true;
   $('join').firstElementChild.textContent = '进入营地';
@@ -35,33 +39,43 @@ function connect(name, room, retry = false) {
   const ws = new WebSocket(webSocketEndpoint());
   socket = ws;
   let denied = false;
-  ws.addEventListener('open', () => { if (epoch === generation) send({ type: 'join', name, room }); });
+  ws.addEventListener('open', () => { if (epoch === generation) send({ type: 'join', name, room, ...restoreCredentials(name) }); });
   ws.addEventListener('message', event => {
     if (epoch !== generation) return;
     const msg = JSON.parse(event.data);
     if (msg.type === 'welcome') {
       selfId = msg.id; roomId = msg.room; connected = true;
+      let credentialsStored = true;
+      if(msg.character){credentialsStored=rememberCharacter(msg.character,msg.resumeToken);combat.progress(msg.character,msg.savedAt);}
+      combat.enable(true);
+      $('name').value = msg.character?.name || name;
       $('invite').disabled = $('second').disabled = false;
       $('join').firstElementChild.textContent = '已进入营地';
       $('touch-controls').classList.add('active');
-      $('map-hint').classList.add('joined'); $('map-hint').textContent = 'WASD / 方向键移动 · 点击地面前进';
-      status(`营地 ${roomId}`, true); message(retry ? '已重新连接，以新角色身份返回出生点。' : '你已到达。复制邀请链接，等朋友一起出发。');
+      $('map-hint').classList.add('joined'); $('map-hint').textContent = 'WASD 移动 · 空格 / F 攻击野狼';
+      status(`营地 ${roomId}`, true); message(msg.restored ? '已恢复角色进度。靠近野狼，按攻击开始战斗。' : '角色已创建。靠近野狼，按攻击开始战斗。');
+      if(!credentialsStored)message(characterSessionWarning());
       const url = new URL(location.href); url.searchParams.set('room', roomId); history.replaceState(null, '', url);
       canvas.focus({ preventScroll: true });
     } else if (msg.type === 'state') {
       players = msg.players;
+      combat.state(msg);
+      const me=players.find(p=>p.id===selfId);if(me){$('hero-hp').value=$('field-hp').value=me.hp;$('hero-hp').max=$('field-hp').max=me.maxHp;$('hero-health').textContent=`${me.hp} / ${me.maxHp}`;}
       const ids = new Set(players.map(p => p.id));
       for (const id of display.keys()) if (!ids.has(id)) display.delete(id);
       for (const p of players) if (!display.has(p.id)) display.set(p.id, { x: p.x, y: p.y });
       renderRoster();
-    } else if (msg.type === 'error') { denied = true; message(msg.message); }
+    } else if(msg.type==='progress'){combat.progress(msg.character,msg.savedAt);}
+    else if(msg.type==='combat'){combat.event(msg);}
+    else if(msg.type==='notice'){message(msg.message);combat.log(msg.message);}
+    else if (msg.type === 'error') { denied = true; message(msg.message); }
     else if (msg.type === 'pong') $('latency').textContent = ` · ${Math.max(0, Date.now() - msg.at)} ms`;
   });
   ws.addEventListener('close', () => {
     if (epoch !== generation) return;
     stop(); reset();
     if (denied || intentional) { status('已离开营地'); return; }
-    status('连接中断'); message('连接中断，3 秒后尝试重连。重连后会回到出生点。');
+    status('连接中断'); message('连接中断，3 秒后尝试使用当前浏览器凭据恢复角色。');
     reconnect = setTimeout(() => connect(name, room, true), 3000);
   });
   ws.addEventListener('error', () => { if (epoch === generation) message('暂时无法连接营地，请确认服务器仍在运行。'); });
@@ -112,7 +126,8 @@ canvas.addEventListener('pointerdown', event => {
   if (!connected) return;
   canvas.focus({ preventScroll: true });
   const rect = canvas.getBoundingClientRect();
-  target = { x: (event.clientX - rect.left - view.ox) / view.scale, y: (event.clientY - rect.top - view.oy) / view.scale };
+  const point = { x: (event.clientX - rect.left - view.ox) / view.scale, y: (event.clientY - rect.top - view.oy) / view.scale };
+  if(combat.pick(point.x,point.y)){target=null;return;}target=point;
 });
 for (const button of document.querySelectorAll('[data-key]')) {
   button.addEventListener('pointerdown', event => {
@@ -175,6 +190,7 @@ function gate(o, time) {
 function avatar(p, position, time) {
   const {x,y}=position;
   const mine=p.id===selfId;
+  ctx.save();if(p.hp<=0)ctx.globalAlpha=.35;
   ellipse(x+3,y+8,16,7,'#07151e80');
   if(mine){ctx.strokeStyle=p.color+'90';ctx.lineWidth=1.3;ctx.beginPath();ctx.ellipse(x,y+6,20,9,0,0,Math.PI*2);ctx.stroke();}
   ctx.fillStyle='#243234';ctx.fillRect(x-8,y-6,6,14);ctx.fillRect(x+2,y-6,6,14);
@@ -183,9 +199,10 @@ function avatar(p, position, time) {
   ctx.fillStyle='#303b35';ctx.beginPath();ctx.arc(x,y-34,7,Math.PI,0);ctx.fill();
   line([[x+12,y-24],[x+17,y+6]],'#c4ae80',2.5);ellipse(x+12,y-25,3,4,'#c3ead0');
   ctx.font='12px "PingFang SC", sans-serif';ctx.textAlign='center';
-  const label=p.name+(mine?' · 你':'');const width=ctx.measureText(label).width;
+  const label=p.name+(p.hp<=0?' · 即将复活':mine?' · 你':'');const width=ctx.measureText(label).width;
   ctx.fillStyle='#112722d9';ctx.fillRect(x-width/2-8,y-63,width+16,22);
   ctx.fillStyle=mine?'#c8f0d3':'#e9debe';ctx.fillText(label,x,y-48);
+  ctx.fillStyle='#122c25';ctx.fillRect(x-20,y-37,40,4);ctx.fillStyle='#a7d5a0';ctx.fillRect(x-20,y-37,40*(p.hp??100)/(p.maxHp||100),4);ctx.restore();
 }
 function frame(now) {
   const rect=canvas.getBoundingClientRect(), dpr=Math.min(devicePixelRatio||1,2), w=rect.width, h=rect.height;
@@ -215,6 +232,7 @@ function frame(now) {
   const objects=WORLD.obstacles.map(o=>({y:o.y,draw:()=>o.kind==='tree'?tree(o):o.kind==='gate'?gate(o,now):rock(o)}));
   for(const p of players){const pos=display.get(p.id);if(!pos)continue;const t=reduceMotion?1:1-Math.exp(-dt*18);pos.x+=(p.x-pos.x)*t;pos.y+=(p.y-pos.y)*t;objects.push({y:pos.y,draw:()=>avatar(p,pos,now)});}
   objects.sort((a,b)=>a.y-b.y);for(const o of objects)o.draw();
+  combat.draw(ctx,dt,now);
   // A quiet campfire, rendered below the spawn area.
   ellipse(560,650,24,10,'#102c24a0');line([[546,650],[573,643]],'#887b58',5);line([[550,642],[570,652]],'#887b58',5);
   const flame=ctx.createRadialGradient(560,638,0,560,638,40);flame.addColorStop(0,'#ffcf6a35');flame.addColorStop(1,'#ffcf6a00');ctx.fillStyle=flame;ctx.fillRect(520,598,80,80);

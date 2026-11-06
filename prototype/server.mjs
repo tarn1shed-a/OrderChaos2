@@ -2,23 +2,29 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve, extname, sep } from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
-import { WORLD, RESOURCE_WORLD, advance } from './public/world.js';
+import { WORLD, RESOURCE_WORLD, advance, walkable } from './public/world.js';
+import { CharacterStore, characterView } from './game/character-store.mjs';
+import { CombatRoom, COMBAT, syncPlayerStats } from './game/combat.mjs';
 
 const PUBLIC = fileURLToPath(new URL('./public/', import.meta.url));
 const CONVERTED = fileURLToPath(new URL('../game-data/converted/', import.meta.url));
 const THREE_BUILD = fileURLToPath(new URL('./node_modules/three/build/', import.meta.url));
 const COLORS = ['#80e5d1', '#ffc47c', '#b7a2f7', '#f39da9', '#90bdec', '#d4e993', '#ffdfaa', '#b4e4ed'];
 
-export function createGameServer({ allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean) } = {}) {
+export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean) } = {}) {
+  if (saveFile && [PUBLIC, CONVERTED].some(root => resolve(saveFile).startsWith(root.endsWith(sep) ? root : root + sep))) throw new Error('角色存档必须放在静态资源目录之外');
+  const store = new CharacterStore(saveFile);
   const rooms = new Map();
+  const combatRooms = new Map();
+  const activeCharacters = new Map();
+  let storageError = null;
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
       if (url.pathname === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ ok: true, rooms: rooms.size }));
+        return res.end(JSON.stringify({ ok: !storageError, rooms: rooms.size, persistence: store.saveFile ? 'file' : 'memory' }));
       }
       const pathname = decodeURIComponent(url.pathname);
       const isAsset = pathname.startsWith('/assets/');
@@ -50,6 +56,19 @@ export function createGameServer({ allowedOrigins = (process.env.ALLOWED_ORIGINS
     if (ws.readyState === WebSocket.OPEN && ws.bufferedAmount < 65536) ws.send(JSON.stringify(data));
   };
   const reject = (ws, message) => { send(ws, { type: 'error', message }); ws.close(1008, message); };
+  const notice = (ws, message) => send(ws, { type: 'notice', message });
+  const emit = (room, data) => { for (const ws of room.values()) send(ws, data); };
+  const progress = ws => send(ws, { type: 'progress', character: characterView(ws.character), savedAt: store.savedAt });
+  const changed = (ws, immediate = false) => {
+    store.touch(ws.character); store.savePosition(ws.character, ws.scene, ws.player);
+    if (immediate) store.flush();
+    progress(ws);
+  };
+  const storageFailure = error => {
+    if (!storageError) console.error(error.message);
+    storageError = error;
+    for (const ws of activeCharacters.values()) notice(ws, '角色存档写入失败，游戏已暂停；请检查服务器终端');
+  };
   wss.on('connection', ws => {
     ws.alive = true;
     ws.on('error', () => {});
@@ -63,6 +82,8 @@ export function createGameServer({ allowedOrigins = (process.env.ALLOWED_ORIGINS
       let msg;
       try { msg = JSON.parse(buffer.toString()); } catch { return reject(ws, '消息格式错误'); }
       if (!msg || typeof msg !== 'object') return reject(ws, '消息格式错误');
+      if (storageError) return reject(ws, '存档当前不可用，请检查服务器后重试');
+      try {
       if (msg.type === 'join' && !ws.player) {
         const scene = msg.scene || 'camp';
         if (!['camp', 'resources'].includes(scene)) return reject(ws, '未知场景');
@@ -76,54 +97,116 @@ export function createGameServer({ allowedOrigins = (process.env.ALLOWED_ORIGINS
         if (room.size >= 8) return reject(ws, '这个房间已满（最多 8 人）');
         const used = new Set([...room.values()].map(s => s.player.color));
         const index = COLORS.findIndex(c => !used.has(c));
-        ws.player = { id: randomUUID(), name, x: world.spawn.x + index * 35, y: world.spawn.y, color: COLORS[index] };
+        let identity;
+        try { identity = store.resolveCharacter(name, msg.characterId, msg.resumeToken); }
+        catch (error) {
+          if (/存档写入失败/.test(error.message)) throw error;
+          return reject(ws, error.message);
+        }
+        if (activeCharacters.has(identity.record.id)) return reject(ws, '这个角色已在另一个窗口在线，请先退出原窗口');
+        ws.character = identity.record; ws.scene = scene;
+        const position = ws.character.positions[scene];
+        const restorePosition = position && walkable(position.x, position.y, world) && ws.character.hp > 0;
+        ws.player = { id: ws.character.id, name: ws.character.name,
+          x: restorePosition ? position.x : world.spawn.x + index * 35,
+          y: restorePosition ? position.y : world.spawn.y,
+          color: COLORS[index], deadUntil: 0, attackAt: -COMBAT.playerCooldownMs };
+        if (ws.character.hp <= 0) ws.character.hp = ws.character.maxHp;
+        syncPlayerStats(ws);
         ws.input = { x: 0, y: 0 }; ws.inputAt = Date.now(); ws.roomId = roomKey; ws.world = world;
+        activeCharacters.set(ws.player.id, ws);
         room.set(ws.player.id, ws); rooms.set(roomKey, room); clearTimeout(deadline);
-        send(ws, { type: 'welcome', id: ws.player.id, room: roomId, scene, world });
+        if (!combatRooms.has(roomKey)) combatRooms.set(roomKey, new CombatRoom(roomKey, world, scene, room, { changed, emit: data => emit(room, data), notice }));
+        store.savePosition(ws.character, scene, ws.player); store.touch(ws.character); store.flush();
+        send(ws, { type: 'welcome', id: ws.player.id, room: roomId, scene, world,
+          character: characterView(ws.character), resumeToken: identity.resumeToken, restored: identity.restored,
+          savedAt: store.savedAt, combat: { attackRange: combatRooms.get(roomKey).range, cooldownMs: COMBAT.playerCooldownMs } });
       } else if (msg.type === 'input' && ws.player) {
         if (typeof msg.x !== 'number' || typeof msg.y !== 'number' || !Number.isFinite(msg.x) || !Number.isFinite(msg.y) || Math.abs(msg.x) > 1 || Math.abs(msg.y) > 1) return reject(ws, '无效移动输入');
         ws.input = { x: msg.x, y: msg.y }; ws.inputAt = Date.now();
+      } else if (msg.type === 'attack' && ws.player) {
+        combatRooms.get(ws.roomId).attack(ws, msg.targetId, clock());
+      } else if (msg.type === 'save' && ws.player) {
+        changed(ws, true); notice(ws, '角色进度已保存');
       } else if (msg.type === 'ping' && ws.player) send(ws, { type: 'pong', at: msg.at });
       else reject(ws, '无效消息');
+      } catch (error) { storageFailure(error); reject(ws, '存档写入失败，请检查服务器后重试'); }
     });
     ws.on('close', () => {
       clearTimeout(deadline);
       const room = rooms.get(ws.roomId);
-      if (room) { room.delete(ws.player.id); if (!room.size) rooms.delete(ws.roomId); }
+      if (ws.character && activeCharacters.get(ws.character.id) === ws) {
+        store.savePosition(ws.character, ws.scene, ws.player);
+        if (!closing) { try { store.flush(); } catch (error) { storageFailure(error); } }
+        activeCharacters.delete(ws.character.id);
+      }
+      if (room) {
+        room.delete(ws.player.id);
+        if (!room.size) { rooms.delete(ws.roomId); combatRooms.delete(ws.roomId); }
+      }
     });
   });
   let tick = 0;
   const ticker = setInterval(() => {
     tick++;
-    for (const room of rooms.values()) {
+    if (storageError) return;
+    try {
+    for (const [roomKey, room] of rooms) {
       for (const ws of room.values()) {
-        advance(ws.player, Date.now() - ws.inputAt > 350 ? { x: 0, y: 0 } : ws.input, 0.05, ws.world);
+        if (ws.player.hp > 0) advance(ws.player, Date.now() - ws.inputAt > 350 ? { x: 0, y: 0 } : ws.input, 0.05, ws.world);
+        store.savePosition(ws.character, ws.scene, ws.player);
       }
-      const snapshot = { type: 'state', tick, players: [...room.values()].map(ws => ws.player) };
+      const encounter = combatRooms.get(roomKey);
+      encounter.tick(clock(), 0.05);
+      const snapshot = { type: 'state', tick, serverTime: clock(), players: [...room.values()].map(ws => ({ ...ws.player })), monsters: encounter.snapshot() };
       for (const ws of room.values()) send(ws, snapshot);
     }
+    } catch (error) { storageFailure(error); }
   }, 50);
+  const saveTimer = setInterval(() => {
+    if (storageError || !store.dirty) return;
+    try { store.flush(); for (const ws of activeCharacters.values()) progress(ws); }
+    catch (error) { storageFailure(error); }
+  }, 5000);
   const heartbeat = setInterval(() => {
     for (const ws of wss.clients) {
       if (!ws.alive) { ws.terminate(); continue; }
       ws.alive = false; ws.ping();
     }
   }, 15000);
+  let closing;
   return {
-    server, rooms,
-    async close() {
-      clearInterval(ticker); clearInterval(heartbeat);
-      for (const ws of wss.clients) ws.terminate();
-      await new Promise(resolve => wss.close(resolve));
-      await new Promise(resolve => server.close(resolve));
+    server, rooms, combatRooms,
+    close() {
+      if (closing) return closing;
+      closing = (async () => {
+        clearInterval(ticker); clearInterval(heartbeat); clearInterval(saveTimer);
+        try {
+          for (const ws of activeCharacters.values()) store.savePosition(ws.character, ws.scene, ws.player);
+          store.flush();
+        } finally {
+          // Even a full/unwritable disk must not leave the game listening or sockets alive.
+          for (const ws of wss.clients) ws.terminate();
+          await new Promise(resolve => wss.close(resolve));
+          await new Promise(resolve => server.close(resolve));
+        }
+      })();
+      return closing;
     },
   };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  const game = createGameServer();
+  const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
+  const saveFile = resolve(repositoryRoot, process.env.SAVE_FILE || 'runtime/characters.json');
+  const game = createGameServer({ saveFile });
   const port = Number(process.env.PORT || 8787);
-  game.server.listen(port, process.env.HOST || '0.0.0.0', () => console.log(`营地已开启：http://localhost:${port}\n同一局域网的朋友可使用这台电脑的局域网 IP 和相同端口。`));
-  const stop = async () => { await game.close(); process.exit(0); };
+  game.server.listen(port, process.env.HOST || '0.0.0.0', () => console.log(`营地已开启：http://localhost:${port}\n角色存档：${saveFile}\n同一局域网的朋友可使用这台电脑的局域网 IP 和相同端口。`));
+  let stopping = false;
+  const stop = async () => {
+    if (stopping) return; stopping = true;
+    try { await game.close(); process.exit(0); }
+    catch (error) { console.error(`服务器已关闭，但最终存档失败：${error.message}`); process.exit(1); }
+  };
   process.on('SIGINT', stop); process.on('SIGTERM', stop);
 }

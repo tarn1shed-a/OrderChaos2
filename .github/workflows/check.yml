@@ -36,3 +36,6 @@ jobs:
       - run: python tools/skill_attachments_tests.py
       - run: python tools/scene_render_tests.py
       - run: python tools/ui_assets_tests.py
+      - run: python tools/chinese_fonts_tests.py
+      - run: python tools/skill_icons_tests.py
+      - run: python tools/art_library_tests.py

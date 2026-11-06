@@ -2,6 +2,7 @@
 import json
 import math
 import argparse
+import hashlib
 from pathlib import Path
 from PIL import Image
 from fontTools.ttLib import TTFont
@@ -90,21 +91,48 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v1' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v2' and not ui['provenance']['swfScriptExecution']
     for entry in ui['assets'].values():
         with Image.open(asset(entry['url'], output)) as image:
             assert image.size == (entry['width'], entry['height'])
     glyphs = 0
+    assert {'chineseText','chineseDisplay'} <= set(ui['fonts']['faces'])
     for face in ui['fonts']['faces'].values():
-        with TTFont(asset(face['url'], output)) as font:
-            assert set(font.getBestCmap()) == set(face['codePoints'])
-            glyphs += len(face['codePoints'])
+        font_path = asset(face['url'], output)
+        with TTFont(font_path) as font:
+            if 'codePoints' in face:assert set(font.getBestCmap()) == set(face['codePoints'])
+            else:
+                assert len(font.getBestCmap()) == face['codePointCount']
+                assert font['maxp'].numGlyphs == face['sourceGlyphCount']
+                assert face['output']['allSourceTablesVerified'] and not face['subset']
+                assert face['coverage']['requiredText']['status'] == 'complete'
+                assert hashlib.sha256(font_path.read_bytes()).hexdigest() == face['output']['sha256']
+            glyphs += len(font.getBestCmap())
     assert ui['fonts']['faces']['leagueGothic']['completeDigits']
-    assert ui['fonts']['chineseStatus'] == 'incomplete-use-system-fallback'
+    assert ui['fonts']['chineseStatus'] == 'source-fonts-available'
+    assert ui['fonts']['requiredTextStatus'] == 'complete'
+    icons = ui['skillIcons']
+    assert icons['format'] == 'oc2-skill-icons-v1' and set(icons['icons']) == {'fireball','frost_blast'}
+    for icon in icons['icons'].values():
+        path = asset(icon['url'], output)
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == icon['sourceSHA256']
+        with Image.open(path) as image:assert image.size == (96,96)
+    catalog = json.loads(asset('/assets/library/catalog.json', output).read_text())
+    assert catalog['format'] == 'oc2-art-catalog-v1'
+    assert catalog['sourceFormats'] == {'web':m['format'], **{key:m[key]['format'] for key in ('effects','rendering','ui')}}
+    assert catalog['fileCount'] == len(catalog['entries'])
+    for entry in catalog['entries']:
+        path = asset('/assets/'+entry['path'], output)
+        assert path.stat().st_size == entry['bytes']
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == entry['sha256']
+    assert catalog['totalBytes'] == sum(entry['bytes'] for entry in catalog['entries'])
+    asset('/assets/library/index.html', output); asset('/assets/library/style.css', output)
     return {'status':'passed','terrainVertices':vertices,'terrainTriangles':len(terrain['indices'])//3,
                      'modelsReferenced':len(refs),'meshes':mesh_count,'textures':len(m['textures']), 'combatEffects':len(effects['effects']),
                      'sceneInstances':sum(len(s['instances']) for s in m['scenery']),
-                     'renderZones':len(rendering['zones']), 'uiCrops':len(ui['assets']), 'fontGlyphs':glyphs, 'warnings':m['warnings']}
+                     'renderZones':len(rendering['zones']), 'uiCrops':len(ui['assets']),
+                     'skillIcons':len(icons['icons']), 'fontCharacters':glyphs,
+                     'artFiles':catalog['fileCount'], 'warnings':m['warnings']}
 
 def main():
     cli = argparse.ArgumentParser(description=__doc__)

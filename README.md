@@ -45,7 +45,7 @@ pnpm start
 - 火焰与冰霜使用原 BEFF 中的 15 个发射器、545 条曲线，恢复发射间隔/数量、寿命、颜色/透明度、UV、尺寸、旋转、速度、重力/阻尼及材质混合。按原生整数 30 FPS 曲线采样；技能数值、整体飞行路径和随机种子仍为本地实现。
 - HDR 使用恢复的亮部提取、两轮水平/垂直模糊、Reinhardt 与原 LUT；雾按源区域优先级和指数公式计算。原设备质量覆盖、天气、完整光照与区域渐变尚未恢复，当前使用已验证的构造默认参数和原始区域表。
 - 火球蓄力分别跟随左右手 Dummy 的完整变换，飞行终点与命中使用胸部挂点，冰霜使用地面 +0.1 挂点及原缩放。森林精灵缺少的三个 Dummy 适配自同一动作参考模型，完整原版玩家技能 ID 链尚未证明。
-- 三维界面使用 9 张原版图集裁片与两套原嵌入西文字体子集；中文与缺失字符回退系统字体。布局与按钮行为由网页实现，不执行原 SWF。美术与字体文件均只在本地资源目录。
+- 三维界面使用 9 张原版图集裁片、两张经技能表链确认的 96×96 原图标，以及原 Fontin / Alegreya 中文字体。两份完整字体各含 20,932 个基本汉字，当前界面汉字均已检查覆盖；稀有扩展和源字体缺字仍回退系统字体。西文数字继续使用原嵌入子集，布局与按钮行为由网页实现，不执行 SWF。美术与字体均只留在本地。
 - 伤害、冷却、奖励与重生规则沿用现有服务端，不以动画画面计算命中。装备、原版混合地表材质和建筑碰撞尚未恢复，可穿过场景物件。
 
 资源单独复制到另一台 Mac、首次安装和局域网联机步骤见 [本地服务器指南](docs/LOCAL_SERVER.md)。服务器只开放转换后的资源，不开放原始导出目录或数据库。
@@ -97,6 +97,9 @@ python3 -m venv .venv
 .venv/bin/python tools/skill_attachments_tests.py
 .venv/bin/python tools/scene_render_tests.py
 .venv/bin/python tools/ui_assets_tests.py
+.venv/bin/python tools/chinese_fonts_tests.py
+.venv/bin/python tools/skill_icons_tests.py
+python3 tools/art_library_tests.py
 ```
 
 基础资源和动画格式测试包含自制数据，无需游戏文件；原始模型/动画集成测试在缺少本地素材时明确跳过。GitHub Actions 运行这些 Python 检查及 Node 联机、角色动画测试，不上传或下载游戏资源。
@@ -126,7 +129,24 @@ python3 -m venv .venv
 .venv/bin/python tools/analyze_native_effects.py /path/to/game.apk
 ```
 
-转换入口校验原始配套索引，使用恢复的名称查找规则提取当前样例必需的 111 个源文件（包括动画/骨架、4 个 BEFF、材质库、区域表、光影 shader、LUT、UI 图集与字体子集），生成 20 个模型、36 张场景/特效贴图、9 张 UI 裁片、2 个 WOFF、战斗/光影/界面清单和一块地图。原始包不修改，生成文件保存在被忽略的本地目录。当前要求 `oc2-combat-effects-v3`、`oc2-scene-render-v1` 和 `oc2-original-ui-v1`；请重新构建或单独复制匹配版本的整个 `converted/`，再刷新页面。
+转换入口按原索引提取 117 个包内源文件并校验长度/CRC，另按精确 SHA256/长度读取两个松散原字体。生成 20 个模型、36 张场景/特效贴图、9 张 UI 裁片、2 张技能原图、4 个 WOFF、战斗/光影/界面清单和一块地图。完整中文字体来自 `files/ui/Font/Fontin.ttf` 与 `Alegreya-Bold.ttf`，必须随原导出目录另行提供；不从系统字体替代转换。原始包不修改，产物留在忽略目录。当前要求 `oc2-combat-effects-v3`、`oc2-scene-render-v1` 和 `oc2-original-ui-v2`，请整体重建或单独同步匹配版本的 `converted/` 后刷新页面。
+
+## 美术素材复用与同步
+
+运行资源构建后，可打开 <http://localhost:8787/assets/library/index.html>。素材按界面、技能图标、字体、贴图、模型、地图、特效和光影分组，保留原图下载、用途引用、来源、尺寸、SHA256 与资源版本。目录位于 `game-data/converted/library/`，随整套转换资源复制，原始导出仍保留在原位置。
+
+下列同步工具只用 Python 标准库，朋友的服务器不需要安装逆向环境：
+
+```sh
+# 开发机：整理并生成独立素材 ZIP，默认写入 game-data/transfers/
+python3 tools/art_library.py export
+
+# 目标机：git pull 后停止服务，先检查再导入；文件名替换为实际收到的 ZIP
+python3 tools/art_library.py verify /path/to/oc2-assets.zip
+python3 tools/art_library.py import /path/to/oc2-assets.zip
+```
+
+导入先核对每个文件的长度、SHA256、路径和清单版本，再替换 `game-data/converted/`；旧目录自动保留为相邻 `converted.backup-…`。素材包只包含转换产物，不含 APK、原资源包、原 TTF 或 `runtime/` 存档。GitHub 同步目录生成器、导出/导入工具与代码，素材 ZIP 和备份继续留在 Git 忽略目录。
 
 ## 文档与当前验证
 

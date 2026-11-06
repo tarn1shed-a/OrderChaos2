@@ -107,7 +107,14 @@ function updateSkills() {
     const text=`${skill.name}${remaining>0?` · ${(remaining/1000).toFixed(1)}s`: ` · ${skill.hotkey}`}`;
     for(const id of [`skill-${skill.id}`,`field-${skill.id}`]) {
       const button=$(id);button.disabled=!connected||!chosenMonster()||!me||me.hp<=0||Boolean(casting)||remaining>0;
-      if(button.textContent!==text)button.textContent=text;
+      // Preserve the original icon and frame while updating the server cooldown.
+      const label=button.querySelector('.skill-label'),state=button.querySelector('.skill-status');
+      if(label&&state){
+        const value=remaining>0?`${(remaining/1000).toFixed(1)}s`:skill.hotkey;
+        if(state.textContent!==value)state.textContent=value;
+        button.classList.toggle('cooling',remaining>0);
+        button.setAttribute('aria-label',text);
+      }else if(button.textContent!==text)button.textContent=text;
       button.dataset.readyAt=String(me?.skillReadyAt?.[skill.id]||0);
     }
   }

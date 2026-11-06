@@ -35,12 +35,17 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
         ├── effects/
         ├── rendering/
         ├── ui/
+        ├── library/
         └── textures/
 ```
 
-资源到位后打开 `http://localhost:8787/explore.html`。不需要把 APK、原始 960 MiB 数据包、解包目录或 Python 环境传到服务器，仅运行网页所需的转换产物约 15 MB（随转换内容变化）。
+资源到位后打开 `http://localhost:8787/explore.html`。不需要把 APK、原始 960 MiB 数据包、解包目录或逆向环境传到服务器，仅运行网页所需的转换产物约 27 MB（含完整中文字体，随转换内容变化）。
 
 如需在目标机器重新研究或转换，才需要另传原始导出目录 `game-data/com.gameloft.android.ANMP.GloftO2HM/files/`，并安装 Python 3.12、创建 `.venv`、安装 `tools/requirements-resources.txt` 后运行 `tools/build_resource_preview.py`。
+
+开发机还可运行 `python3 tools/art_library.py export`，将完整转换资源整理为独立 ZIP，默认保存在 `game-data/transfers/`。目标机拉取相同版本代码、停止服务后，运行 `python3 tools/art_library.py verify /path/to/oc2-assets.zip`，再运行 `python3 tools/art_library.py import /path/to/oc2-assets.zip`。该工具仅需 Python 标准库；实际文件名以导出结果为准。校验失败不会替换现有资源；成功时旧 `converted/` 自动留为同目录下的 `converted.backup-…`，不会读写角色存档。完成后重新启动服务、刷新浏览器。
+
+素材库入口为 `http://localhost:8787/assets/library/index.html`，也可从三维页“资源与玩法”打开。分类目录含原图、字体示例、资源用途/来源、像素尺寸与校验信息，方便另一个网页项目按相对路径复用。不要只拷某几个图标或字体文件；整套 ZIP 与代码匹配后再更新正式服。
 
 ## 朋友连接服务器
 
@@ -54,7 +59,7 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
 
 技能特效版本需要匹配的 `converted/models/forest-elf.json`、`wolf.json`、`effects/combat.json`、新增特效贴图与 `manifest.json`，请整体复制本次构建的 `converted/`。只有旧资源时，三维页会明确要求重建；在拥有原始包的开发机执行 `.venv/bin/python tools/build_resource_preview.py` 即可，再把产物单独传给正式服。更新代码与资源后重启服务，让战斗消息和快照包含技能与动作时间。角色存档不随资源重建改变；待结算施法、技能冷却和怪物减速为当前会话/房间状态，不写入角色存档。
 
-挂点与光影版将特效格式升级为 `oc2-combat-effects-v3`，另需 `rendering/tutorial.json`、原 LUT、`ui/profile.json`、9 张 UI 裁片和两个 WOFF 字体。请完整同步 `converted/`，旧版清单会明确要求重建。原材质库、源表和字体只由开发机转换时读取；运行机器只需转换后的 JSON/PNG/WOFF，无须 BEFF、BDAE、SWF、APK 或反汇编。更新后重启服务并刷新页面；本次更新不修改服务端规则或存档格式。中文继续使用系统字体回退。
+当前要求 `oc2-combat-effects-v3` 与 `oc2-original-ui-v2`，包括 `rendering/`、原 LUT、`ui/profile.json`、9 张 UI 裁片、2 张技能图标、4 个 WOFF（含完整中文正文/标题字体）。请完整同步 `converted/`，旧版清单会明确要求重建。原材质库、源表和松散 TTF 只由开发机转换时读取；运行机器只需转换产物，无须 BEFF、BDAE、SWF、APK 或反汇编。更新后重启服务并刷新页面；本次更新不修改服务端规则或存档格式。源字体覆盖常用中文，未覆盖的稀有字仍回退系统字体。
 
 当前角色进度保存在根目录 `runtime/characters.json`，始终不进 Git。奖励立即保存，移动定期保存，离开和正常关闭服务会保存最新状态。异常强制断电时，尚未落盘的短时间移动可能丢失；正常关闭请使用 Control-C。
 

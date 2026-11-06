@@ -12,6 +12,9 @@ from bdae_skin import read_nodes
 from skill_attachments import recover_skill_attachments, REFERENCE_MODEL
 from recover_scene_render import build_scene_profile
 from ui_assets import recover_ui_assets
+from chinese_fonts import recover_chinese_fonts, SOURCE_FONTS
+from skill_icons import recover_skill_icons
+from art_library import build_catalog
 from terrain_convert import convert as terrain_convert
 from texture_decode import convert as texture_convert
 
@@ -23,7 +26,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     source, extracted, output = Path(source), Path(extracted), Path(output)
     # Select archive namespaces explicitly while the complete native mounting
     # priority is still under investigation. Never guess between conflicting packs.
-    packs = {'res.bin','res_a.bin','res_npc.bin','res_scene.bin','res_scene_generator_temple_000.bin','res_t.bin','res_t_upd15.bin','tables.bin','ui.bin',
+    packs = {'res.bin','res_a.bin','res_npc.bin','res_scene.bin','res_scene_generator_temple_000.bin','res_t.bin','res_t_upd15.bin','tables.bin','ui.bin','ui_icon_1.bin',
              'tutorial.bin','tutorial_layer.bin','tutorial_lmap_1.bin',
              'selection.bin','selection_layer.bin','selection_lmap_1.bin',
              'dawnwatch.bin','dawnwatch_layer.bin','dawnwatch_lmap_1.bin'}
@@ -143,6 +146,29 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     render_output=output/'rendering/tutorial.json';render_output.parent.mkdir(parents=True,exist_ok=True)
     render_output.write_text(json.dumps(rendering,ensure_ascii=False,indent=2))
     ui = recover_ui_assets(extract, output)
+    allowed_loose = {spec['path'] for spec in SOURCE_FONTS.values()}
+    def read_loose(path):
+        if path not in allowed_loose:raise ValueError(f'Unexpected loose resource: {path}')
+        return safe_output(source, path)
+    # Check actual Chinese interface characters, including dynamic combat labels.
+    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js'])
+    required_text = ''.join(sorted({ch for ch in ui_text if '\u3400' <= ch <= '\u9fff'}))
+    chinese = recover_chinese_fonts(read_loose, output, required_text)
+    if chinese['requiredTextStatus'] != 'complete':raise ValueError('Original Chinese fonts do not cover the current interface')
+    icons = recover_skill_icons(extract, output)
+    ui['format'] = 'oc2-original-ui-v2'
+    ui['fonts']['faces'].update(chinese['faces'])
+    ui['fonts']['chineseStatus'] = chinese['chineseStatus']
+    ui['fonts']['requiredTextStatus'] = chinese['requiredTextStatus']
+    ui['fonts']['chineseProfile'] = '/assets/ui/chinese-fonts.json'
+    ui['fonts']['status'] = 'original-full-cjk-and-embedded-latin-subsets'
+    ui['skillIcons'] = icons
+    ui['provenance']['limitations'] = [
+        'Original art and full source CJK fonts are reused in the web layout; complete original Flash UI behavior is not restored.',
+        'Rare CJK extensions and characters absent from the source fonts require system fallback.',
+        'Original square skill images are adapted to the existing circular web HUD slots.',
+    ]
+    (output/'ui/profile.json').write_text(json.dumps(ui,ensure_ascii=False,indent=2))
     manifest = {'format':'oc2-web-preview-v1','map':{'url':'/assets/maps/tutorial-preview.json','label':'新手区域 · 神殿遗迹','subtitle':'原作地形高程与场景摆放 · 地表使用单层材质预览','surfaceTexture':surface},
                 'player':player,'exhibits':exhibits,'scenery':scenery,'textures':textures,
                 'effects': {'url':'/assets/effects/combat.json','format':'oc2-combat-effects-v3'},
@@ -153,10 +179,14 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     archive_names = {entry['pack'] for entry in entries}
     paired = {name for name in archive_names if (source/Path(name).with_name(Path(name).stem+'_i.bin')).is_file()}
     validation = {'originalIndexes':len(paired), 'originalIndexRecords':sum(e['pack'] in paired for e in entries),
-                  'nativeNameLookup':True, 'extractedFiles':len(extracted_names)}
+                  'nativeNameLookup':True, 'extractedFiles':len(extracted_names),
+                  'looseFontSources':{face['sourcePath']:{'bytes':face['sourceBytes'],'sha256':face['sourceSHA256']}
+                                      for face in chinese['faces'].values()}}
     manifest['sourceValidation'] = validation
     (output/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2))
+    catalog = build_catalog(output)
     stats = {'archivesIndexed':len(set(e['pack'] for e in entries)),'archiveEntries':len(entries),'extractedVerifiedFiles':len(extracted_names),'convertedModels':len(models),'sceneInstances':sum(len(s['instances']) for s in scenery),'textures':len(textures),'mapVertices':len(terrain['positions'])//3,'mapTriangles':len(terrain['indices'])//3,'sourceValidation':validation,'warnings':warnings}
+    stats['artLibrary'] = {'files':catalog['fileCount'],'bytes':catalog['totalBytes']}
     return stats
 
 def main():

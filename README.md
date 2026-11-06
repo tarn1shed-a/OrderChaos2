@@ -4,7 +4,7 @@
 
 **仓库不包含游戏资源、原版源码、账号数据或数据库。** 网页客户端、协议、服务端与转换工具为本项目编写，不连接原游戏服务器。
 
-本项目以学习框架为优先目标：每轮追踪“输入 → 网络 → 服务端规则 → 存档 → 画面”的完整链路。先读 [学习路线与一次攻击的数据流](docs/LEARNING.md)，结合实际运行结果理解代码边界。
+本项目以学习为优先目标：资源逆向沿“线索 → 假设 → 字节/调用证据 → 实验验证”推进；框架开发沿“输入 → 网络 → 服务端规则 → 存档 → 画面”理解。先读 [学习路线](docs/LEARNING.md)，区分原程序的证据与我们新写的实现。
 
 ## 第一版可玩循环
 
@@ -94,6 +94,9 @@ python3 -m venv .venv
 
 ```sh
 # 原始下载文件放在 game-data/com.gameloft.android.ANMP.GloftO2HM/files/
+# 先只读检查一个资源条目的偏移、解压和 CRC
+.venv/bin/python tools/inspect_resource_entry.py
+
 .venv/bin/python tools/build_resource_preview.py
 .venv/bin/python tools/verify_resource_preview.py
 .venv/bin/python tools/terrain_convert.py --validate-all
@@ -108,7 +111,7 @@ python3 -m venv .venv
 ## 文档与当前验证
 
 - [上传 GitHub 的约定](docs/GITHUB.md)
-- [学习框架：一次攻击如何变成奖励和存档](docs/LEARNING.md)
+- [学习路线：资源逆向证据与框架数据流](docs/LEARNING.md)
 - [另一台 Mac 的安装与资源迁移](docs/LOCAL_SERVER.md)
 - [APK 资源加载分析](analysis/APK资源加载分析.md)
 - [资源解包与网页接入结果](analysis/资源解包与网页接入.md)

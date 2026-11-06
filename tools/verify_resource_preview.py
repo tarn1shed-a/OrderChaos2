@@ -30,6 +30,28 @@ def verify(output=OUT):
     mesh_count = 0
     for ref in refs:
         data = json.loads(asset(ref['url'], output).read_text())
+        if ref.get('animated'):
+            assert data['format'] == 'bdae946-character-v1'
+            rig = data['rig']
+            for index, node in enumerate(rig['nodes']):
+                assert -1 <= node['parent'] < index
+                assert all(math.isfinite(v) for key in ['position','quaternion','scale'] for v in node[key])
+            for skin in rig['skins']:
+                n = data['meshes'][skin['mesh']]['vertexCount']
+                assert len(skin['skinIndices']) == len(skin['skinWeights']) == n * 4
+                assert all(0 <= joint < len(skin['boneNodes']) for joint in skin['skinIndices'])
+                assert all(0 <= node < len(rig['nodes']) for node in skin['boneNodes'])
+                assert all(math.isfinite(weight) and 0 <= weight <= 1 for weight in skin['skinWeights'])
+                assert all(abs(sum(skin['skinWeights'][at:at+4])-1)<1e-5 for at in range(0,n*4,4))
+                assert skin['verification']['maximumRestBindShapeError'] < 1e-5
+            assert {clip['name'] for clip in data['clips']} == {'idle','walk_forward'}
+            for clip in data['clips']:
+                for track in clip['tracks']:
+                    components = 4 if track['type'] == 'quaternion' else 3
+                    assert len(track['values']) == len(track['times']) * components
+                    assert all(a < b for a,b in zip(track['times'],track['times'][1:]))
+                    assert track['times'][0] == 0 and abs(track['times'][-1]-clip['duration']) < 1e-7
+                    assert all(math.isfinite(value) for value in track['values'])
         for mesh in data['meshes']:
             n = len(mesh['positions'])//3
             assert n > 0 and all(math.isfinite(v) for v in mesh['positions'])

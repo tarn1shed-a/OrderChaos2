@@ -2,6 +2,7 @@ import * as THREE from '/vendor/three.module.js';
 import { RESOURCE_WORLD } from './world.js';
 import { sampleHeight } from './heightfield.js';
 import { webSocketEndpoint } from './network.js';
+import { createCharacterFactory, updateCharacterAnimation, disposeCharacterAnimation, snapshotMotion } from './character-animation.js';
 import { restoreCredentials, rememberCharacter, lastCharacterName, characterSessionWarning } from './character-session.js';
 
 const $ = id => document.getElementById(id);
@@ -18,6 +19,7 @@ let target = null, keys = new Set(), avatars = new Map(), rosterSignature = '', 
 let azimuth = .65, elevation = .58, distance = 24, previous = performance.now(), pointer = null;
 const focus = new THREE.Vector3(), raycaster = new THREE.Raycaster(), pointerNDC = new THREE.Vector2(), textureCache = new Map();
 const message = text => { $('message').textContent = text; };
+const modelFactories = new WeakMap();
 const status = (text, online = false) => { $('status').textContent = text; $('lamp').classList.toggle('online', online); };
 const send = data => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(data)); };
 async function json(url) { const r = await fetch(url); if (!r.ok) throw new Error(`读取 ${url} 失败（${r.status}）`); return r.json(); }
@@ -134,6 +136,11 @@ async function loadModel(entry) {
     const tex = await texture(assets.textures[mat.diffuse]);
     return new THREE.MeshStandardMaterial({ map: tex, color: tex ? 0xffffff : 0xa7bda1, roughness: .93, metalness: 0, side: THREE.DoubleSide, alphaTest: .35 });
   }));
+  if (entry.animated) {
+    const create = createCharacterFactory(THREE, data, materials), root = create();
+    modelFactories.set(root, create);
+    return root;
+  }
   for (const mesh of data.meshes) {
     const geo = geometry(mesh);
     let material = materials[mesh.material ?? 0];
@@ -182,6 +189,7 @@ async function init() {
     sun.shadow.mapSize.set(2048, 2048); sun.shadow.camera.left = -100; sun.shadow.camera.right = 100; sun.shadow.camera.top = 100; sun.shadow.camera.bottom = -100; sun.shadow.camera.far = 240; sun.shadow.normalBias = .025;
     scene.add(sun);
     assets = await json('/assets/manifest.json');
+    if (!assets.player?.animated) throw new Error('角色动画资源需要更新，请重新运行本地资源构建工具');
     terrainData = await json(assets.map.url);
     mapBounds = [terrainData.bounds.min, terrainData.bounds.max];
     origin = new THREE.Vector3((mapBounds[0][0] + mapBounds[1][0]) / 2, mapBounds[0][1], (mapBounds[0][2] + mapBounds[1][2]) / 2);
@@ -235,21 +243,25 @@ function updateRoster() {
     icon.className = 'avatar'; icon.textContent = '◇'; icon.style.color = p.color; text.textContent = p.name; tag.textContent = `Lv.${p.level || 1} · ${p.hp ?? 100} HP${p.id === selfId ? ' · 你' : ''}`; li.append(icon, text, tag); $('players').append(li);
   }
 }
-function syncAvatars() {
+function syncAvatars(serverTime = Date.now()) {
   const ids = new Set(snapshot.map(p => p.id));
-  for (const [id, a] of avatars) if (!ids.has(id)) { scene.remove(a.root); a.label.remove(); avatars.delete(id); }
+  for (const [id, a] of avatars) if (!ids.has(id)) { disposeCharacterAnimation(a.body); scene.remove(a.root); a.label.remove(); avatars.delete(id); }
   for (const p of snapshot) {
     if (!avatars.has(p.id)) {
-      const root = new THREE.Group(), body = modelTemplate.clone(true);
+      const root = new THREE.Group(), body = modelFactories.has(modelTemplate) ? modelFactories.get(modelTemplate)() : modelTemplate.clone(true);
       prepareFighter(body);
       root.add(body);
       const ring = new THREE.Mesh(new THREE.RingGeometry(.4, .49, 40), new THREE.MeshBasicMaterial({ color: p.color, side: THREE.DoubleSide, transparent: true, opacity: .8 })); ring.rotation.x = -Math.PI/2; ring.position.y = .05; root.add(ring);
       root.position.copy(localPosition(p.x, p.y)); scene.add(root);
       const label = document.createElement('div'); label.className = 'player-label' + (p.id === selfId ? ' mine' : '');
       const name = document.createElement('span'), health = document.createElement('span'); health.className = 'label-health'; name.textContent = p.name + (p.id === selfId ? ' · 你' : ''); label.append(name,health); $('labels').append(label);
-      avatars.set(p.id, { root, label, health, target: localPosition(p.x, p.y), body });
+      avatars.set(p.id, { root, label, health, target: localPosition(p.x, p.y), body,
+        lastState: null, lastStateAt: serverTime, motion: { moving: false, speed: 0 } });
     }
     const a = avatars.get(p.id); a.target.copy(localPosition(p.x, p.y));
+    a.motion = snapshotMotion(a.lastState, p, (serverTime - a.lastStateAt) / 1000, (mapBounds[1][0] - mapBounds[0][0]) / world.width);
+    a.lastState = { x: p.x, y: p.y }; a.lastStateAt = serverTime;
+    a.label.dataset.motion = a.motion.moving ? 'walk' : 'idle';
     a.health.textContent = p.hp <= 0 ? '倒下了 · 即将恢复' : `${p.hp ?? 100} / ${p.maxHp ?? 100}`;
     a.label.classList.toggle('dead',p.hp <= 0);
     a.body.visible = p.hp > 0;
@@ -302,7 +314,7 @@ function connect(name, room, retry = false) {
       const restored = msg.restored ? '已恢复角色进度。' : '已创建角色，开始第一次试炼。';
       message(characterSessionWarning() || restored); logEvent(restored);
       const url = new URL(location.href); url.searchParams.set('room', msg.room); history.replaceState(null, '', url); canvas.focus({ preventScroll: true });
-    } else if (msg.type === 'state') { snapshot = msg.players;monsterSnapshot=msg.monsters||[]; if(msg.serverTime)serverOffset=msg.serverTime-Date.now(); updateRoster(); syncAvatars();syncMonsters(); }
+    } else if (msg.type === 'state') { snapshot = msg.players;monsterSnapshot=msg.monsters||[]; if(msg.serverTime)serverOffset=msg.serverTime-Date.now(); updateRoster(); syncAvatars(msg.serverTime || Date.now());syncMonsters(); }
     else if (msg.type === 'progress') {
       const before=character; updateCharacter(msg.character,msg.savedAt);
       if(before&&msg.character.gold>before.gold){const gain=`获得 ${msg.character.xp-before.xp} 经验、${msg.character.gold-before.gold} 金币和狼皮`;logEvent(gain,true);flash(gain);}
@@ -384,6 +396,7 @@ function draw(now) {
   for(const [id,a] of avatars){
     const delta=a.target.clone().sub(a.root.position); if(delta.length()>.01)a.body.rotation.y=Math.atan2(delta.x,delta.z);
     a.root.position.lerp(a.target,1-Math.exp(-dt*16));
+    updateCharacterAnimation(a.body, dt, a.motion);
     animateFighter(a,Date.now());
     if(id===selfId){const dest=a.root.position.clone().add(new THREE.Vector3(0,1,0));focus.lerp(dest,1-Math.exp(-dt*7));$('position').textContent=`${(a.root.position.x+origin.x).toFixed(1)} E / ${(a.root.position.z+origin.z).toFixed(1)} N`;}
   }

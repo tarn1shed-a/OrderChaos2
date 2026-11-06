@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from resource_packs import index, ResourceArchive, normalize_resource_name, safe_output, DEFAULT_SOURCE
 from bdae_convert import BDAE
+from bdae_character import convert_character
 from terrain_convert import convert as terrain_convert
 from texture_decode import convert as texture_convert
 
@@ -67,8 +68,15 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         except Exception as e:
             warnings.append({'texture':path,'error':str(e)})
             return None
-    def model(path, key):
-        result = BDAE(extract(path)).parse()
+    def model(path, key, animated=False):
+        if animated:
+            animation_path = 'model/npc/character/elf/female/anim/animations.bdae'
+            animation_model = 'model/npc/character/elf/female/oc2_elf_f_body_01.bdae'
+            result = convert_character(extract(path), extract(animation_path), extract(animation_model))
+            result['animationBinding']['source'] = animation_path
+            result['animationBinding']['restSource'] = animation_model
+        else:
+            result = BDAE(extract(path)).parse()
         result['source'] = path
         if not result['meshes']:
             raise ValueError('Model has no supported meshes')
@@ -77,9 +85,11 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         dest = output/'models'/f'{key}.json';dest.parent.mkdir(parents=True,exist_ok=True)
         dest.write_text(json.dumps(result,ensure_ascii=False,separators=(',',':'),allow_nan=False))
         record = {'url':f'/assets/models/{key}.json','model':path,'vertices':sum(m['vertexCount'] for m in result['meshes']),'triangles':sum(m['triangleCount'] for m in result['meshes'])}
+        if animated:
+            record['animated'] = True
         models[key] = record
         return record
-    player = model('model/npc/creature/humanoid/forest_elf/forest_elf.bdae','forest-elf')
+    player = model('model/npc/creature/humanoid/forest_elf/forest_elf.bdae','forest-elf', animated=True)
     exhibits = []
     for name in ['wolf','bear']:
         # Paths come from the observed archive index; reject ambiguity rather than guess.

@@ -196,7 +196,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     chinese = recover_chinese_fonts(read_loose, output, required_text)
     if chinese['requiredTextStatus'] != 'complete':raise ValueError('Original Chinese fonts do not cover the current interface')
     icons = recover_skill_icons(extract, output)
-    ui['format'] = 'oc2-original-ui-v18'
+    ui['format'] = 'oc2-original-ui-v19'
     ui['fonts']['faces'].update(chinese['faces'])
     ui['fonts']['chineseStatus'] = chinese['chineseStatus']
     ui['fonts']['requiredTextStatus'] = chinese['requiredTextStatus']

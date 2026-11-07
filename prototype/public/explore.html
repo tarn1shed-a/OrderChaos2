@@ -127,8 +127,9 @@
     </div>
   </dialog>
   <dialog id="quest-book" class="quest-book" aria-labelledby="quest-book-title">
-    <header><h2 id="quest-book-title">任务手册</h2><button id="quest-book-close" type="button" aria-label="关闭任务面板">×</button></header>
-    <div class="quest-stage-viewport"><div id="quest-stage-size"><div id="quest-stage"><p id="quest-empty"></p></div></div></div>
+    <div id="quest-topbar" aria-hidden="true"></div>
+    <button id="quest-book-close" type="button" aria-label="返回"><span id="quest-back-art" aria-hidden="true"></span><span id="quest-book-title">任务手册</span></button>
+    <div id="quest-stage"><p id="quest-empty"></p></div>
   </dialog>
   <dialog id="skill-book" class="skill-book" aria-labelledby="skill-book-title" aria-describedby="skill-book-note">
     <header class="skill-book-heading"><h2 id="skill-book-title">技能 <small>法师</small></h2><button id="skill-book-close" type="button" aria-label="关闭技能面板">×</button></header>

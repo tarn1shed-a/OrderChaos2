@@ -40,6 +40,21 @@ class QuestAssetsTests(unittest.TestCase):
   self.assertEqual(len(data['objects']),3);self.assertEqual(next(q for q in data['catalog'] if q['id']==632)['sourceObjects'],[621])
   with tempfile.TemporaryDirectory() as temp:
    p=recover_quest_ui(extract,temp,data);self.assertEqual({k:v['codeSHA256'] for k,v in p['methods'].items()},METHODS)
+   frame=p['frame'];self.assertEqual(frame['format'],'oc2-source-igm-frame-v1')
+   self.assertEqual(frame['layout']['closeY'],-5);self.assertEqual(frame['layout']['topbarHeight'],62)
+   self.assertAlmostEqual(frame['layout']['pageSize'][0],872.0814308166504)
+   self.assertAlmostEqual(frame['layout']['pageSize'][1],565.0219940185548)
+   self.assertEqual(frame['title']['style']['fontHeight'],38)
+   self.assertEqual(frame['title']['placement']['matrixPixels'][4:],[82.55,11.85])
+   self.assertEqual([c['sourceDepth'] for c in frame['drawings']['background']['children']],[1,3,5,6])
+   # Both original texture layers remain; do not deduplicate by symbol ID.
+   self.assertEqual(frame['drawings']['background']['children'][0]['node'],frame['drawings']['background']['children'][1]['node'])
+   import hashlib
+   from igm_frame_assets import METHODS as FRAME_METHODS
+   self.assertEqual({k:v['codeSHA256'] for k,v in frame['methods'].items()},FRAME_METHODS)
+   for a in frame['assets'].values():
+    self.assertEqual((Path(temp)/a['url'].removeprefix('/assets/')).read_bytes(),extract(a['sourcePath']))
+    self.assertEqual(hashlib.sha256(extract(a['sourcePath'])).hexdigest(),a['sourceSHA256'])
    self.assertEqual(p['strings']['GENERAL_QUESTHUD_NOQUEST'],{'id':984,'text':'无可用任务！'});self.assertEqual(p['emptyTextStyle']['fontHeight'],36)
    fields=p['layouts']['book']['fields'];self.assertAlmostEqual(fields['panel_list.item_1']['matrixPixels'][5]-fields['panel_list.item_0']['matrixPixels'][5],63.8)
    self.assertEqual(p['assets']['unfinished']['sourcePath'],'ui/icons/head_obj/quest_unfinished.png');self.assertTrue((Path(temp)/'ui/quest-unfinished.png').is_file());self.assertFalse(p['provenance']['swfScriptExecution'])

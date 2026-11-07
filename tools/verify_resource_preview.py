@@ -96,7 +96,7 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v18' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v19' and not ui['provenance']['swfScriptExecution']
     controls=ui['controls'];assert controls['format']=='oc2-original-controls-v1' and not controls['scriptExecution']
     assert m['player']['jumpAnimations']
     collision=json.loads(asset(m['collision']['url'],output).read_text())
@@ -108,11 +108,17 @@ def verify(output=OUT):
     gameplay=json.loads(asset(m['gameplay']['url'],output).read_text())
     assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v9'
     quests=gameplay['quests'];assert quests['format']=='oc2-source-quests-v1' and not quests['serverScriptsRecovered']
-    quest_ui=ui['questUI'];assert quest_ui['format']=='oc2-original-quest-ui-v2' and quest_ui['data']==quests
+    quest_ui=ui['questUI'];assert quest_ui['format']=='oc2-original-quest-ui-v3' and quest_ui['data']==quests
     assert len(quests['catalog'])==2 and len(quests['objects'])==3 and len(quest_ui['methods'])==11 and len(quest_ui['assets'])==4
     assert quests['clientStates']['status']['QMGR_QUEST_FINISHED']==9 and quests['clientStates']['status']['QMGR_QUEST_NOT_FINISHED']==4
     assert quest_ui['strings']['GENERAL_QUESTHUD_NOQUEST']['text']=='无可用任务！'
     assert quest_ui==json.loads(asset('/assets/ui/quests.json',output).read_text())
+    frame=quest_ui['frame'];assert frame==json.loads(asset('/assets/ui/igm-frame.json',output).read_text())
+    assert frame['format']=='oc2-source-igm-frame-v1' and len(frame['methods'])==6 and len(frame['assets'])==2
+    assert frame['layout']['topbarHeight']==62 and frame['layout']['closeY']==-5 and frame['title']['style']['fontHeight']==38
+    for entry in frame['assets'].values():
+        raw=asset(entry['url'],output).read_bytes();assert hashlib.sha256(raw).hexdigest()==entry['sourceSHA256']
+        with Image.open(asset(entry['url'],output)) as image:assert image.size==(entry['width'],entry['height'])
     for entry in quest_ui['assets'].values():
         with Image.open(asset(entry['url'],output)) as image:assert image.size==(entry['width'],entry['height'])
     interaction=gameplay['interaction'];assert interaction['format']=='oc2-source-interaction-v1'

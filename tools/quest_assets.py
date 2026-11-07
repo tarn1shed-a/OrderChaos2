@@ -6,6 +6,7 @@ from hud_assets import document,named_path,_ini_blocks,sprite_frames
 from optimized_abc import parse_abc,extract_abc,named_method
 from skill_icons import decode_localized_names
 from ui_assets import Bits
+from igm_frame_assets import recover_igm_frame
 
 METHODS={
  'QuestListHero.initString':'2fd23042a16c9be2ba37cce4b9ba4fb978361a97743e53fe37a25a2bbbff87f7',
@@ -63,10 +64,11 @@ def recover_quest_ui(extract,output,data):
   image.verify();filename='quest-'+key+'.png';(destination/filename).write_bytes(raw)
   assets[key]={'url':'/assets/ui/'+filename,'width':96,'height':96,'sourcePath':source,'sourceSHA256':hashlib.sha256(raw).hexdigest(),
    'sourceMethod':'QuestListHero.getQuestList','mode':'unchanged-full-source-png'}
- result={'format':'oc2-original-quest-ui-v2','layouts':{'book':{'stagePixels':book['stagePixels'],'fields':layout},'hud':{'fields':hud_layout}},
+ frame=recover_igm_frame(load,output)
+ result={'format':'oc2-original-quest-ui-v3','frame':frame,'layouts':{'book':{'stagePixels':book['stagePixels'],'fields':layout},'hud':{'fields':hud_layout}},
   'methods':methods,'assets':assets,'data':data,'strings':strings,'emptyTextStyle':empty_style,
   'sources':{k:{'bytes':len(v),'sha256':hashlib.sha256(v).hexdigest()} for k,v in loaded.items()},
   'provenance':{'swfScriptExecution':False,'originalServerStateAvailable':False,
    'limits':['Original list/detail/button transforms, the empty-list text branch and HUD quest-state icon paths are verified. The normalquest bitmap has metadata only and no exact external file was found.',
-   'The game enables only the verified empty accepted-list branch. Catalog rows, research legends and object inspectors are not displayed as live game UI. Original nonempty quest processing and WindowContainerIGM framing/font fallback remain incomplete.']}}
+   'The game enables only the verified empty accepted-list branch in the recovered WindowContainerIGM frame. Catalog rows, research legends and object inspectors are not displayed as live game UI. Original nonempty quest processing, navigation history, DPI scaling and full text/filter rasterization remain incomplete.']}}
  (destination/'quests.json').write_text(json.dumps(result,ensure_ascii=False,indent=2));return result

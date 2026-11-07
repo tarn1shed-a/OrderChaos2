@@ -39,19 +39,18 @@
 .desktop-game.recovered-hud.original-mobile .desktop-hotbar .field-skill:not(.cooling) .skill-status{visibility:hidden}
 .desktop-game.recovered-hud.original-mobile .desktop-hotbar .field-skill.cooling .skill-status{position:absolute;inset:0;display:grid;place-items:center;border:0;background:none;border-radius:0;font:25px var(--oc2-number);color:#f8edce}
 .desktop-game.recovered-hud.original-mobile .desktop-hotbar .hud-cooldown{inset:7%;border-radius:50%;overflow:hidden}
-.original-mobile #field-actions #field-attack{position:absolute;inset:auto;padding:0;min-height:0;min-width:0;margin:0;border:0;border-radius:0;background:none;box-shadow:none;pointer-events:auto;touch-action:manipulation}
+.original-mobile #field-actions #field-attack{position:absolute;inset:auto;padding:0;min-height:0;min-width:0;margin:0;border:0;border-radius:0;background:none;box-shadow:none;pointer-events:none;touch-action:manipulation}
 .original-mobile #field-attack .attack-art{position:absolute;inset:0;display:grid;place-items:center;background:var(--hud-attackBackground) center/100% 100% no-repeat}
-.original-mobile #field-attack .attack-symbol{width:58%;height:58%;z-index:1;color:#e8e4ce;filter:drop-shadow(0 1px 2px #000)}
+.original-mobile .control-icon{position:absolute;display:block;object-fit:contain;pointer-events:none}
 .original-mobile #field-attack .attack-label,.original-mobile #field-attack .attack-key{display:none}
 .original-mobile #field-attack .hud-cooldown{inset:0}
 .original-mobile #field-attack:disabled{opacity:.75}
-.original-mobile #field-interaction{position:absolute;inset:auto;border:0;border-radius:0;margin:0;padding:0;background:var(--hud-interactionBackground) center/100% 100% no-repeat;opacity:.5;pointer-events:none}
-.original-mobile #field-interaction span{display:none}
-.original-mobile #touch-controls.native-joystick{display:block;position:absolute;z-index:5;left:40px;right:auto;bottom:54px;width:128px;height:128px;transform:scale(var(--native-hud-scale,1));transform-origin:bottom left;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;border:0;padding:0;cursor:grab}
-.original-mobile .joystick-base,.original-mobile .joystick-knob{position:absolute;display:block;background:var(--hud-joystickDisc) center/100% 100% no-repeat;pointer-events:none}
-.original-mobile .joystick-base{inset:0;opacity:.32}
-.original-mobile .joystick-knob{left:40px;top:40px;width:48px;height:48px;opacity:.65}
-.original-mobile .native-joystick.active .joystick-base{opacity:.55}.original-mobile .native-joystick.active .joystick-knob{opacity:1}
+.original-mobile #field-interaction{position:absolute;inset:auto;border:0;border-radius:0;margin:0;padding:0;background:var(--hud-interactionBackground) center/100% 100% no-repeat;pointer-events:none;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.original-mobile #field-interaction:disabled{opacity:.5}
+.original-mobile #touch-controls.native-joystick{display:block;position:absolute;z-index:5;inset:0;width:100%;height:100%;pointer-events:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.original-mobile .joystick-hit-area{position:absolute;left:0;bottom:0;pointer-events:auto;touch-action:none}
+.original-mobile .joystick-base,.original-mobile .joystick-knob{position:absolute;display:none;background:var(--hud-joystickDisc) center/100% 100% no-repeat;pointer-events:none}
+.original-mobile .native-joystick.active .joystick-base,.original-mobile .native-joystick.active .joystick-knob{display:block}
 .desktop-game.recovered-hud.original-mobile .field-experience{left:0;right:0;bottom:0;height:8px;transform:none}
 .original-mobile #field-xp-text,.original-mobile #field-xp-glow{display:none}
 .original-mobile .hud-xp-track{height:8px;border:0;opacity:1;background:#10232b}
@@ -64,3 +63,6 @@
 @media(max-width:600px) and (orientation:portrait){.original-mobile .game-toolbar{top:105px}}
 .original-mobile #scene:focus-visible{outline:none}
 .desktop-game.recovered-hud.original-mobile .field-experience,.original-mobile .hud-xp-track{height:calc(8px * var(--native-hud-scale,1))}
+
+.original-mobile .control-hit-area{position:absolute;inset:0;display:block;pointer-events:auto;touch-action:none}
+.original-mobile button:disabled .control-hit-area{pointer-events:none}

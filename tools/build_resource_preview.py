@@ -17,6 +17,7 @@ from skill_icons import recover_skill_icons
 from skill_ui_assets import recover_skill_ui
 from art_library import build_catalog
 from hud_assets import recover_hud_assets
+from control_assets import recover_controls
 from character_portraits import recover_character_portraits
 from inventory_assets import recover_inventory_assets
 from item_icons import recover_item_icons
@@ -34,7 +35,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     source, extracted, output = Path(source), Path(extracted), Path(output)
     # Select archive namespaces explicitly while the complete native mounting
     # priority is still under investigation. Never guess between conflicting packs.
-    packs = {'res.bin','res_a.bin','res_npc.bin','res_item.bin','res_scene.bin','res_scene_generator_temple_000.bin','res_t.bin','res_t_upd15.bin','tables.bin','ui.bin','ui_icon_1.bin','conf.bin',
+    packs = {'res.bin','res_a.bin','res_npc.bin','res_item.bin','res_scene.bin','res_scene_generator_temple_000.bin','res_t.bin','res_t_upd15.bin','tables.bin','ui.bin','ui_icon_1.bin','ui_icon_2.bin','conf.bin',
              'tutorial.bin','tutorial_layer.bin','tutorial_lmap_1.bin',
              'selection.bin','selection_layer.bin','selection_lmap_1.bin',
              'dawnwatch.bin','dawnwatch_layer.bin','dawnwatch_lmap_1.bin'}
@@ -117,7 +118,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
             record['animated'] = True
             record['combatAnimations'] = True
             record['attachmentPoints']=['Dummy_R_Hand','Dummy_L_Hand','Dummy_Chest'] if profile=='player' else ['Dummy_Chest']
-            if profile == 'player': record['skillAnimations'] = True
+            if profile == 'player': record.update(skillAnimations=True,jumpAnimations=True)
         if equipment:
             record['appearanceFormat'] = result['appearance']['format']
             record['hairFormat']=result['appearance']['hair']['format']
@@ -181,7 +182,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     chinese = recover_chinese_fonts(read_loose, output, required_text)
     if chinese['requiredTextStatus'] != 'complete':raise ValueError('Original Chinese fonts do not cover the current interface')
     icons = recover_skill_icons(extract, output)
-    ui['format'] = 'oc2-original-ui-v8'
+    ui['format'] = 'oc2-original-ui-v9'
     ui['fonts']['faces'].update(chinese['faces'])
     ui['fonts']['chineseStatus'] = chinese['chineseStatus']
     ui['fonts']['requiredTextStatus'] = chinese['requiredTextStatus']
@@ -189,6 +190,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     ui['fonts']['status'] = 'original-full-cjk-and-embedded-latin-subsets'
     ui['skillIcons'] = icons
     ui['hud'] = recover_hud_assets(extract, output)
+    ui['controls'] = recover_controls(extract, output/'ui', ui['hud'])
     ui['portraits'] = recover_character_portraits(extract, output, player_model=player_path)
     ui['inventory'] = recover_inventory_assets(extract, output)
     ui['itemIcons'] = recover_item_icons(extract, output)

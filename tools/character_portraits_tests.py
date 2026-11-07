@@ -90,7 +90,7 @@ class CharacterPortraitTests(unittest.TestCase):
         self.assertIn('Common.gluicEx.components.ui::Model3D',result['multinames'])
         self.assertIn('playerIcon',result['strings'])
         self.assertEqual(result['unparsedMethodBytes'],1)
-        self.assertIn('unresolved',result['proofScope'])
+        self.assertIn('constant-pool-only',result['proofScope'])
         for invalid in (raw[:8],b'\0\0\0\0'+raw[4:],struct.pack('<HH',16,46)+b'\xff'*6):
             with self.assertRaises(ValueError):decode_abc_metadata(invalid)
 

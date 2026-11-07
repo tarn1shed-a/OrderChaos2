@@ -19,6 +19,7 @@ import { createInventoryUI } from './inventory-ui.js';
 import { createMinimap } from './minimap.js';
 import { createMobileHUD } from './mobile-hud.js';
 import { createTouchJoystick } from './touch-joystick.js';
+import { createPressControl } from './press-control.js';
 import { createHotbarUI } from './hotbar-ui.js';
 import { encodeCharacterRecovery, decodeCharacterRecovery } from './character-recovery.js';
 import { restoreCredentials, rememberCharacter, lastCharacterName, characterSessionWarning } from './character-session.js';
@@ -35,7 +36,7 @@ let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset =
 let combatEffects, environment, hdrRenderer, hud, inventoryUI, skillBook, minimap, nextSkillRequestAt = 0;
 let renderEquipmentPreview, equipmentPreviewKey;
 let playerLookProfile;
-let hotbar, mobileHUD, joystick;
+let hotbar, mobileHUD, joystick, jumpControl, controlProfile;
 let joystickInput={x:0,y:0,active:false};
 let activeCredentials=null;
 const monsterViews = new Map();
@@ -74,6 +75,11 @@ function updateCharacter(data, savedAt = null) {
   hud?.character(data);
   inventoryUI?.update(data);
   hotbar?.syncCharacter(data);
+  if(controlProfile){
+    const key=data.equipment?.mainHand==='trainingSword'?'sword':'unarmed';
+    const icon=$('field-attack').querySelector('.control-icon');
+    icon.src=controlProfile.icons[key].url;$('field-attack').dataset.icon=key;
+  }
   $('field-inventory').disabled=false;
   const previewKey=`${equipmentAppearanceKey(data.equipment)}:${lookKey(data.look)}`;
   if (renderEquipmentPreview && previewKey!==equipmentPreviewKey) {
@@ -132,6 +138,9 @@ function useSkill(id) {
 function updateSkills() {
   const me=snapshot.find(p=>p.id===selfId),now=Date.now()+serverOffset;
   const casting=me?.cast&&now<me.cast.impactAt;
+  const blocked=inputBlocked()||!connected||!me||me.hp<=0;
+  if(blocked||casting)jumpControl?.reset();
+  $('field-interaction').disabled=blocked||Boolean(casting);
   for(const skill of Object.values(SKILLS)) {
     const remaining=Math.max(0,(me?.skillReadyAt?.[skill.id]||0)-now);
     const hotkey=hotbar?.keyForSkill(skill.id)||skill.hotkey;
@@ -226,6 +235,7 @@ async function loadModel(entry) {
     if(Array.isArray(entry.attachmentPoints))for(const name of entry.attachmentPoints)if(!data.rig?.nodes.some(node=>node.name===name||node.aliases?.includes(name)))throw new Error(`原始挂点 ${name} 缺失，请更新模型资源`);
     if (entry.combatAnimations && !['attack','hurt','death'].every(name => data.clips?.some(clip => clip.name === name))) throw new Error('战斗动作资源版本不匹配，请重新构建本地资源');
     if(entry.skillAnimations&&!Object.values(SKILLS).every(skill=>data.clips?.some(clip=>clip.name===skill.clip)))throw new Error('技能动作资源版本不匹配，请重新构建本地资源');
+    if(entry===assets.player&&!['jump_start','jump_air','jump_land'].every(name=>data.clips?.some(clip=>clip.name===name)))throw new Error('跳跃动作资源版本不匹配，请重新构建本地资源');
     const create = createCharacterFactory(THREE, data, materials), root = create();
     modelFactories.set(root, create);
     return root;
@@ -294,8 +304,10 @@ async function init() {
         mobileHUD?.layout();updateSkills();
         $('skill-hint').firstChild.textContent=Object.values(SKILLS).map(skill=>(hotbar?.keyForSkill(skill.id)||skill.hotkey)+'：'+skill.name).join(' · ');
       }});
+    controlProfile=uiProfile.controls;
     mobileHUD=createMobileHUD(uiProfile.hud);
-    joystick=createTouchJoystick($('touch-controls'),{enabled:()=>connected&&Boolean(snapshot.find(p=>p.id===selfId)?.hp>0)&&!inputBlocked(),change:value=>{joystickInput=value;if(value.active){target=null;keys.clear();}else if(connected)send({type:'input',x:0,y:0});}});
+    jumpControl=createPressControl($('field-interaction'),{enabled:()=>connected&&Boolean(snapshot.find(p=>p.id===selfId)?.hp>0)&&!inputBlocked(),change:pressed=>send({type:'jump',pressed})});
+    joystick=createTouchJoystick($('touch-controls'),{stage:viewport,profile:controlProfile.joystick,scale:()=>mobileHUD.scale,enabled:()=>connected&&Boolean(snapshot.find(p=>p.id===selfId)?.hp>0)&&!inputBlocked(),change:value=>{joystickInput=value;if(value.active){target=null;keys.clear();}else if(connected)send({type:'input',x:0,y:0});}});
     terrainData = await json(assets.map.url);
     mapBounds = [terrainData.bounds.min, terrainData.bounds.max];
     origin = new THREE.Vector3((mapBounds[0][0] + mapBounds[1][0]) / 2, mapBounds[0][1], (mapBounds[0][2] + mapBounds[1][2]) / 2);
@@ -438,7 +450,7 @@ function resetConnection() {
   hotbar?.disconnect();$('hotbar-settings').disabled=true;
   $('recovery-copy').disabled=true;$('recovery-show').disabled=true;$('recovery-show').textContent='显示恢复码';$('recovery-status').textContent='';$('recovery-export').value='';$('recovery-export').hidden=true;
   $('recovery-code').disabled=false;$('recovery-join').disabled=!ready;
-  $('field-hud').hidden=true;$('field-attack').hidden=true;$('field-actions').hidden=true;$('touch-controls').hidden=true;joystick?.reset();combatEffects?.clear();
+  $('field-hud').hidden=true;$('field-attack').hidden=true;$('field-actions').hidden=true;$('touch-controls').hidden=true;joystick?.reset();jumpControl?.reset();$('field-interaction').disabled=true;combatEffects?.clear();
   hud?.clear();
   inventoryUI?.update(null);
   $('field-inventory').disabled=true;$('session-open').hidden=false;
@@ -523,7 +535,7 @@ $('invite').addEventListener('click', async () => { const url = inviteURL(); try
 $('second').addEventListener('click', () => window.open(inviteURL(), '_blank', 'noopener'));
 $('reset-view').addEventListener('click', () => { azimuth = .65; elevation = .58; distance = 12; });
 function inputBlocked(){return skillBook?.isOpen||hotbar?.isEditing||inventoryUI?.isOpen||!$('camp-panel').hidden||$('session-dialog').open;}
-function stop() { joystick?.reset();keys.clear(); target = null; if (connected) send({ type: 'input', x: 0, y: 0 }); }
+function stop() { jumpControl?.reset();joystick?.reset();keys.clear(); target = null; if (connected) send({ type: 'input', x: 0, y: 0 }); }
 function setCampPanel(open) {
   if(open){hotbar?.close();skillBook?.close();}
   stop();pointer=null;$('camp-panel').hidden=!open;
@@ -600,6 +612,7 @@ function draw(now) {
   for(const [id,a] of avatars){
     updateCharacterAnimation(a.body, dt, a.motion, Date.now()+serverOffset);
     const pose=characterAnimationState(a.body);a.label.dataset.motion=pose?.phase||'idle';
+    a.body.position.y=pose?.jumpHeight||0;a.label.dataset.jumpHeight=String(pose?.jumpHeight||0);
     const delta=a.target.clone().sub(a.root.position);
     if((pose?.phase==='attack'||pose?.phase?.startsWith('skill_'))&&Number.isFinite(a.combatFacing))a.body.rotation.y=a.combatFacing;
     else if(!pose?.dead&&delta.length()>.01)a.body.rotation.y=Math.atan2(delta.x,delta.z);
@@ -620,7 +633,7 @@ function draw(now) {
   const surface=heightAt(camera.position.x+origin.x,camera.position.z+origin.z)-origin.y;
   if(camera.position.y<surface+1.5){camera.position.y=surface+1.5;camera.lookAt(focus);}
   for(const a of avatars.values()){
-    const projected=a.root.position.clone().add(new THREE.Vector3(0,modelTemplate.userData.height+.4,0)).project(camera);
+    const projected=a.root.position.clone().add(new THREE.Vector3(0,modelTemplate.userData.height+.4+a.body.position.y,0)).project(camera);
     a.label.hidden=projected.z>1||projected.z< -1;
     a.label.style.left=`${(projected.x*.5+.5)*w}px`;a.label.style.top=`${(-projected.y*.5+.5)*h}px`;
   }

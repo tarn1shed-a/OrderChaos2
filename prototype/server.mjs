@@ -10,6 +10,7 @@ import { SKILLS } from './public/skills.js';
 import { changeEquipment } from './game/equipment.mjs';
 import { validLook } from './public/character-look.js';
 import { validHotbar, cloneHotbar } from './public/hotbar-settings.js';
+import { setJumpPressed, updateJump } from './game/jump.mjs';
 
 const PUBLIC = fileURLToPath(new URL('./public/', import.meta.url));
 const CONVERTED = fileURLToPath(new URL('../game-data/converted/', import.meta.url));
@@ -115,7 +116,7 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
           x: restorePosition ? position.x : world.spawn.x + index * 35,
           y: restorePosition ? position.y : world.spawn.y,
           color: COLORS[index], deadUntil: 0, attackAt: -COMBAT.playerCooldownMs,
-          animation: { attackAt: null, hitAt: null, deathAt: null }, cast: null, skillReadyAt: {} };
+          animation: { attackAt: null, hitAt: null, deathAt: null }, cast: null, jump:null, skillReadyAt: {} };
         if (ws.character.hp <= 0) ws.character.hp = ws.character.maxHp;
         syncPlayerStats(ws);
         ws.input = { x: 0, y: 0 }; ws.inputAt = Date.now(); ws.roomId = roomKey; ws.world = world;
@@ -129,9 +130,15 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
       } else if (msg.type === 'input' && ws.player) {
         if (typeof msg.x !== 'number' || typeof msg.y !== 'number' || !Number.isFinite(msg.x) || !Number.isFinite(msg.y) || Math.abs(msg.x) > 1 || Math.abs(msg.y) > 1) return reject(ws, '无效移动输入');
         ws.input = { x: msg.x, y: msg.y }; ws.inputAt = Date.now();
+      } else if (msg.type === 'jump' && ws.player) {
+        if(typeof msg.pressed!=='boolean')return reject(ws,'无效跳跃输入');
+        const result=setJumpPressed(ws,msg.pressed,clock(),combatRooms.get(ws.roomId).casts.has(ws.player.id));
+        if(result)notice(ws,result);
       } else if (msg.type === 'attack' && ws.player) {
+        if(ws.player.jump&&clock()<ws.player.jump.endsAt)return notice(ws,'跳跃结束后再攻击');
         combatRooms.get(ws.roomId).attack(ws, msg.targetId, clock());
       } else if (msg.type === 'skill' && ws.player) {
+        if(ws.player.jump&&clock()<ws.player.jump.endsAt)return notice(ws,'跳跃结束后再施法');
         combatRooms.get(ws.roomId).skill(ws, msg.skillId, msg.targetId, clock());
       } else if (['equip', 'unequip'].includes(msg.type) && ws.player) {
         if (combatRooms.get(ws.roomId).casts.has(ws.player.id)) return notice(ws, '施法时无法更换装备');
@@ -182,6 +189,7 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
       }
       const encounter = combatRooms.get(roomKey);
       encounter.tick(clock(), 0.05);
+      for(const ws of room.values())updateJump(ws,clock());
       const snapshot = { type: 'state', tick, serverTime: clock(), players: [...room.values()].map(ws => ({ ...ws.player, animation: { ...ws.player.animation },
         skillReadyAt: { ...ws.player.skillReadyAt }, cast: ws.player.cast ? structuredClone(ws.player.cast) : null })), monsters: encounter.snapshot() };
       for (const ws of room.values()) send(ws, snapshot);

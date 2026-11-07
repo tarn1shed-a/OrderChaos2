@@ -49,6 +49,7 @@ def verify(output=OUT):
                 assert skin['verification']['maximumRestBindShapeError'] < 1e-5
             expected = {'idle','walk_forward','attack','hurt','death'}
             if ref.get('skillAnimations'): expected |= {'skill_fireball','skill_frost_blast'}
+            if ref.get('jumpAnimations'): expected |= {'jump_start','jump_air','jump_land'}
             assert {clip['name'] for clip in data['clips']} == expected
             for clip in data['clips']:
                 for track in clip['tracks']:
@@ -91,7 +92,15 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v8' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v9' and not ui['provenance']['swfScriptExecution']
+    controls=ui['controls'];assert controls['format']=='oc2-original-controls-v1' and not controls['scriptExecution']
+    assert m['player']['jumpAnimations']
+    assert controls==json.loads((output/'ui/controls.json').read_text())
+    for icon in controls['icons'].values():
+        path=asset(icon['url'],output)
+        assert hashlib.sha256(path.read_bytes()).hexdigest()==icon['sourceSHA256']
+        with Image.open(path) as image:assert image.size==(96,96)
+    assert set(controls['hitZones'])=={'attack','interaction'}
     for entry in ui['assets'].values():
         with Image.open(asset(entry['url'], output)) as image:
             assert image.size == (entry['width'], entry['height'])
@@ -118,9 +127,9 @@ def verify(output=OUT):
         assert hashlib.sha256(path.read_bytes()).hexdigest() == icon['sourceSHA256']
         with Image.open(path) as image:assert image.size == (96,96)
     hud=ui['hud'];assert hud['format']=='oc2-original-hud-v1'
-    assert hud['nativeControls']['format']=='oc2-original-mobile-controls-v1'
+    assert hud['nativeControls']['format']=='oc2-original-mobile-controls-v2'
     assert set(hud['layouts']['joystick']['fields'])=={'bg','stick'}
-    assert hud['nativeControls']['joystick']['runtimePositionAndSizeAreNotProvenBySWF']
+    assert hud['nativeControls']['joystick']['runtimeEvidenceProfile']==controls['format']
     assert hud['progress']['healthGreen']['sourceRole']=='self-health'
     assert hud['progress']['healthGreen']['frameCount']==50
     assert hud['progress']['healthGreen']['webMapping']['ratioOrder']=='descending'
@@ -206,7 +215,7 @@ def verify(output=OUT):
                      'sceneInstances':sum(len(s['instances']) for s in m['scenery']),
                      'renderZones':len(rendering['zones']), 'uiCrops':len(ui['assets']),
                      'skillIcons':len(icons['icons']), 'fontCharacters':glyphs,
-                     'hudAssets':len(hud['assets']),'modelPortraits':len(portraits['models']),
+                     'hudAssets':len(hud['assets']),'controlIcons':len(controls['icons']),'controlMethods':len(controls['methods']),'modelPortraits':len(portraits['models']),
                      'skillCatalog':len(skill_ui['skills']),'skillUIAssets':len(skill_ui['assets']),
                      'inventoryAssets':len(inventory['assets']),'itemIcons':len(item_icons['icons']),
                      'equipmentAppearances':len(appearance['items']),

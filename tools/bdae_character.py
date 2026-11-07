@@ -9,7 +9,8 @@ from skill_attachments import adapt_socket_nodes
 ACTION_SOURCES = {
     'player': {'idle': 'idle', 'walk_forward': 'walk_forward',
                'attack': 'combat_1h_scepter_npc_01', 'hurt': 'hurt_battle_01', 'death': 'die_ground',
-               'skill_fireball': 'skill_mg_directed_instant', 'skill_frost_blast': 'skill_mg_omni_release'},
+               'skill_fireball': 'skill_mg_directed_instant', 'skill_frost_blast': 'skill_mg_omni_release',
+               'jump_start': 'jump_start', 'jump_air': 'jump_air', 'jump_land': 'jump_land'},
     'wolf': {'idle': 'idle', 'walk_forward': 'walk_forward',
              'attack': 'combat_01', 'hurt': 'hurt_battle_01', 'death': 'die_ground'},
 }

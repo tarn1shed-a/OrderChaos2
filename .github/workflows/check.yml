@@ -41,6 +41,8 @@ jobs:
       - run: python tools/skill_ui_assets_tests.py
       - run: python tools/art_library_tests.py
       - run: python tools/hud_assets_tests.py
+      - run: python tools/optimized_abc_tests.py
+      - run: python tools/control_assets_tests.py
       - run: python tools/character_portraits_tests.py
       - run: python tools/inventory_assets_tests.py
       - run: python tools/item_icons_tests.py

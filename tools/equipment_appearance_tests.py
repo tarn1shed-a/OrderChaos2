@@ -70,7 +70,7 @@ class EquipmentAppearanceTests(unittest.TestCase):
         self.assertEqual(len(appearance['items']['linenArmor']['meshIndices']), 2)
         self.assertTrue(set(appearance['foundationMeshIndices']) <= set(appearance['items']['linenArmor']['hideBaseMeshIndices']))
         self.assertFalse(appearance['provenance']['nativeBodyFlagMeaningRestored'])
-        self.assertEqual(set(clip['name'] for clip in data['clips']), {'idle','walk_forward','attack','hurt','death','skill_fireball','skill_frost_blast'})
+        self.assertEqual(set(clip['name'] for clip in data['clips']), {'idle','walk_forward','attack','hurt','death','skill_fireball','skill_frost_blast','jump_start','jump_air','jump_land'})
         weapon = data['meshes'][appearance['items']['trainingSword']['meshIndices'][0]]
         self.assertEqual(data['rig']['nodes'][weapon['attachment']['node']]['name'], 'Weapon_R-node')
         identity = multiply(weapon['attachment']['sourceGripMatrix'], weapon['attachment']['matrix'])

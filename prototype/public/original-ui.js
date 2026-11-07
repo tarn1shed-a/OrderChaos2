@@ -1,8 +1,8 @@
 // Only decoded art and embedded glyphs are loaded. Original SWF scripts never run.
 export async function loadOriginalUI(profile) {
-  if (profile.format !== 'oc2-original-ui-v8' || profile.fonts?.requiredTextStatus !== 'complete' ||
+  if (profile.format !== 'oc2-original-ui-v9' || profile.controls?.format!=='oc2-original-controls-v1' || profile.fonts?.requiredTextStatus !== 'complete' ||
       !['chineseText','chineseDisplay'].every(key=>profile.fonts.faces?.[key]?.conversion==='lossless-full-sfnt-to-woff') ||
-      profile.skillIcons?.format !== 'oc2-skill-icons-v1'||profile.hud?.format!=='oc2-original-hud-v1'||profile.hud?.nativeControls?.format!=='oc2-original-mobile-controls-v1'||
+      profile.skillIcons?.format !== 'oc2-skill-icons-v1'||profile.hud?.format!=='oc2-original-hud-v1'||profile.hud?.nativeControls?.format!=='oc2-original-mobile-controls-v2'||
       profile.portraits?.format!=='oc2-character-portraits-v1'||profile.inventory?.format!=='oc2-original-inventory-v1'||
       profile.itemIcons?.format!=='oc2-item-icons-v1'||profile.skillUI?.format!=='oc2-original-skill-ui-v1') throw new Error('原版界面资源需要更新，请重新构建本地资源');
   const imageKeys = ['buttonGreen','buttonGray','skillOrb','skillFrame','healthRing','experienceRing','healthFill','manaFill','panelBlue'];
@@ -21,6 +21,22 @@ export async function loadOriginalUI(profile) {
     if(image.naturalWidth!==entry.width||image.naturalHeight!==entry.height)throw new Error('原状态栏图集尺寸不匹配');
     document.documentElement.style.setProperty(`--hud-${key}`,`url("${url}")`);
   }));
+  await Promise.all(Object.values(profile.controls.icons).map(async entry=>{
+    const image=new Image();image.src=localURL(entry.url);await image.decode();
+    if(image.naturalWidth!==entry.width||image.naturalHeight!==entry.height)throw new Error('原版操作图标尺寸不匹配');
+  }));
+  for(const [name,id] of [['attack','field-attack'],['interaction','field-interaction']]){
+    const image=document.querySelector(`#${id} .control-icon`),bounds=profile.controls.iconPlacements[name].boundsFraction;
+    Object.assign(image.style,{left:`${bounds[0]*100}%`,top:`${bounds[1]*100}%`,width:`${bounds[2]*100}%`,height:`${bounds[3]*100}%`});
+    const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg'),defs=document.createElementNS(ns,'defs');
+    svg.setAttribute('width','0');svg.setAttribute('height','0');svg.setAttribute('aria-hidden','true');svg.style.position='absolute';
+    const clip=document.createElementNS(ns,'clipPath'),path=document.createElementNS(ns,'path'),hit=profile.controls.hitZones[name];
+    clip.id=`native-hit-${name}`;clip.setAttribute('clipPathUnits','objectBoundingBox');
+    path.setAttribute('d',hit.pathPixels);path.setAttribute('transform',`matrix(${hit.matrixFraction.join(' ')})`);
+    clip.append(path);defs.append(clip);svg.append(defs);document.body.append(svg);
+    document.querySelector(`#${id} .control-hit-area`).style.clipPath=`url(#${clip.id})`;
+  }
+  document.querySelector('#field-interaction .control-icon').src=profile.controls.icons.jump.url;
   await Promise.all(Object.entries(profile.inventory.assets).map(async ([key,entry])=>{
     const image=new Image();image.src=localURL(entry.url);await image.decode();
     if(image.naturalWidth!==entry.width||image.naturalHeight!==entry.height)throw new Error('原背包图集尺寸不匹配');

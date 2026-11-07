@@ -281,3 +281,26 @@ test('two clients and a late observer receive the same server skill, impact and 
   }
   assert.equal(observer.messages.filter(m=>m.type==='progress'&&m.character.kills>0).length,0);
 });
+
+test('jump is server timed, shared with late observers, transient across reconnect, and ignores forged height/timing',async t=>{
+  const f=await fixture(t),a=await enter(f,'跳跃甲',{scene:'resources'}),b=await enter(f,'跳跃乙',{scene:'resources'});
+  const markA=a.mark(),markB=b.mark();
+  a.send({type:'jump',pressed:true,startedAt:0,height:999999,endsAt:Infinity});
+  const first=await stateAfter(a,markA,m=>player(m,a.id)?.jump),second=await stateAfter(b,markB,m=>player(m,a.id)?.jump);
+  const jump=player(first,a.id).jump;assert.deepEqual(player(second,a.id).jump,jump);
+  assert.equal(jump.startedAt,first.serverTime);assert.equal(jump.takeoffAt-jump.startedAt,500);assert(!('height' in jump));
+  const late=await enter(f,'跳跃旁观',{scene:'resources'});
+  const observed=await stateAfter(late,late.mark());assert.deepEqual(player(observed,a.id).jump,jump);
+  a.send({type:'jump',pressed:false});a.send({type:'jump',pressed:true});
+  const again=await stateAfter(a,a.mark());assert.deepEqual(player(again,a.id).jump,jump);
+  const target=wolf(again),mark=a.mark();a.send({type:'skill',skillId:'fireball',targetId:target.id});
+  await a.wait(m=>m.type==='notice'&&m.message.includes('跳跃'),{after:mark});
+  f.advance(2500);const landed=await stateAfter(a,a.mark(),m=>player(m,a.id)?.jump===null);assert.equal(player(landed,a.id).jump,null);
+  a.send({type:'save'});await a.wait(m=>m.type==='notice'&&m.message.includes('保存'));
+  const raw=JSON.parse(await readFile(f.saveFile,'utf8'));assert(!JSON.stringify(raw).includes('takeoffAt'));
+  publicStateHasNoCredentials(b,[a.welcome.resumeToken,b.welcome.resumeToken,late.welcome.resumeToken]);
+  await a.close();
+  const restored=await enter(f,'跳跃甲',{scene:'resources',characterId:a.id,resumeToken:a.welcome.resumeToken});
+  const state=await stateAfter(restored,restored.mark());assert.equal(player(state,a.id).jump,null);
+  const bad=restored.mark();restored.send({type:'jump',pressed:1});await restored.wait(m=>m.type==='error'&&m.message.includes('跳跃'),{after:bad});
+});

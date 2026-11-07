@@ -206,3 +206,41 @@ test('original recovered character stays finite through repeated walk/idle cycle
   assert.deepEqual(character.position.toArray(),[0,0,0]);
   disposeCharacterAnimation(character);
 });
+
+test('confirmed source jump phases deform bones consistently in both views and death returns height to zero',()=>{
+  const data=combatFixture();
+  for(const [name,duration] of [['jump_start',.5],['jump_air',2/3],['jump_land',13/15]])data.clips.push({name,duration,tracks:[{node:1,type:'quaternion',times:[0,duration],values:[0,0,0,1,0,.6,0,.8]}]});
+  const create=createCharacterFactory(THREE,data,materials()),bodies=[create(),create()];
+  const jump={startedAt:1000,takeoffAt:1500,landAt:2166.6666666666665,endsAt:3033.333333333333};
+  for(const body of bodies){
+    syncCharacterCombat(body,{hp:100,jump,animation:{}},1000,.7);
+    updateCharacterAnimation(body,.1,{moving:true,speed:4.8},1750);
+    const state=characterAnimationState(body);assert.equal(state.phase,'jump_air');assert(state.jumpHeight>0);assert.equal(state.walkWeight,0);
+  }
+  assert.deepEqual(characterAnimationState(bodies[0]).bones[1].quaternion.toArray(),characterAnimationState(bodies[1]).bones[1].quaternion.toArray());
+  for(const body of bodies){
+    syncCharacterCombat(body,{hp:0,jump:null,animation:{deathAt:1800}},1800,.7);
+    updateCharacterAnimation(body,.1,{moving:true},1850);assert.equal(characterAnimationState(body).phase,'death');assert.equal(characterAnimationState(body).jumpHeight,0);
+    disposeCharacterAnimation(body);
+  }
+});
+
+const originalPlayer=new URL('../../game-data/converted/models/elf-female.json',import.meta.url);
+test('actual player jump clips preserve source lengths, deform real vertices and finish without root drift',{skip:!existsSync(originalPlayer)},()=>{
+  const data=JSON.parse(readFileSync(originalPlayer,'utf8'));
+  for(const [name,duration] of [['jump_start',.5],['jump_air',2/3],['jump_land',13/15]])assert(Math.abs(data.clips.find(c=>c.name===name).duration-duration)<1e-8);
+  const body=createCharacterFactory(THREE,data,data.materials.map(()=>new THREE.MeshStandardMaterial()))();
+  const meshes=skinnedMeshes(body),before=meshes[0].getVertexPosition(0,new THREE.Vector3()).clone();
+  const jump={startedAt:1000,takeoffAt:1500,landAt:2166.6666666666665,endsAt:3033.333333333333};
+  syncCharacterCombat(body,{hp:100,jump,animation:{}},1000,.7);
+  for(const [now,phase] of [[1250,'jump_start'],[1800,'jump_air'],[2500,'jump_land']]){
+    updateCharacterAnimation(body,.1,{moving:false},now);body.updateMatrixWorld(true);assert.equal(characterAnimationState(body).phase,phase);
+    for(const mesh of meshes)for(let i=0;i<mesh.geometry.attributes.position.count;i++){
+      const point=mesh.getVertexPosition(i,new THREE.Vector3());assert(point.toArray().every(Number.isFinite));assert(point.length()<10);
+    }
+  }
+  assert(meshes[0].getVertexPosition(0,new THREE.Vector3()).distanceTo(before)>1e-5);
+  syncCharacterCombat(body,{hp:100,jump:null,animation:{}},3200,.7);updateCharacterAnimation(body,.1,{moving:false},3200);
+  assert.equal(characterAnimationState(body).phase,'idle');assert.equal(characterAnimationState(body).jumpHeight,0);assert.deepEqual(body.position.toArray(),[0,0,0]);
+  disposeCharacterAnimation(body);
+});

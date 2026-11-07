@@ -82,11 +82,11 @@ def decode_abc_metadata(data):
             return namespace+'::'+name if namespace else name
         if item[0] in (9,14,15,16):return string(item[1])
         return '<runtime-name>'
-    # Exported tag 300 retains the ABC constant pool but optimizes subsequent
-    # method metadata. Do not guess its trait/body layout or execute bytecode.
+    # Metadata-only API. The observed reordered/length-prefixed method layout
+    # is handled separately by optimized_abc; neither reader executes bytecode.
     return {'version':[16,46],'strings':strings,'multinames':[qname(i) for i in range(1,len(names))],
             'constantPoolBytes':reader.at,'unparsedMethodBytes':len(data)-reader.at,
-            'proofScope':'constant-pool-only; optimized method and trait layout unresolved',
+            'proofScope':'constant-pool-only; method/trait proof requires optimized_abc',
             'sourceSHA256':hashlib.sha256(data).hexdigest()}
 
 

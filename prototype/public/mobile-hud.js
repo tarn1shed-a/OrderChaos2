@@ -2,7 +2,7 @@
 // explicit web adaptations, separate from the source display lists.
 export function createMobileHUD(profile) {
   const native=profile.nativeControls,operations=profile.layouts.operations;
-  if(native?.format!=='oc2-original-mobile-controls-v1')throw new Error('手机操作界面资源需要更新');
+  if(native?.format!=='oc2-original-mobile-controls-v2')throw new Error('手机操作界面资源需要更新');
   const $=id=>document.getElementById(id),root=$('field-actions'),gauge=document.querySelector('.hud-portrait-cluster');
   const place=(element,bounds,origin=[0,0])=>{
     const [x,y,width,height]=bounds;
@@ -41,14 +41,15 @@ export function createMobileHUD(profile) {
     }
     root.dataset.layout='original-mobile-operation-panel';
   }
+  let scale=1;
   function resize(){
     const viewport=$('viewport').getBoundingClientRect();
     // Use the source 1136x640 landscape design as one uniform scale.
-    const scale=Math.max(.6,Math.min(viewport.width/1136,viewport.height/640));
+    scale=Math.max(.6,Math.min(viewport.width/1136,viewport.height/640));
     document.documentElement.style.setProperty('--native-hud-scale',String(scale));
   }
   const observer=new ResizeObserver(resize);observer.observe($('viewport'));
   window.addEventListener('pagehide',()=>observer.disconnect(),{once:true});
   layout();resize();
-  return {layout};
+  return {layout,get scale(){return scale;}};
 }

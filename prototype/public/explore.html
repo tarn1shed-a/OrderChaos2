@@ -19,7 +19,7 @@
     <div class="connection"><span id="lamp"></span><span id="status" role="status">载入资源</span></div>
     <button id="session-open" class="glass-tool" type="button">进入营地</button>
     <button id="field-inventory" class="glass-tool" type="button" disabled>背包 <kbd>B</kbd></button>
-    <button id="field-attack" class="field-attack" hidden disabled aria-label="普通攻击 · 空格 / F"><span class="attack-art" aria-hidden="true"><svg class="attack-symbol" viewBox="0 0 24 24"><path d="m5 19 3-3m-2-4 6 6M8 14 17 3l4-1-1 4L10 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="attack-label">普通攻击</span><span class="attack-key">F</span></span></button>
+    <button id="field-attack" class="field-attack" hidden disabled aria-label="普通攻击 · 空格 / F"><span class="attack-art" aria-hidden="true"><img class="control-icon attack-symbol" alt=""><span class="control-hit-area"></span><span class="attack-label">普通攻击</span><span class="attack-key">F</span></span></button>
     <button id="field-skills" class="glass-tool" type="button" aria-controls="skill-book" disabled>技能</button>
     <button id="hotbar-settings" class="glass-tool" type="button" aria-controls="hotbar-editor" aria-expanded="false" disabled>键位</button>
     <button id="camp-toggle" class="glass-tool" type="button" aria-controls="camp-panel" aria-expanded="false">营地 <kbd>H</kbd></button>
@@ -35,7 +35,7 @@
       </div>
       <div id="target-hud" class="target-hud" hidden aria-label="目标状态"><div class="hud-target-portrait"><img id="target-portrait" class="hud-portrait" alt="目标头像"></div><div class="hud-target-text"><strong id="hud-target-name">等待目标</strong><progress id="hud-target-hp" max="60" value="60" aria-label="目标生命"></progress><span id="hud-target-health"></span><span id="hud-target-state" class="hud-state"></span></div></div>
       <div id="field-actions" class="field-actions desktop-hotbar" hidden aria-label="原版手机战斗操作区">
-        <button id="field-interaction" type="button" disabled aria-label="原版交互槽，功能尚未接入" title="原版交互槽，功能尚未接入"><span aria-hidden="true"></span></button>
+        <button id="field-interaction" type="button" disabled aria-label="跳跃" aria-pressed="false" title="跳跃"><img class="control-icon" alt=""><span class="control-hit-area"></span></button>
         <span class="desktop-shortcuts">WASD 移动 · F 普攻 · B 背包 · H 营地</span>
         <div class="hotbar-bank hotbar-left">
           <div class="hotbar-slot" data-slot="0"><kbd class="slot-key">1</kbd><button id="field-fireball" class="field-skill fire" aria-label="火球术 · 1" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">1</span></span><span class="skill-label">火球术</span></button></div>
@@ -59,7 +59,7 @@
           <div class="hotbar-slot" data-slot="9"><kbd class="slot-key">0</kbd></div>
         </div>
       </div>
-      <div id="touch-controls" class="native-joystick" hidden role="group" aria-label="移动摇杆，拖动移动，松手停止"><span class="joystick-base" aria-hidden="true"></span><span class="joystick-knob" aria-hidden="true"></span></div>
+      <div id="touch-controls" class="native-joystick" hidden role="group" aria-label="在左下区域拖动移动，松手停止"><span class="joystick-hit-area" aria-hidden="true"></span><span class="joystick-base" aria-hidden="true"></span><span class="joystick-knob" aria-hidden="true"></span></div>
       <div id="field-experience" class="field-experience" hidden><span id="field-xp-text">经验 0 / 60</span><progress id="field-xp" value="0" max="60" aria-label="地图内角色经验"></progress><div class="hud-xp-track" aria-hidden="true"><i id="field-xp-fill"></i><i id="field-xp-glow"></i></div></div>
       <div id="combat-feedback" aria-live="polite"></div>
       <div class="scene-notice" id="load-note" role="status">正在读取本地转换后的地形与模型…</div>

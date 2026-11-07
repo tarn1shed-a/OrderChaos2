@@ -49,7 +49,7 @@ def verify(output=OUT):
                 assert skin['verification']['maximumRestBindShapeError'] < 1e-5
             expected = {'idle','walk_forward','attack','hurt','death'}
             if ref.get('skillAnimations'): expected |= {'skill_fireball','skill_frost_blast'}
-            if ref.get('jumpAnimations'): expected |= {'jump_start','jump_air','jump_land','jumplandrun'}
+            if ref.get('jumpAnimations'): expected |= {'jump_start','jump_air','jump_land','jumplandrun','jump_air_drop'}
             if ref is m['player']:
                 profile=json.loads(asset(m['gameplay']['url'],output).read_text())
                 expected |= {s['clip'] for s in profile['skills'].values() if s['clip']}
@@ -95,12 +95,17 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v10' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v11' and not ui['provenance']['swfScriptExecution']
     controls=ui['controls'];assert controls['format']=='oc2-original-controls-v1' and not controls['scriptExecution']
     assert m['player']['jumpAnimations']
+    collision=json.loads(asset(m['collision']['url'],output).read_text())
+    assert collision['format']=='oc2-scene-collision-v1'
+    assert len(collision['instances'])==39
+    assert sum(len(s['shapes']) for s in collision['sources'].values())==110
+    assert all(mesh.get('sourceNodeTransform') for ref in m['scenery'] for mesh in json.loads(asset(ref['url'],output).read_text())['meshes'])
     assert controls==json.loads((output/'ui/controls.json').read_text())
     gameplay=json.loads(asset(m['gameplay']['url'],output).read_text())
-    assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v1'
+    assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v2'
     assert gameplay['weapons']['trainingSword']['legacy']
     for icon in gameplay['icons'].values():
         assert hashlib.sha256(asset(icon['url'],output).read_bytes()).hexdigest()==icon['sourceSHA256']
@@ -210,7 +215,7 @@ def verify(output=OUT):
             with Image.open(asset(url,output)) as image:image.verify()
     catalog = json.loads(asset('/assets/library/catalog.json', output).read_text())
     assert catalog['format'] == 'oc2-art-catalog-v1'
-    assert catalog['sourceFormats'] == {'web':m['format'], **{key:m[key]['format'] for key in ('effects','rendering','ui','gameplay')}}
+    assert catalog['sourceFormats'] == {'web':m['format'], **{key:m[key]['format'] for key in ('effects','rendering','ui','gameplay','collision')}}
     assert catalog['fileCount'] == len(catalog['entries'])
     for entry in catalog['entries']:
         path = asset('/assets/'+entry['path'], output)

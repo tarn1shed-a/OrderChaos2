@@ -7,9 +7,10 @@ import { join } from 'node:path';
 import WebSocket from 'ws';
 import { createGameServer } from '../server.mjs';
 import {existsSync} from 'node:fs';
+import {createCollision} from '../game/collision.mjs';
 
 // Every test has a fresh save directory; no test reads or modifies runtime/.
-async function fixture(t) {
+async function fixture(t,options={}) {
   const directory = await mkdtemp(join(tmpdir(), 'oc2-combat-test-'));
   const saveFile = join(directory, 'characters.json');
   let now = Date.now(), game;
@@ -17,7 +18,7 @@ async function fixture(t) {
     saveFile,
     advance(ms) { now += ms; },
     async start() {
-      game = createGameServer({ saveFile, clock: () => now });
+      game = createGameServer({ saveFile, motion:null,clock: () => now,...options });
       await new Promise(resolve => game.server.listen(0, '127.0.0.1', resolve));
       f.url = `ws://127.0.0.1:${game.server.address().port}/ws`;
       return f;
@@ -313,21 +314,65 @@ test('original staff attack is chosen on the server and both peers receive its s
     const mark=c.mark();c.send({type:'equip',slot:'mainHand',itemId:'trainingStaff'});
     await c.wait(m=>m.type==='progress'&&m.character.equipment.mainHand==='trainingStaff',{after:mark});
   }
-  const initial=await stateAfter(a,a.mark(),m=>player(m,a.id)?.basicAttack?.id===84&&player(m,b.id)?.basicAttack?.id===424);
+  const initial=await stateAfter(a,a.mark(),m=>player(m,a.id)?.basicSlot?.id===84&&player(m,b.id)?.basicSlot?.id===424);
   const target=wolf(initial);await moveNear(a,target);
   let ma=a.mark(),mb=b.mark();a.send({type:'attack',targetId:target.id,skillId:424,clip:'forged',profession:4,mainWeaponType:0xffff});
   const own=await a.wait(m=>m.type==='combat'&&m.action==='hit'&&m.attackerId===a.id,{after:ma});
   const other=await b.wait(m=>m.type==='combat'&&m.action==='hit'&&m.attackerId===a.id,{after:mb});
   assert.equal(own.basicAttack.id,84);assert.deepEqual(own.basicAttack,other.basicAttack);
   assert.equal(own.basicAttack.clip,'attack_84');
+  const prepared=await stateAfter(a,a.mark());
+  assert.equal(player(prepared,a.id).basicAttack.id,84);
+  assert([85,86].includes(player(prepared,a.id).basicSlot.id),'Execution prepares the next HUD slot before another press');
   f.advance(700);ma=a.mark();a.send({type:'attack',targetId:target.id});
   const chained=await a.wait(m=>m.type==='combat'&&m.action==='hit'&&m.attackerId===a.id,{after:ma});
   assert([85,86].includes(chained.basicAttack.id));
   a.send({type:'unequip',slot:'mainHand'});
-  const empty=await stateAfter(a,a.mark(),m=>player(m,a.id)?.basicAttack?.id===4);assert.equal(player(empty,a.id).equipment.mainHand,null);
+  const empty=await stateAfter(a,a.mark(),m=>player(m,a.id)?.basicSlot?.id===4);assert.equal(player(empty,a.id).equipment.mainHand,null);
   a.send({type:'equip',slot:'mainHand',itemId:'trainingGreatsword'});
   await a.wait(m=>m.type==='notice'&&m.message.includes('职业'));
   await a.close();const resumed=await enter(f,'同一法师',{scene:'resources',profession:1,characterId:a.id,resumeToken:a.welcome.resumeToken});
   assert.equal(resumed.welcome.character.profession,2);
-  const rejoined=await stateAfter(resumed,resumed.mark());assert.equal(player(rejoined,resumed.id).basicAttack.id,4);
+  const rejoined=await stateAfter(resumed,resumed.mark());assert.equal(player(rejoined,resumed.id).basicSlot.id,4);
+});
+
+test('source-shape collisions and world-space jumps are authoritative for both peers; airborne height never becomes a saved floor',async t=>{
+  const profile={format:'oc2-scene-collision-v1',query:{forwardMargin:.31,stepProbeCap:.5,stepProbeMultiplier:3.5,wallNormalYThreshold:.5},
+    sources:{wall:{shapes:[{kind:'box',center:[136.2,2,54],halfExtents:[.1,2,6],yawRadians:0,flags:2048}]}},
+    instances:[{id:1,sourcePHY:'wall',position:[0,0,0],quaternion:[0,0,0,1],scale:[1,1,1]}]};
+  const terrain={bounds:{min:[0,0,0],max:[192,0,192]},grid:{width:3,height:3,heights:Array(9).fill(0)}};
+  const f=await fixture(t,{motion:createCollision(profile,terrain)}),a=await enter(f,'碰撞甲',{scene:'resources'}),b=await enter(f,'碰撞乙',{scene:'resources'});
+  const before=await stateAfter(a,a.mark(),m=>m.players.length===2),start=player(before,a.id);
+  assert.equal(start.worldY,0);assert(start.grounded);
+  const interval=setInterval(()=>a.send({type:'input',x:1,y:0,worldY:99999}),50);
+  try{await stateAfter(a,a.mark(),m=>m.tick>before.tick+12);}finally{clearInterval(interval);a.send({type:'input',x:0,y:0});}
+  const blocked=await stateAfter(a,a.mark());assert(player(blocked,a.id).x>start.x);assert(player(blocked,a.id).x<start.x+6);
+  const ma=a.mark(),mb=b.mark();a.send({type:'jump',pressed:true,worldY:99999,grounded:true});
+  await stateAfter(a,ma,m=>player(m,a.id)?.jump);f.advance(300);
+  const upA=await stateAfter(a,a.mark(),m=>player(m,a.id)?.worldY>1),upB=await stateAfter(b,mb,m=>m.tick===upA.tick);
+  const airborne=player(upA,a.id);assert.deepEqual(airborne,player(upB,a.id));assert.equal(airborne.grounded,false);
+  assert(Math.abs(airborne.worldY-1.494)<1e-5);
+  const late=await enter(f,'碰撞旁观',{scene:'resources'});
+  assert.deepEqual(player(await stateAfter(late,late.mark()),a.id),airborne);
+  const saved=a.mark();a.send({type:'save'});await a.wait(m=>m.type==='notice'&&m.message.includes('保存'),{after:saved});
+  const data=JSON.parse(await readFile(f.saveFile,'utf8')),record=data.characters.find(c=>c.id===a.id);
+  assert.equal(record.positions.resources.groundY,0);assert(!JSON.stringify(record).includes('source-world-v1'));
+  publicStateHasNoCredentials(b,[a.welcome.resumeToken,b.welcome.resumeToken]);
+  const credentials={characterId:a.id,resumeToken:a.welcome.resumeToken};await f.stop();await f.start();
+  const resumed=await enter(f,'碰撞甲',{scene:'resources',...credentials});
+  const restored=player(await stateAfter(resumed,resumed.mark()),resumed.id);
+  assert.equal(restored.worldY,0);assert(restored.grounded);assert.equal(restored.jump,null);assert.equal(restored.x,airborne.x);
+});
+
+test('normal press/release casts once per press and a lost release clears without auto attack',async t=>{
+  const f=await fixture(t),a=await enter(f,'按压普攻'),target=wolf(await stateAfter(a,a.mark()));
+  a.send({type:'attack-control',pressed:true,targetId:target.id});
+  await stateAfter(a,a.mark(),m=>wolf(m).hp===40);
+  f.advance(750);let mark=a.mark();a.send({type:'attack-control',pressed:true,targetId:target.id});
+  assert.equal(wolf(await stateAfter(a,mark)).hp,40);
+  a.send({type:'attack-control',pressed:false});a.send({type:'attack-control',pressed:true,targetId:target.id});
+  await stateAfter(a,a.mark(),m=>wolf(m).hp===20);
+  f.advance(4000);mark=a.mark();assert.equal(wolf(await stateAfter(a,mark)).hp,20);
+  a.send({type:'attack-control',pressed:true,targetId:target.id});
+  await stateAfter(a,a.mark(),m=>wolf(m).hp===0);
 });

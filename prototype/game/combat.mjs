@@ -1,7 +1,7 @@
 import { advance, walkable } from '../public/world.js';
 import { skillById } from '../public/skills.js';
 import { equipmentStats } from '../public/items.js';
-import {chooseBasicAttack} from './basic-attack.mjs';
+import {chooseBasicAttack,prepareBasicAttack,updateBasicAttack} from './basic-attack.mjs';
 
 export const COMBAT = Object.freeze({ playerDamage: 20, playerCooldownMs: 700, monsterHp: 60, monsterDamage: 6,
   monsterCooldownMs: 1000, monsterRespawnMs: 8000, playerRespawnMs: 4000,
@@ -14,8 +14,9 @@ export function syncPlayerStats(ws) {
 }
 
 export class CombatRoom {
-  constructor(key, world, scene, clients, { changed, emit, notice, gameplay=null, random=Math.random }) {
+  constructor(key, world, scene, clients, { changed, emit, notice, gameplay=null, motion=null, random=Math.random }) {
     this.gameplay=scene==='resources'?gameplay:null;this.random=random;
+    this.motion=scene==='resources'?motion:null;
     this.world = world; this.scene = scene; this.clients = clients; this.changed = changed; this.emit = emit; this.notice = notice;
     this.range = scene === 'resources' ? 32 : 95;
     this.monsterSpeed = scene === 'resources' ? 14 : 70;
@@ -26,6 +27,7 @@ export class CombatRoom {
     this.monster = { id: `${key}:wolf-1`, kind: 'wolf', name: '营地野狼', ...spawn, hp: COMBAT.monsterHp, maxHp: COMBAT.monsterHp,
       alive: true, respawnAt: 0, attackAt: 0, slowUntil: 0, animation: { attackAt: null, hitAt: null, deathAt: null } };
     this.contributors = new Set();
+    if(this.motion)this.motion.place(this.monster);
     this.casts = new Map(); this.castSequence = 0;
   }
 
@@ -43,6 +45,7 @@ export class CombatRoom {
     if(result.error)return this.notice(ws,result.error);
     ws.basicCombo=result.state;
     ws.player.basicAttack=result.skill;
+    ws.player.basicSlot=result.slot;
     ws.player.attackAt = now;
     ws.player.animation ||= { attackAt: null, hitAt: null, deathAt: null };
     ws.player.animation.attackAt = now;
@@ -116,12 +119,15 @@ export class CombatRoom {
       if (ws.player.cast?.id === cast.id) ws.player.cast = null;
     }
     for (const ws of this.clients.values()) {
+      if(this.gameplay)updateBasicAttack(this.gameplay,ws,now);
       if (ws.player.hp <= 0 && ws.player.deadUntil && now >= ws.player.deadUntil) {
         ws.character.hp = ws.character.maxHp; syncPlayerStats(ws);
         ws.player.x = this.world.spawn.x; ws.player.y = this.world.spawn.y; ws.player.deadUntil = 0;
+        if(this.motion)this.motion.place(ws.player);
         ws.player.animation = { attackAt: null, hitAt: null, deathAt: null };
         ws.player.cast = null;
-        ws.basicCombo=null;ws.player.basicAttack=null;
+        const basic=prepareBasicAttack(this.gameplay,ws.character,this.random);
+        ws.basicCombo=basic.state;ws.player.basicSlot=basic.slot;ws.player.basicAttack=null;ws.attackPressed=false;
         ws.input = { x: 0, y: 0 }; this.changed(ws, true);
         this.emit({ type: 'combat', action: 'respawn', attackerId: null, targetId: ws.player.id, targetHp: ws.player.hp, serverTime: now });
       }
@@ -131,6 +137,7 @@ export class CombatRoom {
       if (now >= m.respawnAt) {
         Object.assign(m, this.spawn, { hp: m.maxHp, alive: true, respawnAt: 0, attackAt: 0, slowUntil: 0,
           animation: { attackAt: null, hitAt: null, deathAt: null } }); this.contributors.clear();
+        if(this.motion)this.motion.place(m);
         this.emit({ type: 'combat', action: 'respawn', attackerId: null, targetId: m.id, targetHp: m.hp, serverTime: now });
       }
       return;
@@ -143,11 +150,11 @@ export class CombatRoom {
     const leash = this.scene === 'resources' ? 220 : 360;
     if (!target || target.distance > leash) {
       const dx = this.spawn.x - m.x, dy = this.spawn.y - m.y, d = Math.hypot(dx, dy);
-      if (d > 1) advance(m, { x: dx / d, y: dy / d }, dt, { ...this.world, speed: this.monsterSpeed * (now < m.slowUntil ? .5 : 1) });
+      if (d > 1) this.moveMonster(m, { x: dx / d, y: dy / d }, dt,now);
       return;
     }
     if (target.distance > this.monsterRange) {
-      advance(m, { x: (target.ws.player.x - m.x) / target.distance, y: (target.ws.player.y - m.y) / target.distance }, dt, { ...this.world, speed: this.monsterSpeed * (now < m.slowUntil ? .5 : 1) });
+      this.moveMonster(m, { x: (target.ws.player.x - m.x) / target.distance, y: (target.ws.player.y - m.y) / target.distance }, dt,now);
       return;
     }
     if (now - m.attackAt < COMBAT.monsterCooldownMs) return;
@@ -162,5 +169,10 @@ export class CombatRoom {
     if (victim.player.hp <= 0) { victim.player.deadUntil = now + COMBAT.playerRespawnMs; victim.input = { x: 0, y: 0 }; }
     this.changed(victim, victim.player.hp <= 0);
     this.emit({ type: 'combat', action: 'player-hit', attackerId: m.id, targetId: victim.player.id, damage, targetHp: victim.player.hp, serverTime: now });
+  }
+
+  moveMonster(monster,input,dt,now){
+    const world={...this.world,speed:this.monsterSpeed*(monster.slowUntil>now ? .5 : 1)};
+    if(this.motion)this.motion.move(monster,input,dt,world);else advance(monster,input,dt,world);
   }
 }

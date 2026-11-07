@@ -19,6 +19,9 @@ PROGRAMS = {
 }
 
 METHODS = {
+    'SpellPanel2.onSlotPress':'575f6642bf347f187c69d1fa26527de08f40babaef70ae6cf78c18faa90fc884',
+    'SpellPanel2.onSlotRelease':'2333ba280f8d6233ee666236b832739938129ebdaeb1b2521548a995cb91aa55',
+    'SpellPanel2.onSlotReleaseOut':'2dfe62bdd67f3ce72662dadd52bb9daceced32d9ee1c29dcf0296aebe239faca',
     'Joystick.init': 'ece0cc09776a2ee62d83a2a1a44cc7d3a9f41b3360e6f41e8240ed55043f8eb3',
     'Joystick.OnMouseMove': '4bb61f695bdea3e4da8cda73b4e5f218b556da51f12ff022640ee886053e6708',
     'Joystick.StartMove': '02726cd9d430a9bc7b2e584bb2226a4e2b9842514d884a7b0c91dba86c7d1445',

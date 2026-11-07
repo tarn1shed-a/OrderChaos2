@@ -270,7 +270,7 @@ export function characterAnimationState(root) {
   const controller = controllers.get(root);
   return controller ? { moving: controller.moving, walkWeight: controller.walk.getEffectiveWeight(),
     idleTime: controller.idle.time, walkTime: controller.walk.time,
-    phase: controller.phase, dead: controller.dead, jumpHeight:controller.jumpHeight, attackWeight: controller.attackWeight,
+    phase: controller.phase, dead: controller.dead, jumpHeight:controller.jumpHeight,jumpWorldMotion:controller.jump?.physics==='source-world-v1', attackWeight: controller.attackWeight,
     hurtWeight: controller.hurtWeight, skillWeight: controller.skillWeight, castId: controller.cast?.id,
     skillTime: controller.cast ? controller.shots[skillById(controller.cast.skillId)?.clip]?.time : null,
     attackClip:controller.attackClip||'attack',attackTime: controller.shots[controller.attackClip||'attack']?.time,

@@ -44,7 +44,7 @@ function validate(record, legacy = false, requireLook = true, requireHotbar = tr
     if (record.maxHp !== equipmentStats(record).maxHp) throw new Error('角色装备属性存档无效');
   }
   for (const [scene, p] of Object.entries(record.positions)) {
-    if (!['camp', 'resources'].includes(scene) || !p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) throw new Error('角色位置存档无效');
+    if (!['camp', 'resources'].includes(scene) || !p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || (p.groundY!==undefined&&!Number.isFinite(p.groundY))) throw new Error('角色位置存档无效');
   }
 }
 
@@ -98,8 +98,9 @@ export class CharacterStore {
 
   savePosition(record, scene, player) {
     const p = record.positions[scene];
-    if (!p || p.x !== player.x || p.y !== player.y) {
-      record.positions[scene] = { x: player.x, y: player.y }; this.touch(record);
+    const groundY=player.grounded&&Number.isFinite(player.worldY)?player.worldY:p?.groundY;
+    if (!p || p.x !== player.x || p.y !== player.y || p.groundY!==groundY) {
+      record.positions[scene] = { x: player.x, y: player.y,...(Number.isFinite(groundY)?{groundY}:{}) }; this.touch(record);
     }
   }
 

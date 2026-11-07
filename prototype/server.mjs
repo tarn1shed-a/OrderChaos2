@@ -11,14 +11,15 @@ import { changeEquipment } from './game/equipment.mjs';
 import { validLook } from './public/character-look.js';
 import { validHotbar, cloneHotbar } from './public/hotbar-settings.js';
 import { setJumpPressed, updateJump } from './game/jump.mjs';
-import {loadGameplay,initialBasicAttack} from './game/basic-attack.mjs';
+import {loadGameplay,prepareBasicAttack} from './game/basic-attack.mjs';
+import {loadCollision} from './game/collision.mjs';
 
 const PUBLIC = fileURLToPath(new URL('./public/', import.meta.url));
 const CONVERTED = fileURLToPath(new URL('../game-data/converted/', import.meta.url));
 const THREE_BUILD = fileURLToPath(new URL('./node_modules/three/build/', import.meta.url));
 const COLORS = ['#80e5d1', '#ffc47c', '#b7a2f7', '#f39da9', '#90bdec', '#d4e993', '#ffdfaa', '#b4e4ed'];
 
-export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGameplay(), allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean) } = {}) {
+export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGameplay(), motion=loadCollision(), allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean) } = {}) {
   if (saveFile && [PUBLIC, CONVERTED].some(root => resolve(saveFile).startsWith(root.endsWith(sep) ? root : root + sep))) throw new Error('角色存档必须放在静态资源目录之外');
   const store = new CharacterStore(saveFile);
   const rooms = new Map();
@@ -111,6 +112,7 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
         }
         if (activeCharacters.has(identity.record.id)) return reject(ws, '这个角色已在另一个窗口在线，请先退出原窗口');
         ws.character = identity.record; ws.scene = scene;
+        ws.motion=scene==='resources'?motion:null;ws.gameplay=gameplay;
         const position = ws.character.positions[scene];
         const restorePosition = position && walkable(position.x, position.y, world) && ws.character.hp > 0;
         ws.player = { id: ws.character.id, name: ws.character.name,
@@ -120,11 +122,18 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
           animation: { attackAt: null, hitAt: null, deathAt: null }, cast: null, jump:null, skillReadyAt: {} };
         if (ws.character.hp <= 0) ws.character.hp = ws.character.maxHp;
         syncPlayerStats(ws);
+        if(ws.motion){
+          ws.motion.place(ws.player);
+          if(restorePosition&&Number.isFinite(position.groundY)){
+            const p=ws.motion.point(ws.player.x,ws.player.y);ws.player.worldY=ws.motion.support(p.x,p.z,position.groundY+ws.motion.step);
+          }
+        }
         ws.input = { x: 0, y: 0 }; ws.inputAt = Date.now(); ws.roomId = roomKey; ws.world = world;
         activeCharacters.set(ws.player.id, ws);
         room.set(ws.player.id, ws); rooms.set(roomKey, room); clearTimeout(deadline);
-        if (!combatRooms.has(roomKey)) combatRooms.set(roomKey, new CombatRoom(roomKey, world, scene, room, { changed, emit: data => emit(room, data), notice,gameplay }));
-        ws.player.basicAttack=initialBasicAttack(scene==='resources'?gameplay:null,ws.character);
+        if (!combatRooms.has(roomKey)) combatRooms.set(roomKey, new CombatRoom(roomKey, world, scene, room, { changed, emit: data => emit(room, data), notice,gameplay,motion }));
+        const basic=prepareBasicAttack(scene==='resources'?gameplay:null,ws.character);ws.basicCombo=basic.state;
+        ws.player.basicSlot=basic.slot;ws.player.basicAttack=null;
         store.savePosition(ws.character, scene, ws.player); store.touch(ws.character); store.flush();
         send(ws, { type: 'welcome', id: ws.player.id, room: roomId, scene, world,
           character: characterView(ws.character), resumeToken: identity.resumeToken, restored: identity.restored,
@@ -136,6 +145,13 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
         if(typeof msg.pressed!=='boolean')return reject(ws,'无效跳跃输入');
         const result=setJumpPressed(ws,msg.pressed,clock(),combatRooms.get(ws.roomId).casts.has(ws.player.id));
         if(result)notice(ws,result);
+      } else if (msg.type === 'attack-control' && ws.player) {
+        if(typeof msg.pressed!=='boolean')return reject(ws,'无效普攻输入');
+        if(!msg.pressed){ws.attackPressed=false;return;}
+        if(ws.attackPressed)return;
+        ws.attackPressed=true;ws.attackInputAt=clock();
+        if(ws.player.jump&&clock()<ws.player.jump.endsAt)return notice(ws,'跳跃结束后再攻击');
+        combatRooms.get(ws.roomId).attack(ws,msg.targetId,clock());
       } else if (msg.type === 'attack' && ws.player) {
         if(ws.player.jump&&clock()<ws.player.jump.endsAt)return notice(ws,'跳跃结束后再攻击');
         combatRooms.get(ws.roomId).attack(ws, msg.targetId, clock());
@@ -147,7 +163,7 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
         const result = changeEquipment(ws.character, msg);
         if (result.error) return notice(ws, result.error);
         syncPlayerStats(ws); changed(ws, true); notice(ws, result.message);
-        ws.basicCombo=null;ws.player.basicAttack=initialBasicAttack(ws.scene==='resources'?gameplay:null,ws.character);
+        const basic=prepareBasicAttack(ws.scene==='resources'?gameplay:null,ws.character);ws.basicCombo=basic.state;ws.player.basicSlot=basic.slot;
       } else if (msg.type === 'hotbar' && ws.player) {
         if(!Number.isSafeInteger(msg.requestId)||msg.requestId<1||msg.requestId>1_000_000_000)return notice(ws,'技能栏请求编号无效');
         const result=(ok,message)=>send(ws,{type:'hotbar-result',requestId:msg.requestId,ok,message,
@@ -187,11 +203,18 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
     try {
     for (const [roomKey, room] of rooms) {
       for (const ws of room.values()) {
-        if (ws.player.hp > 0 && !combatRooms.get(roomKey).casts.has(ws.player.id)) advance(ws.player, Date.now() - ws.inputAt > 350 ? { x: 0, y: 0 } : ws.input, 0.05, ws.world);
+        // A lost pointer release must not latch the control forever; recovery
+        // clears input only and never schedules an automatic second attack.
+        if(ws.attackPressed&&clock()-ws.attackInputAt>3000)ws.attackPressed=false;
+        if (ws.player.hp > 0 && !combatRooms.get(roomKey).casts.has(ws.player.id)) {
+          const input=Date.now()-ws.inputAt>350?{x:0,y:0}:ws.input;
+          if(ws.motion)ws.motion.move(ws.player,input,.05,ws.world);else advance(ws.player,input,.05,ws.world);
+        }
         store.savePosition(ws.character, ws.scene, ws.player);
       }
       const encounter = combatRooms.get(roomKey);
       encounter.tick(clock(), 0.05);
+      if(encounter.motion&&encounter.monster.alive)encounter.motion.settle(encounter.monster);
       for(const ws of room.values())updateJump(ws,clock());
       const snapshot = { type: 'state', tick, serverTime: clock(), players: [...room.values()].map(ws => ({ ...ws.player, animation: { ...ws.player.animation },
         skillReadyAt: { ...ws.player.skillReadyAt }, cast: ws.player.cast ? structuredClone(ws.player.cast) : null })), monsters: encounter.snapshot() };

@@ -3,7 +3,7 @@ const EMPTY=0xffff;
 export function loadGameplay(path=new URL('../../game-data/converted/gameplay/native.json',import.meta.url)) {
   if(!existsSync(path))return null;
   const profile=JSON.parse(readFileSync(path,'utf8'));
-  if(profile.format!=='oc2-native-gameplay-v1'||!Array.isArray(profile.comboRows)||
+  if(profile.format!=='oc2-native-gameplay-v2'||!Array.isArray(profile.comboRows)||
     !profile.skills||!profile.weapons||profile.comboRows.some(r=>r.isNormalAttack!==1||
       !['id','skillId','nextSkillId','reqMainWeaponType','reqOffWeaponType','timeOutTime','timeOutSkill','probability','summonNormalSkill'].every(k=>Number.isSafeInteger(r[k])&&r[k]>=0)))throw new Error('原版普攻数据无效，请重新构建本地资源');
   return profile;
@@ -27,32 +27,42 @@ function candidates(profile,ctx,id) {
   return profile.comboRows.filter(r=>r.skillId===id&&r.nextSkillId!==0&&r.summonNormalSkill!==1&&
     matchesCombo(r,profile.skills,ctx.main,ctx.off,ctx.profession));
 }
+function pick(rows,random){
+  if(!rows.length)return null;
+  const sum=rows.reduce((s,r)=>s+(r.probability||50),0);
+  return rows.find(r=>Math.floor(random()*(sum+1))<(r.probability||50))||rows[0];
+}
+export function prepareBasicAttack(profile,character,random=Math.random){
+  if(!profile)return {state:null,slot:null};
+  const ctx=context(profile,character);if(ctx.error)return {state:null,slot:ctx};
+  // Live equipment path 0x5c11bc uses the weighted group selector, including
+  // the initial group. The previously traced first-match helper is unused here.
+  const starter=pick(candidates(profile,ctx,0),random),skill=starter&&profile.skills[starter.nextSkillId];
+  if(!skill?.clip)return {state:null,slot:{error:'这个职业与武器的普攻动作尚未恢复'}};
+  return {state:{key:ctx.key,starter,currentRow:starter,expiresAt:Infinity},slot:{...skill}};
+}
 export function initialBasicAttack(profile,character) {
-  if(!profile)return null;
-  const ctx=context(profile,character);if(ctx.error)return ctx;
-  const row=candidates(profile,ctx,0)[0],skill=row&&profile.skills[row.nextSkillId];
-  return skill?.clip?{...skill,contextKey:ctx.key}: {error:'这个职业与武器的普攻动作尚未恢复'};
+  return prepareBasicAttack(profile,character).slot;
 }
 export function chooseBasicAttack(profile,character,previous,now,random=Math.random) {
-  if(!profile)return {skill:null,state:null}; // Explicit source-free prototype mode.
+  if(!profile)return {skill:null,state:null,slot:null}; // Explicit source-free prototype mode.
   const ctx=context(profile,character);if(ctx.error)return ctx;
-  let rows=previous?.key===ctx.key?candidates(profile,ctx,previous.id):[];
-  const timeout=rows[0];
-  let row;
-  if(timeout&&timeout.timeOutTime>0&&now-previous.at>=timeout.timeOutTime) {
-    // Timer orchestration is a web adaptation, not a proven native timer caller.
-    const skill=profile.skills[timeout.timeOutSkill];
-    if(skill?.clip)return {skill,state:{id:skill.id,at:now,key:ctx.key}};
-    rows=[];
-  }
-  if(!rows.length)row=candidates(profile,ctx,0)[0];
-  else {
-    // 0x5bef40 draws once per candidate and falls back to the first. It is not
-    // cumulative weighted selection. Native RNG(min,max) excludes max.
-    const sum=rows.reduce((s,r)=>s+(r.probability||50),0);
-    row=rows.find(r=>Math.floor(random()*(sum+1))<(r.probability||50))||rows[0];
-  }
-  const skill=row&&profile.skills[row.nextSkillId];
+  let state=previous?.key===ctx.key&&previous.currentRow?previous:prepareBasicAttack(profile,character,random).state;
+  if(!state)return {error:'这个职业与武器的普攻动作尚未恢复'};
+  // 0x5bf9b4 uses strict > and restores the stored starter, not timeOutSkill
+  // (that field belongs to the separate bank-2/3 temporary-slot path).
+  const row=now>state.expiresAt?state.starter:state.currentRow;
+  const skill=profile.skills[row.nextSkillId];
   if(!skill?.clip)return {error:'这段原版普攻动作尚未恢复'};
-  return {skill,state:{id:skill.id,at:now,key:ctx.key}};
+  const currentRow=pick(candidates(profile,ctx,skill.id),random)||state.starter;
+  const duration=Math.max(0,skill.durationMs||0),timeout=currentRow.timeOutTime;
+  state={...state,currentRow,id:skill.id,at:now,expiresAt:timeout>0?now+duration+timeout:Infinity};
+  return {skill,state,slot:{...profile.skills[currentRow.nextSkillId]}};
+}
+export function updateBasicAttack(profile,ws,now){
+  const state=ws.basicCombo;
+  if(state&&now>state.expiresAt){
+    state.currentRow=state.starter;state.expiresAt=Infinity;
+    ws.player.basicSlot={...profile.skills[state.starter.nextSkillId]};
+  }
 }

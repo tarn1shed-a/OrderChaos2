@@ -30,6 +30,15 @@ export function jumpTimeline(now,moving=false) {
   return {startedAt:now,takeoffAt:now,landAt:now+FLIGHT_MS,endsAt:now+FLIGHT_MS+JUMP.landMs,moving:Boolean(moving)};
 }
 export function jumpPose(jump,now) {
+  if(jump?.physics==='source-world-v1'){
+    if(!Number.isFinite(now)||!Number.isFinite(jump.startedAt)||!Number.isFinite(jump.updatedAt)||!Number.isFinite(jump.height)||now<jump.startedAt||now>=jump.endsAt)return null;
+    const age=now-jump.startedAt,landed=Number.isFinite(jump.landedAt);
+    const phase=landed?'jumplandrun':!jump.moving&&!jump.falling?(jump.stationaryAvailable?'jump_in_place':'jump_stationary_missing'):
+      jump.falling?'jump_air_drop':age<JUMP.startMs?'jump_start':'jump_air';
+    const phaseStart=landed?jump.landedAt:phase==='jump_air'?jump.startedAt+JUMP.startMs:jump.startedAt;
+    const duration=landed?JUMP.landMs:phase==='jump_start'?JUMP.startMs:2000/3;
+    return {phase,height:jump.height,worldMotion:true,fraction:Math.max(0,Math.min(1,(now-phaseStart)/duration)),weight:Math.max(0,Math.min(1,(age+16)/60))};
+  }
   if(!jump||!Number.isFinite(now)||!['startedAt','takeoffAt','landAt','endsAt'].every(k=>Number.isFinite(jump[k])))return null;
   const {startedAt,takeoffAt,landAt,endsAt}=jump;
   if(!(startedAt===takeoffAt&&takeoffAt<landAt&&landAt<endsAt)||now<startedAt||now>=endsAt)return null;

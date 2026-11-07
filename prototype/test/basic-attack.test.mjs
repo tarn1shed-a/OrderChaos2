@@ -27,11 +27,13 @@ test('native filter distinguishes profession enums, empty hands, offhand fallbac
   const any={84:{reqProfession:7}};assert(matchesCombo(row(0,84),any,0x30001,0xffff,5));
 });
 test('first starter, independent branch draws, source timeout and loadout reset are server decisions',()=>{
-  const first=chooseBasicAttack(profile,mage,null,1000);assert.equal(first.skill.id,84);
+  const first=chooseBasicAttack(profile,mage,null,1000,()=>0);assert.equal(first.skill.id,84);
   assert.equal(initialBasicAttack(profile,{...mage,profession:4}).id,424);
-  const values=[.99,0],branched=chooseBasicAttack(profile,mage,first.state,1700,()=>values.shift());
-  assert.equal(branched.skill.id,86);assert.equal(values.length,0);
-  assert.equal(chooseBasicAttack(profile,mage,first.state,3000).skill.id,84);
+  const values=[0,.99,0],prepared=chooseBasicAttack(profile,mage,null,1000,()=>values.shift());
+  assert.equal(prepared.skill.id,84);assert.equal(prepared.slot.id,86);assert.equal(values.length,0);
+  assert.equal(chooseBasicAttack(profile,mage,prepared.state,1700).skill.id,86);
+  assert.equal(chooseBasicAttack(profile,mage,first.state,3000).skill.id,85);
+  assert.equal(chooseBasicAttack(profile,mage,first.state,3001).skill.id,84);
   const changed=chooseBasicAttack(profile,{...mage,profession:4},first.state,1700);assert.equal(changed.skill.id,424);
   assert(chooseBasicAttack(profile,{...mage,profession:1},null,1000).error);
 });

@@ -23,6 +23,7 @@ from inventory_assets import recover_inventory_assets
 from item_icons import recover_item_icons
 from equipment_appearance import convert_equipment_character, BASE_MODEL, SELECTED
 from native_gameplay import recover_gameplay
+from scene_collision import apply_scene_transforms, recover_collision
 from character_hair import recover_character_hair
 from character_materials import recover_character_materials
 from terrain_convert import convert as terrain_convert
@@ -36,7 +37,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     source, extracted, output = Path(source), Path(extracted), Path(output)
     # Select archive namespaces explicitly while the complete native mounting
     # priority is still under investigation. Never guess between conflicting packs.
-    packs = {'res.bin','res_a.bin','res_npc.bin','res_item.bin','res_scene.bin','res_scene_generator_temple_000.bin','res_t.bin','res_t_upd15.bin','tables.bin','ui.bin','ui_icon_1.bin','ui_icon_2.bin','conf.bin',
+    packs = {'res.bin','res_a.bin','res_npc.bin','res_item.bin','model_phy.bin','res_scene.bin','res_scene_generator_temple_000.bin','res_t.bin','res_t_upd15.bin','tables.bin','ui.bin','ui_icon_1.bin','ui_icon_2.bin','conf.bin',
              'tutorial.bin','tutorial_layer.bin','tutorial_lmap_1.bin',
              'selection.bin','selection_layer.bin','selection_lmap_1.bin',
              'dawnwatch.bin','dawnwatch_layer.bin','dawnwatch_lmap_1.bin'}
@@ -88,7 +89,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         except Exception as e:
             warnings.append({'texture':path,'error':str(e)})
             return None
-    def model(path, key, animated=False, profile='player', equipment=False):
+    def model(path, key, animated=False, profile='player', equipment=False, scene_model=False):
         if equipment:
             result = convert_equipment_character(extract, extra_actions=attack_actions)
             result['appearance']['hair']=recover_character_hair(extract,result)
@@ -108,6 +109,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
             result['animationBinding']['restSource'] = animation_model
         else:
             result = BDAE(extract(path)).parse()
+            if scene_model:apply_scene_transforms(BDAE(extract(path)),result)
         result['source'] = path
         if not result['meshes']:
             raise ValueError('Model has no supported meshes')
@@ -145,8 +147,10 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     scenery = []
     for i,(path,instances) in enumerate(grouped.items()):
         try:
-            obj = model(path,f'scene-{i:02d}');obj['instances']=instances;scenery.append(obj)
+            obj = model(path,f'scene-{i:02d}',scene_model=True);obj['instances']=instances;scenery.append(obj)
         except Exception as e:warnings.append({'model':path,'error':str(e)})
+    collision=recover_collision(extract,scenery)
+    (output/'maps/collision.json').write_text(json.dumps(collision,ensure_ascii=False,indent=2))
     surface = texture('texture/tiles/textures/cliffside/cliffside_rock05.tga')
     effects = {}
     effect_materials = recover_materials(extract('EfflibEffects.bdae'))
@@ -184,7 +188,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     chinese = recover_chinese_fonts(read_loose, output, required_text)
     if chinese['requiredTextStatus'] != 'complete':raise ValueError('Original Chinese fonts do not cover the current interface')
     icons = recover_skill_icons(extract, output)
-    ui['format'] = 'oc2-original-ui-v10'
+    ui['format'] = 'oc2-original-ui-v11'
     ui['fonts']['faces'].update(chinese['faces'])
     ui['fonts']['chineseStatus'] = chinese['chineseStatus']
     ui['fonts']['requiredTextStatus'] = chinese['requiredTextStatus']
@@ -195,7 +199,8 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     ui['controls'] = recover_controls(extract, output/'ui', ui['hud'])
     ui['gameplay'] = gameplay
     ui['controls']['attack'].pop('webEquipmentSelection',None)
-    ui['controls']['attack'].update(nativeWeaponToSkillSelectionRecovered=False,nativeWeaponTableFilterRecovered=True,runtimeProfile='/assets/gameplay/native.json')
+    ui['controls']['attack'].update(nativeWeaponToSkillSelectionRecovered=False,nativeNormalWeaponSelectionRecovered=True,nativeWeaponTableFilterRecovered=True,runtimeProfile='/assets/gameplay/native.json',
+        pressArguments=[1,1],releaseArguments=[1,2],releaseOutArguments=[1,3])
     ui['controls']['interaction'].update(nativeJumpPhysicsRecovered=False,nativeNormalJumpVerticalStepRecovered=True)
     (output/'ui/controls.json').write_text(json.dumps(ui['controls'],ensure_ascii=False,indent=2))
     ui['portraits'] = recover_character_portraits(extract, output, player_model=player_path)
@@ -213,7 +218,8 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
                 'rendering':{'url':'/assets/rendering/tutorial.json','format':'oc2-scene-render-v1'},
                 'ui':{'url':'/assets/ui/profile.json','format':ui['format']},
                 'gameplay':{'url':'/assets/gameplay/native.json','format':gameplay['format']},
-                'summary':f'真实新手地图 3×3 地块；可换装玩家精灵、狼与熊；接入 {sum(len(s["instances"]) for s in scenery)} 个原作场景摆放。地表混合材质和多节点变换尚未完整恢复。',
+                'collision':{'url':'/assets/maps/collision.json','format':collision['format']},
+                'summary':f'真实新手地图 3×3 地块；可换装玩家精灵、狼与熊；接入 {sum(len(s["instances"]) for s in scenery)} 个原作场景摆放。已恢复场景节点与静态PHY碰撞；地表混合材质及完整物理引擎尚未恢复。',
                 'warnings':warnings}
     archive_names = {entry['pack'] for entry in entries}
     paired = {name for name in archive_names if (source/Path(name).with_name(Path(name).stem+'_i.bin')).is_file()}

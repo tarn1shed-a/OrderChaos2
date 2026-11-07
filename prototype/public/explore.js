@@ -38,7 +38,7 @@ let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset =
 let combatEffects, environment, hdrRenderer, hud, inventoryUI, skillBook, minimap, nextSkillRequestAt = 0;
 let renderEquipmentPreview, equipmentPreviewKey;
 let playerLookProfile;
-let hotbar, mobileHUD, joystick, jumpControl, controlProfile, gameplayProfile;
+let hotbar, mobileHUD, joystick, jumpControl, attackControl,controlProfile, gameplayProfile;
 let joystickInput={x:0,y:0,active:false};
 let activeCredentials=null;
 const monsterViews = new Map();
@@ -94,7 +94,7 @@ function nearestMonster() {
 }
 function chosenMonster() { return monsterSnapshot.find(m => m.id === selectedMonsterId && m.alive && m.hp > 0) || nearestMonster(); }
 function updateTarget() {
-  const basic=snapshot.find(p=>p.id===selfId)?.basicAttack;
+  const me=snapshot.find(p=>p.id===selfId),basic=me?.basicSlot||me?.basicAttack;
   if(controlProfile){
     const entry=gameplayProfile?.icons[basic?.id]||controlProfile.icons.unarmed;
     const icon=$('field-attack').querySelector('.control-icon');
@@ -122,12 +122,12 @@ function updateTarget() {
   for (const [id, view] of monsterViews) view.label.classList.toggle('selected',id===selectedMonsterId);
   $('field-attack').disabled=$('attack').disabled;
 }
-function attack() {
+function attack(pressed=false) {
   if(skillBook?.isOpen||hotbar?.isEditing)return;
   if (!connected || !character || character.hp <= 0 || Date.now() < nextAttackAt) return;
   const enemy = chosenMonster(); if (!enemy) return;
   selectedMonsterId = enemy.id; target = null;
-  send({ type: 'attack', targetId: enemy.id });
+  send({ type: pressed===true?'attack-control':'attack',...(pressed===true?{pressed:true}:{}),targetId: enemy.id });
   canvas.focus({preventScroll:true});
   // This is only button feedback. Server cooldown and range decide the hit.
   nextAttackAt = Date.now() + cooldownMs;
@@ -255,6 +255,7 @@ async function loadModel(entry) {
       material = materials;
     }
     const obj = new THREE.Mesh(geo, material); obj.castShadow = true; obj.receiveShadow = true; group.add(obj);
+    if(mesh.sourceNodeTransform){obj.matrix.fromArray(mesh.sourceNodeTransform.matrix);obj.matrix.decompose(obj.position,obj.quaternion,obj.scale);}
   }
   const box = new THREE.Box3().setFromObject(group), size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
   group.position.set(-center.x, -box.min.y, -center.z);
@@ -315,6 +316,9 @@ async function init() {
     gameplayProfile=uiProfile.gameplay;
     mobileHUD=createMobileHUD(uiProfile.hud);
     jumpControl=createPressControl($('field-interaction'),{enabled:()=>connected&&Boolean(snapshot.find(p=>p.id===selfId)?.hp>0)&&!inputBlocked(),change:pressed=>send({type:'jump',pressed})});
+    attackControl=createPressControl($('field-attack'),{enabled:()=>connected&&!$('field-attack').disabled&&!inputBlocked(),change:pressed=>{
+      if(pressed)attack(true);else send({type:'attack-control',pressed:false});
+    }});
     joystick=createTouchJoystick($('touch-controls'),{stage:viewport,profile:controlProfile.joystick,scale:()=>mobileHUD.scale,enabled:()=>connected&&Boolean(snapshot.find(p=>p.id===selfId)?.hp>0)&&!inputBlocked(),change:value=>{joystickInput=value;if(value.active){target=null;keys.clear();}else if(connected)send({type:'input',x:0,y:0});}});
     terrainData = await json(assets.map.url);
     mapBounds = [terrainData.bounds.min, terrainData.bounds.max];
@@ -399,6 +403,7 @@ function updateRoster() {
     text.textContent = p.name; tag.textContent = `Lv.${p.level || 1} · ${p.hp ?? 100} HP${p.id === selfId ? ' · 你' : ''}`; li.append(icon, text, tag); $('players').append(li);
   }
 }
+function entityPosition(entity){const p=localPosition(entity.x,entity.y);if(Number.isFinite(entity.worldY))p.y=entity.worldY-origin.y;return p;}
 function syncAvatars(serverTime = Date.now()) {
   const ids = new Set(snapshot.map(p => p.id));
   for (const [id, a] of avatars) if (!ids.has(id)) { disposeFighter(a.body); scene.remove(a.root); a.label.remove(); avatars.delete(id); }
@@ -408,13 +413,14 @@ function syncAvatars(serverTime = Date.now()) {
       prepareFighter(body);
       root.add(body);
       const ring = new THREE.Mesh(new THREE.RingGeometry(.4, .49, 40), new THREE.MeshBasicMaterial({ color: p.color, side: THREE.DoubleSide, transparent: true, opacity: .8 })); ring.rotation.x = -Math.PI/2; ring.position.y = .05; root.add(ring);
-      root.position.copy(localPosition(p.x, p.y)); scene.add(root);
+      root.position.copy(entityPosition(p)); scene.add(root);
       const label = document.createElement('div'); label.className = 'player-label' + (p.id === selfId ? ' mine' : '');
       const name = document.createElement('span'), health = document.createElement('span'); health.className = 'label-health'; name.textContent = p.name + (p.id === selfId ? ' · 你' : ''); label.append(name,health); $('labels').append(label);
-      avatars.set(p.id, { root, label, health, target: localPosition(p.x, p.y), body,
+      avatars.set(p.id, { root, label, health, ring,target: entityPosition(p), body,
         lastState: null, lastStateAt: serverTime, motion: { moving: false, speed: 0 }, attackSeconds: cooldownMs / 1000 });
     }
-    const a = avatars.get(p.id); a.target.copy(localPosition(p.x, p.y));
+    const a = avatars.get(p.id); a.target.copy(entityPosition(p));
+    a.label.dataset.worldY=String(p.worldY??'');a.label.dataset.grounded=String(p.grounded??true);
     setCharacterEquipment(a.body,p.equipment);
     setCharacterLook(a.body,p.look);
     a.label.dataset.equipment=characterEquipmentState(a.body)?.key||'';
@@ -439,13 +445,13 @@ function syncMonsters(serverTime = Date.now()) {
       prepareFighter(body);
       body.traverse(obj => { if (obj.isMesh) obj.userData.monsterId=m.id; });
       const ring = new THREE.Mesh(new THREE.RingGeometry(.65,.74,40),new THREE.MeshBasicMaterial({color:0xe1b872,side:THREE.DoubleSide,transparent:true,opacity:.8})); ring.rotation.x=-Math.PI/2; ring.position.y=.055;root.add(ring);
-      root.position.copy(localPosition(m.x,m.y));scene.add(root);
+      root.position.copy(entityPosition(m));scene.add(root);
       const label=document.createElement('div'),name=document.createElement('span'),bar=document.createElement('span'),fill=document.createElement('i'),health=document.createElement('span');
       label.className='monster-label';name.textContent=m.name;bar.className='monster-hp';bar.append(fill);health.className='monster-health';label.append(name,bar,health);$('labels').append(label);
-      monsterViews.set(m.id,{root,body,label,fill,health,ring,target:localPosition(m.x,m.y),alive:m.alive,height:wolfTemplate.userData.height,
+      monsterViews.set(m.id,{root,body,label,fill,health,ring,target:entityPosition(m),alive:m.alive,height:wolfTemplate.userData.height,
         lastState:null,lastStateAt:serverTime,motion:{moving:false,speed:0},attackSeconds:monsterCooldownMs/1000});
     }
-    const view=monsterViews.get(m.id);view.target.copy(localPosition(m.x,m.y));view.alive=m.alive;view.root.visible=true;
+    const view=monsterViews.get(m.id);view.target.copy(entityPosition(m));view.alive=m.alive;view.root.visible=true;
     view.motion=snapshotMotion(view.lastState,m,(serverTime-view.lastStateAt)/1000,(mapBounds[1][0]-mapBounds[0][0])/world.width);
     view.lastState={x:m.x,y:m.y};view.lastStateAt=serverTime;
     syncCharacterCombat(view.body,m,serverTime,view.attackSeconds);
@@ -458,7 +464,7 @@ function resetConnection() {
   hotbar?.disconnect();$('hotbar-settings').disabled=true;
   $('recovery-copy').disabled=true;$('recovery-show').disabled=true;$('recovery-show').textContent='显示恢复码';$('recovery-status').textContent='';$('recovery-export').value='';$('recovery-export').hidden=true;
   $('recovery-code').disabled=false;$('recovery-join').disabled=!ready;
-  $('field-hud').hidden=true;$('field-attack').hidden=true;$('field-actions').hidden=true;$('touch-controls').hidden=true;joystick?.reset();jumpControl?.reset();$('field-interaction').disabled=true;combatEffects?.clear();
+  $('field-hud').hidden=true;$('field-attack').hidden=true;$('field-actions').hidden=true;$('touch-controls').hidden=true;joystick?.reset();jumpControl?.reset();attackControl?.reset();$('field-interaction').disabled=true;combatEffects?.clear();
   hud?.clear();
   inventoryUI?.update(null);
   $('field-inventory').disabled=true;$('session-open').hidden=false;
@@ -534,7 +540,6 @@ $('recovery-show').addEventListener('click',()=>{
   $('recovery-export').value=show?encodeCharacterRecovery({id:activeCredentials.characterId,name:activeCredentials.name},activeCredentials.resumeToken):'';
   $('recovery-export').hidden=!show;$('recovery-show').textContent=show?'隐藏恢复码':'显示恢复码';
 });
-$('field-attack').addEventListener('click', attack);
 $('leave').addEventListener('click', () => { stop(); manualExit = true; generation++; clearTimeout(retryTimer); socket?.close(); resetConnection(); status('已离开'); message('已离开。使用相同浏览器和角色名字可恢复进度。'); openSession(); });
 $('attack').addEventListener('click',attack);
 for(const skill of Object.values(SKILLS))for(const id of [`skill-${skill.id}`,`field-${skill.id}`])$(id).addEventListener('click',()=>useSkill(skill.id));
@@ -543,7 +548,7 @@ $('invite').addEventListener('click', async () => { const url = inviteURL(); try
 $('second').addEventListener('click', () => window.open(inviteURL(), '_blank', 'noopener'));
 $('reset-view').addEventListener('click', () => { azimuth = .65; elevation = .58; distance = 12; });
 function inputBlocked(){return skillBook?.isOpen||hotbar?.isEditing||inventoryUI?.isOpen||!$('camp-panel').hidden||$('session-dialog').open;}
-function stop() { jumpControl?.reset();joystick?.reset();keys.clear(); target = null; if (connected) send({ type: 'input', x: 0, y: 0 }); }
+function stop() { attackControl?.reset();jumpControl?.reset();joystick?.reset();keys.clear(); target = null; if (connected) send({ type: 'input', x: 0, y: 0 }); }
 function setCampPanel(open) {
   if(open){hotbar?.close();skillBook?.close();}
   stop();pointer=null;$('camp-panel').hidden=!open;
@@ -620,10 +625,12 @@ function draw(now) {
   for(const [id,a] of avatars){
     updateCharacterAnimation(a.body, dt, a.motion, Date.now()+serverOffset);
     const pose=characterAnimationState(a.body);a.label.dataset.motion=pose?.phase||'idle';
-    a.body.position.y=pose?.jumpHeight||0;a.label.dataset.jumpHeight=String(pose?.jumpHeight||0);
+    a.body.position.y=pose?.jumpWorldMotion?0:pose?.jumpHeight||0;
+    if(a.ring)a.ring.position.y=.05-(pose?.jumpWorldMotion?pose.jumpHeight:0);
+    a.label.dataset.jumpHeight=String(pose?.jumpHeight||0);a.label.dataset.attackClip=pose?.attackClip||'';
     const delta=a.target.clone().sub(a.root.position);
     if((pose?.phase==='attack'||pose?.phase?.startsWith('skill_'))&&Number.isFinite(a.combatFacing))a.body.rotation.y=a.combatFacing;
-    else if(!pose?.dead&&delta.length()>.01)a.body.rotation.y=Math.atan2(delta.x,delta.z);
+    else if(!pose?.dead&&Math.hypot(delta.x,delta.z)>.01)a.body.rotation.y=Math.atan2(delta.x,delta.z);
     a.root.position.lerp(a.target,1-Math.exp(-dt*16));
     animateFighter(a,Date.now());
     if(id===selfId){const dest=a.root.position.clone().add(new THREE.Vector3(0,1,0));focus.lerp(dest,1-Math.exp(-dt*7));$('position').textContent=`${(a.root.position.x+origin.x).toFixed(1)} E / ${(a.root.position.z+origin.z).toFixed(1)} N`;}

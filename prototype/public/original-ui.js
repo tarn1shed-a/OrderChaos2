@@ -1,8 +1,9 @@
 // Only decoded art and embedded glyphs are loaded. Original SWF scripts never run.
 export async function loadOriginalUI(profile) {
-  if (profile.format !== 'oc2-original-ui-v2' || profile.fonts?.requiredTextStatus !== 'complete' ||
+  if (profile.format !== 'oc2-original-ui-v3' || profile.fonts?.requiredTextStatus !== 'complete' ||
       !['chineseText','chineseDisplay'].every(key=>profile.fonts.faces?.[key]?.conversion==='lossless-full-sfnt-to-woff') ||
-      profile.skillIcons?.format !== 'oc2-skill-icons-v1') throw new Error('原版中文字体与技能图标资源需要更新，请重新构建本地资源');
+      profile.skillIcons?.format !== 'oc2-skill-icons-v1'||profile.hud?.format!=='oc2-original-hud-v1'||
+      profile.portraits?.format!=='oc2-character-portraits-v1') throw new Error('原版头像、状态栏与技能栏资源需要更新，请重新构建本地资源');
   const imageKeys = ['buttonGreen','buttonGray','skillOrb','skillFrame','healthRing','experienceRing','healthFill','manaFill','panelBlue'];
   const localURL = url => {
     if (typeof url !== 'string' || !/^\/assets\/ui\/[A-Za-z0-9_-]+\.(png|woff)$/.test(url)) throw new Error('原版界面资源路径无效');
@@ -13,6 +14,11 @@ export async function loadOriginalUI(profile) {
     const url = localURL(profile.assets[key]?.url), image = new Image();
     image.src = url; await image.decode();
     document.documentElement.style.setProperty(`--oc2-${key}`, `url("${url}")`);
+  }));
+  await Promise.all(Object.entries(profile.hud.assets).map(async ([key,entry])=>{
+    const url=localURL(entry.url),image=new Image();image.src=url;await image.decode();
+    if(image.naturalWidth!==entry.width||image.naturalHeight!==entry.height)throw new Error('原状态栏图集尺寸不匹配');
+    document.documentElement.style.setProperty(`--hud-${key}`,`url("${url}")`);
   }));
   await Promise.all(Object.entries(profile.fonts.faces).map(async ([key,entry]) => {
     const face = new FontFace(entry.family, `url("${localURL(entry.url)}") format("woff")`, {
@@ -37,4 +43,6 @@ export async function loadOriginalUI(profile) {
   document.body.dataset.chineseFont = 'original-full-source-fonts';
   document.body.dataset.fontFaces = String(Object.keys(profile.fonts.faces).length);
   document.body.dataset.skillIcons = 'fireball,frost_blast';
+  document.body.dataset.hud = profile.hud.format;
+  return profile;
 }

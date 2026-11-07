@@ -9,6 +9,8 @@ import { createCombatEffects } from './combat-effects.js';
 import { createSceneEnvironment } from './scene-environment.js';
 import { createRecoveredHDR } from './hdr-renderer.js';
 import { loadOriginalUI } from './original-ui.js';
+import { createRecoveredHUD } from './recovered-hud.js';
+import { renderCharacterPortrait } from './character-portraits.js';
 import { restoreCredentials, rememberCharacter, lastCharacterName, characterSessionWarning } from './character-session.js';
 
 const $ = id => document.getElementById(id);
@@ -20,7 +22,7 @@ let renderer, scene, camera, terrainMeshes = [], terrainData, mapBounds, origin,
 let assets, modelTemplate, ready = false, world = RESOURCE_WORLD, snapshot = [], selfId, socket, connected = false;
 let wolfTemplate, monsterSnapshot = [], selectedMonsterId = null, character = null, nextAttackAt = 0, feedbackUntil = 0, saveAt = null;
 let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset = 0;
-let combatEffects, environment, hdrRenderer, nextSkillRequestAt = 0;
+let combatEffects, environment, hdrRenderer, hud, nextSkillRequestAt = 0;
 const monsterViews = new Map();
 let target = null, keys = new Set(), avatars = new Map(), rosterSignature = '', generation = 0, retryTimer, manualExit = false;
 let azimuth = .65, elevation = .58, distance = 24, previous = performance.now(), pointer = null;
@@ -54,6 +56,7 @@ function updateCharacter(data, savedAt = null) {
   if (savedAt) saveAt = savedAt;
   const warning = characterSessionWarning();
   $('save-status').textContent = warning || (saveAt ? `服务器已保存 · ${new Date(saveAt).toLocaleTimeString('zh-CN')}` : '恢复凭据已记住 · 进度由服务器保存');
+  hud?.character(data);
   updateTarget();
 }
 function nearestMonster() {
@@ -114,6 +117,7 @@ function updateSkills() {
         if(state.textContent!==value)state.textContent=value;
         button.classList.toggle('cooling',remaining>0);
         button.setAttribute('aria-label',text);
+        button.title=text;
       }else if(button.textContent!==text)button.textContent=text;
       button.dataset.readyAt=String(me?.skillReadyAt?.[skill.id]||0);
     }
@@ -226,7 +230,7 @@ async function init() {
     scene.add(sun);
     assets = await json('/assets/manifest.json');
     if (!assets.player?.attachmentPoints||!assets.effects||!assets.rendering||!assets.ui) throw new Error('原始挂点、光影与界面资源需要更新，请重新运行本地资源构建工具');
-    await loadOriginalUI(await json(assets.ui.url));
+    const uiProfile=await loadOriginalUI(await json(assets.ui.url));hud=createRecoveredHUD(uiProfile.hud);
     terrainData = await json(assets.map.url);
     mapBounds = [terrainData.bounds.min, terrainData.bounds.max];
     origin = new THREE.Vector3((mapBounds[0][0] + mapBounds[1][0]) / 2, mapBounds[0][1], (mapBounds[0][2] + mapBounds[1][2]) / 2);
@@ -249,6 +253,12 @@ async function init() {
       scene.add(model);
     }
     if (!wolfTemplate || !modelFactories.has(wolfTemplate)) throw new Error('野狼战斗动画缺失，请重新构建本地资源');
+    const portraits=uiProfile.portraits.models;
+    if(portraits.player.modelPath!==assets.player.model||portraits.targetWolf.modelURL!==assets.exhibits.find(entry=>entry.url.includes('wolf')).url)throw new Error('原头像模型引用不匹配');
+    hud.setPortraits({
+      player:renderCharacterPortrait(THREE,renderer,modelFactories.get(modelTemplate),{headNode:portraits.player.headNode,...portraits.player.webFraming}),
+      targetWolf:renderCharacterPortrait(THREE,renderer,modelFactories.get(wolfTemplate),{headNode:portraits.targetWolf.headNode,...portraits.targetWolf.webFraming}),
+    });
     const effectData=await json(assets.effects.url),effectTextures=new Map();
     const effectURLs=[...new Set(Object.values(effectData.effects).flatMap(effect=>Object.values(effect.textureURLs)))];
     await Promise.all(effectURLs.map(async url=>effectTextures.set(url,await texture(url))));
@@ -284,7 +294,9 @@ function updateRoster() {
   if (!snapshot.length) { const li = document.createElement('li'); li.className = 'empty'; li.textContent = '等待冒险者进入。'; $('players').append(li); }
   for (const p of snapshot) {
     const li = document.createElement('li'), icon = document.createElement('span'), text = document.createElement('span'), tag = document.createElement('small');
-    icon.className = 'avatar'; icon.textContent = '◇'; icon.style.color = p.color; text.textContent = p.name; tag.textContent = `Lv.${p.level || 1} · ${p.hp ?? 100} HP${p.id === selfId ? ' · 你' : ''}`; li.append(icon, text, tag); $('players').append(li);
+    icon.className = 'avatar';icon.style.borderColor=p.color;
+    if(hud?.playerPortrait){const image=document.createElement('img');image.src=hud.playerPortrait;image.alt='';icon.append(image);}else icon.textContent='◇';
+    text.textContent = p.name; tag.textContent = `Lv.${p.level || 1} · ${p.hp ?? 100} HP${p.id === selfId ? ' · 你' : ''}`; li.append(icon, text, tag); $('players').append(li);
   }
 }
 function syncAvatars(serverTime = Date.now()) {
@@ -340,6 +352,7 @@ function syncMonsters(serverTime = Date.now()) {
 
 function resetConnection() {
   $('field-hud').hidden=true;$('field-attack').hidden=true;$('field-actions').hidden=true;combatEffects?.clear();
+  hud?.clear();
   connected = false; snapshot = []; monsterSnapshot = []; selfId = null; keys.clear(); target = null; selectedMonsterId=null; updateRoster(); syncAvatars(); syncMonsters();
   for (const id of ['name', 'room']) $(id).disabled = false;
   $('join').disabled = !ready; $('join').firstElementChild.textContent = '进入试炼'; $('invite').disabled = $('second').disabled = true; $('leave').hidden = true;
@@ -481,6 +494,7 @@ function draw(now) {
     a.label.style.left=`${(projected.x*.5+.5)*w}px`;a.label.style.top=`${(-projected.y*.5+.5)*h}px`;
   }
   if(Date.now()>feedbackUntil)$('combat-feedback').classList.remove('combat-flash');
+  hud?.combat({me:snapshot.find(player=>player.id===selfId),enemy:chosenMonster()||monsterSnapshot.find(monster=>!monster.alive),connected,now:Date.now()+serverOffset,attackCooldownMs:cooldownMs});
   combatEffects?.update(Date.now()+serverOffset);
   if(combatEffects)canvas.dataset.effects=combatEffects.state().types.join(',');
   if(combatEffects)canvas.dataset.particles=String(combatEffects.particleCount());

@@ -15,6 +15,8 @@ from ui_assets import recover_ui_assets
 from chinese_fonts import recover_chinese_fonts, SOURCE_FONTS
 from skill_icons import recover_skill_icons
 from art_library import build_catalog
+from hud_assets import recover_hud_assets
+from character_portraits import recover_character_portraits
 from terrain_convert import convert as terrain_convert
 from texture_decode import convert as texture_convert
 
@@ -26,7 +28,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     source, extracted, output = Path(source), Path(extracted), Path(output)
     # Select archive namespaces explicitly while the complete native mounting
     # priority is still under investigation. Never guess between conflicting packs.
-    packs = {'res.bin','res_a.bin','res_npc.bin','res_scene.bin','res_scene_generator_temple_000.bin','res_t.bin','res_t_upd15.bin','tables.bin','ui.bin','ui_icon_1.bin',
+    packs = {'res.bin','res_a.bin','res_npc.bin','res_scene.bin','res_scene_generator_temple_000.bin','res_t.bin','res_t_upd15.bin','tables.bin','ui.bin','ui_icon_1.bin','conf.bin',
              'tutorial.bin','tutorial_layer.bin','tutorial_lmap_1.bin',
              'selection.bin','selection_layer.bin','selection_lmap_1.bin',
              'dawnwatch.bin','dawnwatch_layer.bin','dawnwatch_lmap_1.bin'}
@@ -151,18 +153,20 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         if path not in allowed_loose:raise ValueError(f'Unexpected loose resource: {path}')
         return safe_output(source, path)
     # Check actual Chinese interface characters, including dynamic combat labels.
-    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js'])
+    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','recovered-hud.js'])
     required_text = ''.join(sorted({ch for ch in ui_text if '\u3400' <= ch <= '\u9fff'}))
     chinese = recover_chinese_fonts(read_loose, output, required_text)
     if chinese['requiredTextStatus'] != 'complete':raise ValueError('Original Chinese fonts do not cover the current interface')
     icons = recover_skill_icons(extract, output)
-    ui['format'] = 'oc2-original-ui-v2'
+    ui['format'] = 'oc2-original-ui-v3'
     ui['fonts']['faces'].update(chinese['faces'])
     ui['fonts']['chineseStatus'] = chinese['chineseStatus']
     ui['fonts']['requiredTextStatus'] = chinese['requiredTextStatus']
     ui['fonts']['chineseProfile'] = '/assets/ui/chinese-fonts.json'
     ui['fonts']['status'] = 'original-full-cjk-and-embedded-latin-subsets'
     ui['skillIcons'] = icons
+    ui['hud'] = recover_hud_assets(extract, output)
+    ui['portraits'] = recover_character_portraits(extract, output)
     ui['provenance']['limitations'] = [
         'Original art and full source CJK fonts are reused in the web layout; complete original Flash UI behavior is not restored.',
         'Rare CJK extensions and characters absent from the source fonts require system fallback.',

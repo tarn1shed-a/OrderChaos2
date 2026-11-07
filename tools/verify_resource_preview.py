@@ -91,7 +91,7 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v2' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v3' and not ui['provenance']['swfScriptExecution']
     for entry in ui['assets'].values():
         with Image.open(asset(entry['url'], output)) as image:
             assert image.size == (entry['width'], entry['height'])
@@ -117,6 +117,21 @@ def verify(output=OUT):
         path = asset(icon['url'], output)
         assert hashlib.sha256(path.read_bytes()).hexdigest() == icon['sourceSHA256']
         with Image.open(path) as image:assert image.size == (96,96)
+    hud=ui['hud'];assert hud['format']=='oc2-original-hud-v1'
+    assert hud['progress']['healthGreen']['sourceRole']=='self-health'
+    assert hud['progress']['healthGreen']['frameCount']==50
+    assert hud['progress']['healthGreen']['webMapping']['ratioOrder']=='descending'
+    for entry in hud['assets'].values():
+        with Image.open(asset(entry['url'],output)) as image:assert image.size==(entry['width'],entry['height'])
+    for key in ('healthGreen','cooldownSkill','cooldownAttack','experience'):
+        progress=hud['progress'][key]
+        assert len(progress['frames'])==progress['frameCount']
+        assert [frame['frame'] for frame in progress['frames']]==list(range(1,progress['frameCount']+1))
+    portraits=ui['portraits'];assert portraits['format']=='oc2-character-portraits-v1'
+    for key in ('player','targetWolf'):
+        entry=portraits['models'][key];model=json.loads(asset(entry['modelURL'],output).read_text())
+        assert entry['mode']=='source-model-web-framing'
+        assert any(entry['headNode'] in [node['name'],*node.get('aliases',[])] for node in model['rig']['nodes'])
     catalog = json.loads(asset('/assets/library/catalog.json', output).read_text())
     assert catalog['format'] == 'oc2-art-catalog-v1'
     assert catalog['sourceFormats'] == {'web':m['format'], **{key:m[key]['format'] for key in ('effects','rendering','ui')}}
@@ -132,6 +147,7 @@ def verify(output=OUT):
                      'sceneInstances':sum(len(s['instances']) for s in m['scenery']),
                      'renderZones':len(rendering['zones']), 'uiCrops':len(ui['assets']),
                      'skillIcons':len(icons['icons']), 'fontCharacters':glyphs,
+                     'hudAssets':len(hud['assets']),'modelPortraits':len(portraits['models']),
                      'artFiles':catalog['fileCount'], 'warnings':m['warnings']}
 
 def main():

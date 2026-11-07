@@ -6,6 +6,7 @@
   <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/explore.css">
   <link rel="stylesheet" href="/field-hud.css">
   <link rel="stylesheet" href="/original-ui.css">
+  <link rel="stylesheet" href="/recovered-hud.css">
   <script type="module" src="/explore.js"></script>
 </head>
 <body>
@@ -15,12 +16,19 @@
       <canvas id="scene" tabindex="0" aria-label="三维地形，进入后用方向键移动，右键拖动旋转，滚轮缩放"></canvas>
       <div class="scene-title"><span class="eyebrow">THE FIRST HUNT</span><h1 id="map-title">微光试炼</h1><p id="scene-subtitle">击败野狼，收获奖励，带着进度回来。</p></div>
       <div id="labels" aria-hidden="true"></div>
-      <div id="field-hud" class="field-hud" hidden><span id="field-level" class="level-medallion" aria-label="角色等级">1</span><strong id="field-name">冒险者</strong><progress id="field-hp" max="100" value="100" aria-label="地图内角色生命"></progress><span id="field-stats"></span></div>
+      <div id="field-hud" class="field-hud" hidden aria-label="角色状态">
+        <div class="hud-portrait-cluster"><img id="field-portrait" class="hud-portrait" alt="角色头像"><div id="field-health-mask" class="hud-health-mask"></div><span id="field-level" class="level-medallion" aria-label="角色等级">1</span></div>
+        <div class="hud-player-text"><strong id="field-name">冒险者</strong><progress id="field-hp" max="100" value="100" aria-label="地图内角色生命"></progress><span id="field-stats"></span><span id="field-state" class="hud-state"></span></div>
+      </div>
+      <div id="target-hud" class="target-hud" hidden aria-label="目标状态"><div class="hud-target-portrait"><img id="target-portrait" class="hud-portrait" alt="目标头像"></div><div class="hud-target-text"><strong id="hud-target-name">等待目标</strong><progress id="hud-target-hp" max="60" value="60" aria-label="目标生命"></progress><span id="hud-target-health"></span><span id="hud-target-state" class="hud-state"></span></div></div>
       <div id="field-actions" class="field-actions" hidden>
-        <button id="field-attack" class="field-attack" hidden disabled>攻击 · 空格 / F</button>
+        <span class="hud-skill-track" aria-hidden="true"></span>
+        <button id="field-attack" class="field-attack" hidden disabled aria-label="普通攻击 · 空格 / F"><span class="attack-art" aria-hidden="true"><span class="attack-label">攻击</span><span class="attack-key">F</span></span></button>
         <button id="field-fireball" class="field-skill fire" aria-label="火球术 · 1" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">1</span></span><span class="skill-label">火球术</span></button>
         <button id="field-frost_blast" class="field-skill frost" aria-label="冰霜爆破 · 2" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">2</span></span><span class="skill-label">冰霜爆破</span></button>
+        <span id="hud-empty-slot3" class="hud-empty-slot" aria-hidden="true"></span><span id="hud-empty-slot4" class="hud-empty-slot" aria-hidden="true"></span>
       </div>
+      <div id="field-experience" class="field-experience" hidden><span id="field-xp-text">经验 0 / 60</span><progress id="field-xp" value="0" max="60" aria-label="地图内角色经验"></progress><div class="hud-xp-track" aria-hidden="true"><i id="field-xp-fill"></i><i id="field-xp-glow"></i></div></div>
       <div id="combat-feedback" aria-live="polite"></div>
       <div class="scene-notice" id="load-note" role="status">正在读取本地转换后的地形与模型…</div>
       <div class="scene-bottom"><span id="position">等待探索</span><button id="reset-view">⌖ 回到角色视角</button></div>
@@ -32,9 +40,9 @@
       <form id="join-form"><label for="name">你的冒险者名字</label><input id="name" placeholder="例如：林间旅人" maxlength="16" required autocomplete="nickname"><label for="room">营地编号</label><input id="room" value="EXPLORE-01" pattern="[A-Za-z0-9\-]{3,16}" minlength="3" maxlength="16" required spellcheck="false"><button id="join" class="primary" disabled><span>等待资源就绪</span><span>↗</span></button></form>
       <p id="message" class="message" role="status">地形与模型载入后即可进入。</p>
       <section id="character-panel" class="character-panel" hidden>
-        <div class="section-title"><h3 id="character-title">冒险者</h3><span id="level">Lv. 1</span></div>
+        <div class="card-portrait"><img id="character-portrait" class="hud-portrait" alt="角色头像"><span id="level">Lv. 1</span></div><div class="section-title"><h3 id="character-title">冒险者</h3></div>
         <div class="stat-label"><span>生命</span><span id="hp-text">100 / 100</span></div><progress id="hp" max="100" value="100" aria-label="角色生命"></progress>
-        <div class="stat-label"><span>经验</span><span id="xp-text">0 / 60</span></div><progress id="xp" max="60" value="0" aria-label="升级经验"></progress>
+        <div class="stat-label"><span>经验</span><span id="xp-text">0 / 60</span></div><progress id="xp" max="60" value="0" aria-label="升级经验"></progress><div id="card-xp-track" class="hud-card-xp-track" aria-hidden="true"></div>
         <div class="reward-totals"><span>金币 <b id="gold">0</b></span><span>狼皮 <b id="pelts">0</b></span><span>击杀 <b id="kills">0</b></span></div>
         <p id="save-status">角色进度由服务器保存</p>
       </section>
@@ -48,7 +56,7 @@
       <div class="invite-actions"><button id="invite" disabled>⌁ 复制邀请链接</button><button id="second" disabled>↗ 打开第二个玩家窗口</button></div>
       <div class="controls"><h3>探索指南</h3><p>WASD / 方向键：相对视角移动</p><p>点击野狼选中 · 空格 / F：攻击</p><p>右键拖动：旋转镜头 · 滚轮：缩放</p><p>点击地面：直线移动 · 手机：方向按钮</p></div>
       <p class="skill-hint">1：火球术 · 2：冰霜爆破<br>施法时短暂停步，倒地或目标失效会中断。</p>
-      <section class="recovery"><h3>资源与玩法</h3><p id="asset-detail">正在核对资源…</p><p>已接入原版中文字体、按钮、技能框和两张技能图标。光影、雾和挂点按恢复的源参数呈现；技能数值与飞行路径为本地实现。角色存档由本地服务器保存。</p><a class="asset-library-link" href="/assets/library/index.html" target="_blank" rel="noopener">浏览本地美术素材库 ↗</a></section>
+      <section class="recovery"><h3>资源与玩法</h3><p id="asset-detail">正在核对资源…</p><p>原版生命弧、经验条和战斗技能栏已接入。头像由原模型渲染，取景为网页适配；玩法数值由本地服务器判定并保存。</p><a class="asset-library-link" href="/assets/library/index.html" target="_blank" rel="noopener">浏览本地美术素材库 ↗</a></section>
       <button id="leave" class="leave" hidden>离开营地</button><a class="back-link" href="/">← 返回营地原型</a>
     </aside>
   </main>

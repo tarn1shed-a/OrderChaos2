@@ -46,6 +46,8 @@ pnpm start
 - HDR 使用恢复的亮部提取、两轮水平/垂直模糊、Reinhardt 与原 LUT；雾按源区域优先级和指数公式计算。原设备质量覆盖、天气、完整光照与区域渐变尚未恢复，当前使用已验证的构造默认参数和原始区域表。
 - 火球蓄力分别跟随左右手 Dummy 的完整变换，飞行终点与命中使用胸部挂点，冰霜使用地面 +0.1 挂点及原缩放。森林精灵缺少的三个 Dummy 适配自同一动作参考模型，完整原版玩家技能 ID 链尚未证明。
 - 三维界面使用 9 张原版图集裁片、两张经技能表链确认的 96×96 原图标，以及原 Fontin / Alegreya 中文字体。两份完整字体各含 20,932 个基本汉字，当前界面汉字均已检查覆盖；稀有扩展和源字体缺字仍回退系统字体。西文数字继续使用原嵌入子集，布局与按钮行为由网页实现，不执行 SWF。美术与字体均只留在本地。
+- 状态栏使用 `Gauges2` 原自身生命半弧的 50 帧掩模及加色；经验使用 `ExpBar` 原条与变换，冷却使用 40 帧原矢量扇形。战斗面板按 `OperationPanel2` 原五槽位置，攻击/火球/冰霜可用，两个空槽仅显示背景。没有虚构 MP 数值或未实现的技能。
+- 头像由恢复的森林精灵/狼模型各生成一次 192px 缩略图，不改战斗骨架；角度、取景、灯光与自身/怪物头像用途均是网页适配。原 `PlayerGauges` 的 Model3D 槽属于选中玩家，自身 `Gauges2` 中心含小地图，原狼目标槽是精英状态图标，不能把这些冒称原版静态肖像绑定。
 - 伤害、冷却、奖励与重生规则沿用现有服务端，不以动画画面计算命中。装备、原版混合地表材质和建筑碰撞尚未恢复，可穿过场景物件。
 
 资源单独复制到另一台 Mac、首次安装和局域网联机步骤见 [本地服务器指南](docs/LOCAL_SERVER.md)。服务器只开放转换后的资源，不开放原始导出目录或数据库。
@@ -99,6 +101,8 @@ python3 -m venv .venv
 .venv/bin/python tools/ui_assets_tests.py
 .venv/bin/python tools/chinese_fonts_tests.py
 .venv/bin/python tools/skill_icons_tests.py
+.venv/bin/python tools/hud_assets_tests.py
+.venv/bin/python tools/character_portraits_tests.py
 python3 tools/art_library_tests.py
 ```
 
@@ -129,7 +133,7 @@ python3 tools/art_library_tests.py
 .venv/bin/python tools/analyze_native_effects.py /path/to/game.apk
 ```
 
-转换入口按原索引提取 117 个包内源文件并校验长度/CRC，另按精确 SHA256/长度读取两个松散原字体。生成 20 个模型、36 张场景/特效贴图、9 张 UI 裁片、2 张技能原图、4 个 WOFF、战斗/光影/界面清单和一块地图。完整中文字体来自 `files/ui/Font/Fontin.ttf` 与 `Alegreya-Bold.ttf`，必须随原导出目录另行提供；不从系统字体替代转换。原始包不修改，产物留在忽略目录。当前要求 `oc2-combat-effects-v3`、`oc2-scene-render-v1` 和 `oc2-original-ui-v2`，请整体重建或单独同步匹配版本的 `converted/` 后刷新页面。
+转换入口按原索引提取 128 个包内源文件并校验长度/CRC，另按精确 SHA256/长度读取两个松散原字体。生成 20 个模型、36 张场景/特效贴图、9 张基础 UI 裁片、2 张技能原图、13 张 HUD 裁片、4 个 WOFF、头像/战斗/光影/界面清单和一块地图。完整中文字体来自 `files/ui/Font/Fontin.ttf` 与 `Alegreya-Bold.ttf`，必须随原导出目录另行提供；不从系统字体替代转换。原始包不修改，产物留在忽略目录。当前要求 `oc2-combat-effects-v3`、`oc2-scene-render-v1` 和 `oc2-original-ui-v3`，请整体重建或单独同步匹配版本的 `converted/` 后刷新页面。
 
 ## 美术素材复用与同步
 

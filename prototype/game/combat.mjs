@@ -2,6 +2,8 @@ import { advance, walkable } from '../public/world.js';
 import { skillById } from '../public/skills.js';
 import { equipmentStats } from '../public/items.js';
 import {chooseBasicAttack,prepareBasicAttack,updateBasicAttack} from './basic-attack.mjs';
+import {SpellRuntime} from './spell-runtime.mjs';
+import {DynamicScene} from './dynamic-scene.mjs';
 
 export const COMBAT = Object.freeze({ playerDamage: 20, playerCooldownMs: 700, monsterHp: 60, monsterDamage: 6,
   monsterCooldownMs: 1000, monsterRespawnMs: 8000, playerRespawnMs: 4000,
@@ -14,9 +16,9 @@ export function syncPlayerStats(ws) {
 }
 
 export class CombatRoom {
-  constructor(key, world, scene, clients, { changed, emit, notice, gameplay=null, motion=null, random=Math.random }) {
+  constructor(key, world, scene, clients, { changed, emit, notice, gameplay=null, motion=null, casting=true,lab=false, random=Math.random }) {
     this.gameplay=scene==='resources'?gameplay:null;this.random=random;
-    this.motion=scene==='resources'?motion:null;
+    this.motion=scene==='resources'?(motion?.fork?.()||motion):null;
     this.world = world; this.scene = scene; this.clients = clients; this.changed = changed; this.emit = emit; this.notice = notice;
     this.range = scene === 'resources' ? 32 : 95;
     this.monsterSpeed = scene === 'resources' ? 14 : 70;
@@ -29,9 +31,23 @@ export class CombatRoom {
     this.contributors = new Set();
     if(this.motion)this.motion.place(this.monster);
     this.casts = new Map(); this.castSequence = 0;
+    this.castProfile=casting&&scene==='resources'?gameplay?.casting:null;
+    if(this.castProfile)this.runtime=new SpellRuntime(this.castProfile,{executions:this.casts,emit,
+      check:(r,now)=>{
+        if(this.clients.get(r.ws.player.id)!==r.ws||r.ws.player.hp<=0)return '施法已中断';
+        if(!r.hit&&!this.monster.alive)return '目标已倒地';
+        if(!r.hit&&now>=r.cast.impactAt&&Math.hypot(r.ws.player.x-this.monster.x,r.ws.player.y-this.monster.y)>r.skill.range)return '目标离开技能范围';
+        return null;
+      },hit:(r,now)=>this.damageMonster(r.ws,r.skill.damage,now,r.cast)});
+    if(lab){if(!this.motion)throw new Error('碰撞验证场需要本地资源');this.dynamic=new DynamicScene(this.motion,Date.now());}
   }
 
   snapshot() { return [{ ...this.monster, animation: { ...this.monster.animation } }]; }
+
+  skillDefinition(id) {
+    const base=skillById(id),native=this.castProfile?.spells[id];
+    return base&&native?{...base,castMs:native.chantMs,cooldownMs:native.cooldownMs,commonCD:native.commonCD,native}:base;
+  }
 
   attack(ws, targetId, now) {
     const m = this.monster;
@@ -53,24 +69,25 @@ export class CombatRoom {
   }
 
   skill(ws, skillId, targetId, now) {
-    const skill = skillById(skillId), m = this.monster;
+    const skill=this.skillDefinition(skillId),native=skill?.native,m = this.monster;
     if (!skill) return this.notice(ws, '未知技能');
     if (targetId !== m.id || typeof targetId !== 'string') return this.notice(ws, '目标不在当前营地');
     if (ws.player.hp <= 0) return this.notice(ws, '倒地后无法施法');
     if (!m.alive) return this.notice(ws, '目标已倒地，无法施法');
     if (this.casts.has(ws.player.id)) return this.notice(ws, '正在施法，请稍候');
     if (now < (ws.player.skillReadyAt?.[skill.id] ?? 0)) return this.notice(ws, `${skill.name}还在冷却中`);
-    if (now - ws.player.attackAt < COMBAT.playerCooldownMs) return this.notice(ws, '攻击尚在冷却中');
+    if (native?now<(ws.player.globalReadyAt||0):now-ws.player.attackAt<COMBAT.playerCooldownMs) return this.notice(ws, '攻击尚在冷却中');
     if (Math.hypot(ws.player.x-m.x, ws.player.y-m.y) > skill.range) return this.notice(ws, `${skill.name}距离太远，先靠近野狼`);
     const cast = { id: `${ws.player.id}:${++this.castSequence}`, skillId: skill.id, targetId: m.id,
       startedAt: now, releaseAt: now + skill.castMs, impactAt: now + skill.castMs + skill.flightMs,
       origin: { x: ws.player.x, y: ws.player.y }, target: { x: m.x, y: m.y } };
     ws.player.skillReadyAt ||= {};
     ws.player.skillReadyAt[skill.id] = now + skill.cooldownMs;
+    if(native)ws.player.globalReadyAt=now+native.commonCD;
     ws.player.attackAt = now;
     ws.player.cast = cast;
-    ws.input = { x: 0, y: 0 };
-    this.casts.set(ws.player.id, { ws, cast });
+    if(this.runtime){this.runtime.start(ws,skill,cast);if(this.casts.get(ws.player.id).machine.movement.stopOnEnter)ws.input={x:0,y:0};}
+    else {ws.input = { x: 0, y: 0 };this.casts.set(ws.player.id, { ws, cast });}
     this.emit({ type: 'combat', action: 'skill-cast', attackerId: ws.player.id, targetId: m.id, serverTime: now, cast });
   }
 
@@ -105,7 +122,8 @@ export class CombatRoom {
   }
 
   tick(now, dt) {
-    for (const [id, { ws, cast }] of this.casts) {
+    if(this.runtime)this.runtime.tick(now);
+    else for (const [id, { ws, cast }] of this.casts) {
       let reason = null;
       if (this.clients.get(id) !== ws || ws.player.hp <= 0) reason = '施法已中断';
       else if (!this.monster.alive) reason = '目标已倒地';
@@ -125,7 +143,7 @@ export class CombatRoom {
         ws.player.x = this.world.spawn.x; ws.player.y = this.world.spawn.y; ws.player.deadUntil = 0;
         if(this.motion)this.motion.place(ws.player);
         ws.player.animation = { attackAt: null, hitAt: null, deathAt: null };
-        ws.player.cast = null;
+        ws.player.cast = null; ws.player.lastCast = null;
         const basic=prepareBasicAttack(this.gameplay,ws.character,this.random);
         ws.basicCombo=basic.state;ws.player.basicSlot=basic.slot;ws.player.basicAttack=null;ws.attackPressed=false;
         ws.input = { x: 0, y: 0 }; this.changed(ws, true);

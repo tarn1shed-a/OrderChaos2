@@ -38,8 +38,9 @@ export function createCombatEffects(THREE,{scene,data,textures,findView,position
     }
     if((event.action==='player-hit'&&event.targetHp<=0)||event.action==='kill')for(const [id,e]of active)if(e.type==='cast'&&(e.payload.attackerId===event.targetId||e.payload.targetId===event.targetId)){destroy(e);active.delete(id);}
   }
-  function sync(players,monsters,now){
+  function sync(players,monsters,now,projectiles=[]){
     for(const player of players)if(player.hp>0&&player.cast)cast({cast:player.cast,attackerId:player.id},now);
+    for(const pending of projectiles)cast(pending,now);
     for(const m of monsters)if(m.alive&&m.slowUntil>now)add(`slow:${m.id}:${m.slowUntil}`,'slow',m.slowUntil-2500,m.slowUntil,{id:m.id,x:m.x,y:m.y});
   }
   function update(now){

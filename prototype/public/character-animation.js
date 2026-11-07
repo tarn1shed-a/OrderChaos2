@@ -4,6 +4,7 @@ import { validateEquipmentAppearance, applyEquipmentMeshes, equipmentAppearanceK
 import { defaultLook, validLook, lookKey } from './character-look.js';
 import { setCharacterMaterialLook } from './character-materials.js';
 import { jumpPose } from './jump.js';
+import {castPose} from './cast-pose.js';
 const controllers = new WeakMap();
 
 export function snapshotMotion(previous, current, seconds, worldUnitsPerLogicalUnit) {
@@ -171,7 +172,10 @@ export function playCharacterAction(root, kind, { at, now, attackSeconds, basicA
 export function playCharacterSkill(root, cast, { now } = {}) {
   const c = controllers.get(root), skill = skillById(cast?.skillId);
   if (!c || c.dead || !skill || !c.shots[skill.clip] || !Number.isFinite(cast.startedAt) || !Number.isFinite(cast.releaseAt)
-    || cast.releaseAt <= cast.startedAt || cast.startedAt < c.lifeSince || cast.startedAt <= c.lastCastAt) return false;
+    || (cast.stage===undefined&&cast.releaseAt<=cast.startedAt) || cast.startedAt < c.lifeSince) return false;
+  if(c.cast?.id===cast.id&&cast.stage!==undefined){
+    if(cast.revision<=c.cast.revision)return false;
+  }else if(cast.startedAt<=c.lastCastAt)return false;
   c.cast = { ...cast }; c.lastCastAt = cast.startedAt;
   c.now = Math.max(c.now, Number.isFinite(now) ? now : cast.startedAt);
   return true;
@@ -209,7 +213,7 @@ export function syncCharacterCombat(root, snapshot, serverTime, attackSeconds) {
   }
   if (c.dead) respawnCharacterAnimation(root, { at: serverTime, now: serverTime });
   c.jump=snapshot.jump?{...snapshot.jump}:null;
-  if (snapshot.cast) playCharacterSkill(root, snapshot.cast, { now: serverTime });
+  if (snapshot.cast||snapshot.lastCast) playCharacterSkill(root, snapshot.cast||snapshot.lastCast, { now: serverTime });
   if (Number.isFinite(animation.attackAt)) playCharacterAction(root, 'attack', { at: animation.attackAt, now: serverTime, attackSeconds, basicAttack:snapshot.basicAttack });
   if (Number.isFinite(animation.hitAt)) playCharacterAction(root, 'hurt', { at: animation.hitAt, now: serverTime });
 }
@@ -233,12 +237,14 @@ export function updateCharacterAnimation(root, seconds, motion, serverTime) {
   }
   const skill = skillById(c.cast?.skillId), skillAge = c.cast ? (c.now-c.cast.startedAt)/1000 : Infinity;
   const skillDuration = c.cast ? (c.cast.releaseAt-c.cast.startedAt)/1000 : 0;
-  const casting = !c.dead && skill && skillAge >= 0 && skillAge < skillDuration;
+  const sourcePose=castPose(c.cast,c.now),sourceCast=c.cast?.stage!==undefined;
+  const casting = !c.dead && skill && (sourceCast?Boolean(sourcePose):skillAge >= 0 && skillAge < skillDuration);
+  c.activeSkillClip=sourceCast?sourcePose?.clip:skill?.clip;
   c.skillWeight += ((casting ? 1 : 0)-c.skillWeight) * (1-Math.exp(-dt*30));
   if (c.dead || c.skillWeight < .0001) c.skillWeight = 0;
   for (const [name, action] of Object.entries(c.shots)) if (name.startsWith('skill_')) {
-    action.setEffectiveWeight(name === skill?.clip ? c.skillWeight*(1-jumpWeight) : 0);
-    if (name === skill?.clip) action.time = action.getClip().duration*Math.max(0,Math.min(1,skillAge/skillDuration));
+    action.setEffectiveWeight(name === c.activeSkillClip ? c.skillWeight*(1-jumpWeight) : 0);
+    if (name === c.activeSkillClip) action.time = sourceCast?sourcePose.time:action.getClip().duration*Math.max(0,Math.min(1,skillAge/skillDuration));
   }
   const attackAge = (c.now - c.attackAt) / 1000;
   const attacking = !c.dead && attack && attackAge >= 0 && attackAge < c.attackSeconds;
@@ -257,7 +263,7 @@ export function updateCharacterAnimation(root, seconds, motion, serverTime) {
   if (death) {
     const age = c.dead ? Math.max(0, (c.now - c.deathAt) / 1000) : 0;
     death.time = Math.min(death.getClip().duration, age); death.setEffectiveWeight(c.dead ? 1 : 0);
-    c.phase = c.dead ? (age < death.getClip().duration ? 'death' : 'dead') : jumping ? jumping.phase : casting ? skill.clip : attacking ? 'attack' : hurting ? 'hurt' : c.moving ? 'walk' : 'idle';
+    c.phase = c.dead ? (age < death.getClip().duration ? 'death' : 'dead') : jumping ? jumping.phase : casting ? c.activeSkillClip : attacking ? 'attack' : hurting ? 'hurt' : c.moving ? 'walk' : 'idle';
   } else c.phase = c.moving ? 'walk' : 'idle';
   const baseWeight = c.dead ? 0 : (1 - c.attackWeight) * (1 - c.skillWeight)*(1-jumpWeight);
   controller.idle.setEffectiveWeight((1 - controller.weight) * baseWeight);
@@ -272,7 +278,7 @@ export function characterAnimationState(root) {
     idleTime: controller.idle.time, walkTime: controller.walk.time,
     phase: controller.phase, dead: controller.dead, jumpHeight:controller.jumpHeight,jumpWorldMotion:controller.jump?.physics==='source-world-v1', attackWeight: controller.attackWeight,
     hurtWeight: controller.hurtWeight, skillWeight: controller.skillWeight, castId: controller.cast?.id,
-    skillTime: controller.cast ? controller.shots[skillById(controller.cast.skillId)?.clip]?.time : null,
+    skillTime: controller.cast ? controller.shots[controller.activeSkillClip]?.time : null,
     attackClip:controller.attackClip||'attack',attackTime: controller.shots[controller.attackClip||'attack']?.time,
     deathTime: controller.shots.death?.time, combatEnabled: Boolean(controller.shots.death),
     bones: controller.nodes, skeletons: controller.skeletons } : null;

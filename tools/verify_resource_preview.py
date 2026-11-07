@@ -28,7 +28,7 @@ def verify(output=OUT):
     assert all(math.isfinite(v) for v in terrain['grid']['heights'])
     assert len(terrain['grid']['heights']) == terrain['grid']['width']*terrain['grid']['height']
     assert terrain['verification']['seamSamplesMatched'] > 0
-    refs = [m['player'],*m['exhibits'],*m['scenery']]
+    refs = [m['player'],*m['exhibits'],*m['scenery'],*m['dynamicModels']]
     mesh_count = 0
     for ref in refs:
         data = json.loads(asset(ref['url'], output).read_text())
@@ -53,6 +53,7 @@ def verify(output=OUT):
             if ref is m['player']:
                 profile=json.loads(asset(m['gameplay']['url'],output).read_text())
                 expected |= {s['clip'] for s in profile['skills'].values() if s['clip']}
+                expected |= {v[k]['clip'] for s in profile['casting']['spells'].values() for v in s['visuals'].values() for k in ('pre','loop') if k in v}
             assert {clip['name'] for clip in data['clips']} == expected
             for clip in data['clips']:
                 for track in clip['tracks']:
@@ -95,17 +96,17 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v11' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v12' and not ui['provenance']['swfScriptExecution']
     controls=ui['controls'];assert controls['format']=='oc2-original-controls-v1' and not controls['scriptExecution']
     assert m['player']['jumpAnimations']
     collision=json.loads(asset(m['collision']['url'],output).read_text())
-    assert collision['format']=='oc2-scene-collision-v1'
+    assert collision['format']=='oc2-scene-collision-v2'
     assert len(collision['instances'])==39
-    assert sum(len(s['shapes']) for s in collision['sources'].values())==110
+    assert sum(len(s['shapes']) for s in collision['sources'].values())==111
     assert all(mesh.get('sourceNodeTransform') for ref in m['scenery'] for mesh in json.loads(asset(ref['url'],output).read_text())['meshes'])
     assert controls==json.loads((output/'ui/controls.json').read_text())
     gameplay=json.loads(asset(m['gameplay']['url'],output).read_text())
-    assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v2'
+    assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v3'
     assert gameplay['weapons']['trainingSword']['legacy']
     for icon in gameplay['icons'].values():
         assert hashlib.sha256(asset(icon['url'],output).read_bytes()).hexdigest()==icon['sourceSHA256']

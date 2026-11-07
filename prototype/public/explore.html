@@ -21,6 +21,7 @@
     <button id="field-inventory" class="glass-tool" type="button" disabled>背包 <kbd>B</kbd></button>
     <button id="field-attack" class="field-attack" hidden disabled aria-label="普通攻击 · 空格 / F"><span class="attack-art" aria-hidden="true"><img class="control-icon attack-symbol" alt=""><span class="control-hit-area"></span><span class="attack-label">普通攻击</span><span class="attack-key">F</span></span></button>
     <button id="field-skills" class="glass-tool" type="button" aria-controls="skill-book" disabled>技能</button>
+    <button id="field-lab-door" class="glass-tool" type="button" hidden>打开试验门</button>
     <button id="hotbar-settings" class="glass-tool" type="button" aria-controls="hotbar-editor" aria-expanded="false" disabled>键位</button>
     <button id="camp-toggle" class="glass-tool" type="button" aria-controls="camp-panel" aria-expanded="false">营地 <kbd>H</kbd></button>
   </header>
@@ -79,6 +80,7 @@
       <div class="chapter"><span>资源复原实验</span><span>Ⅱ</span></div>
       <h2>营地与冒险</h2><p class="intro">靠近野狼，选中目标后攻击。参与击杀即可获得经验、金币和狼皮。</p>
       <p id="camp-message" class="message" role="status"></p>
+      <p><a href="/explore.html?room=DYNAMIC-01&amp;lab=collision">进入动态碰撞验证场</a>（本地试验摆放）</p>
       <section id="character-panel" class="character-panel" hidden>
         <div class="card-portrait"><img id="character-portrait" class="hud-portrait" alt="角色头像"><span id="level">Lv. 1</span></div><div class="section-title"><h3 id="character-title">冒险者</h3></div>
         <div class="stat-label"><span>生命</span><span id="hp-text">100 / 100</span></div><progress id="hp" max="100" value="100" aria-label="角色生命"></progress>
@@ -89,8 +91,8 @@
       </section>
       <section class="combat-panel"><div class="section-title"><h3>战斗目标</h3><span id="target-name">等待进入</span></div><p id="target-detail">靠近野狼，按空格、F 或下方按钮攻击。</p><button id="attack" class="attack-button" disabled>攻击野狼 <kbd>Space</kbd></button><p id="combat-rule">服务器判定距离、伤害与冷却；野狼会反击。</p></section>
       <section class="skill-panel"><div class="section-title"><h3>技能</h3><span>选择目标后施放</span></div>
-        <button id="skill-fireball" class="skill-button fire" aria-label="火球术 · 1" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden></span><span class="skill-label">火球术</span><span class="skill-status" aria-hidden="true">1</span></button><p>远程火球 · 30 伤害 · 冷却 3 秒</p>
-        <button id="skill-frost_blast" class="skill-button frost" aria-label="冰霜爆破 · 2" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden></span><span class="skill-label">冰霜爆破</span><span class="skill-status" aria-hidden="true">2</span></button><p>20 伤害 · 减速 2.5 秒 · 冷却 5 秒</p>
+        <button id="skill-fireball" class="skill-button fire" aria-label="火球术 · 1" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden></span><span class="skill-label">火球术</span><span class="skill-status" aria-hidden="true">1</span></button><p id="fireball-summary">远程火球 · 30 伤害</p>
+        <button id="skill-frost_blast" class="skill-button frost" aria-label="冰霜爆破 · 2" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden></span><span class="skill-label">冰霜爆破</span><span class="skill-status" aria-hidden="true">2</span></button><p id="frost-summary">20 伤害 · 减速 2.5 秒</p>
       </section>
       <section class="battle-log"><h3>冒险记录</h3><ol id="events"><li>完成第一次击杀，获得你的第一份奖励。</li></ol></section>
       <section class="party"><div class="section-title"><h3>同行者</h3><span id="count">0 / 8</span></div><ul id="players"><li class="empty">等待冒险者进入。</li></ul></section>

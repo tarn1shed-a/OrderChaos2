@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { createCharacterFactory, updateCharacterAnimation, characterAnimationState, disposeCharacterAnimation, snapshotMotion, playCharacterAction, syncCharacterCombat, respawnCharacterAnimation, playCharacterSkill, cancelCharacterSkill, characterAttachment } from '../public/character-animation.js';
 import {jumpTimeline} from '../public/jump.js';
 import { applyCombatAnimations } from '../public/combat-animation.js';
+import {CastMachine} from '../game/cast-machine.mjs';
 
 function fixture() {
   const track = values => ({ node: 1, type: 'quaternion', times: [0, .5, 1], values });
@@ -133,6 +134,32 @@ test('both views derive walking from server displacement and stop on idle, death
 
 const original = new URL('../../game-data/converted/models/forest-elf.json',import.meta.url);
 const originalWolf = new URL('../../game-data/converted/models/wolf.json',import.meta.url);
+const nativePlayer=new URL('../../game-data/converted/models/elf-female.json',import.meta.url);
+const nativeProfile=new URL('../../game-data/converted/gameplay/native.json',import.meta.url);
+test('native chant loops, zero-chant release and back use source clips without pose drift for late observers', {skip:!existsSync(nativePlayer)||!existsSync(nativeProfile)},()=>{
+  const data=JSON.parse(readFileSync(nativePlayer,'utf8')),profile=JSON.parse(readFileSync(nativeProfile,'utf8')).casting;
+  const create=createCharacterFactory(THREE,data,data.materials.map(()=>new THREE.MeshStandardMaterial()));
+  for(const [skillId,spec] of Object.entries(profile.spells)){
+    const a=create(),b=create(),machine=new CastMachine(spec,1000);
+    const frames=skillId==='fireball'?[[1100,null],[2400,null],[3000,2],[3200,null],[3500,null]]:[[1100,null],[1700,null],[1800,null]];
+    for(const [now,signal] of frames){
+      if(signal!==null)machine.signal(signal,now);machine.tick(now);
+      const cast={id:skillId,skillId,startedAt:1000,releaseAt:1000+spec.chantMs,...machine.snapshot()};
+      playCharacterSkill(a,cast,{now});syncCharacterCombat(b,{hp:100,cast},now,.7);
+      for(const body of [a,b]){updateCharacterAnimation(body,.05,{moving:false},now);body.updateMatrixWorld(true);}
+      const sa=characterAnimationState(a),sb=characterAnimationState(b);
+      assert.equal(sa.phase,sb.phase);assert.equal(sa.skillTime,sb.skillTime);
+      for(let i=0;i<sa.bones.length;i++)assert.deepEqual(sa.bones[i].quaternion.toArray(),sb.bones[i].quaternion.toArray());
+      for(const mesh of skinnedMeshes(a))for(let vertex=0;vertex<mesh.geometry.attributes.position.count;vertex+=13){
+        const point=mesh.getVertexPosition(vertex,new THREE.Vector3());assert(point.toArray().every(Number.isFinite));assert(point.length()<10);
+      }
+      if(now===2400)assert.equal(sa.phase,spec.visuals['1'].loop.clip);
+      if(skillId==='frost_blast'&&now===1100)assert.equal(sa.phase,'skill_frost_blast');
+      if(skillId==='frost_blast'&&now===1800)assert.equal(sa.phase,spec.visuals['6'].pre.clip);
+    }
+    disposeCharacterAnimation(a);disposeCharacterAnimation(b);
+  }
+});
 test('original recovered skill clips deform vertices, follow hand bones and agree for late observers', {skip: !existsSync(original)},()=>{
   const data=JSON.parse(readFileSync(original,'utf8'));
   assert.equal(data.clips.find(c=>c.name==='skill_fireball').duration,.5);

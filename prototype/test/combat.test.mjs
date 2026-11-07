@@ -18,7 +18,7 @@ async function fixture(t,options={}) {
     saveFile,
     advance(ms) { now += ms; },
     async start() {
-      game = createGameServer({ saveFile, motion:null,clock: () => now,...options });
+      game = createGameServer({ saveFile, motion:null,casting:false,clock: () => now,...options });
       await new Promise(resolve => game.server.listen(0, '127.0.0.1', resolve));
       f.url = `ws://127.0.0.1:${game.server.address().port}/ws`;
       return f;
@@ -337,7 +337,7 @@ test('original staff attack is chosen on the server and both peers receive its s
 });
 
 test('source-shape collisions and world-space jumps are authoritative for both peers; airborne height never becomes a saved floor',async t=>{
-  const profile={format:'oc2-scene-collision-v1',query:{forwardMargin:.31,stepProbeCap:.5,stepProbeMultiplier:3.5,wallNormalYThreshold:.5},
+  const profile={format:'oc2-scene-collision-v2',query:{forwardMargin:.31,stepProbeCap:.5,stepProbeMultiplier:3.5,wallNormalYThreshold:.5},
     sources:{wall:{shapes:[{kind:'box',center:[136.2,2,54],halfExtents:[.1,2,6],yawRadians:0,flags:2048}]}},
     instances:[{id:1,sourcePHY:'wall',position:[0,0,0],quaternion:[0,0,0,1],scale:[1,1,1]}]};
   const terrain={bounds:{min:[0,0,0],max:[192,0,192]},grid:{width:3,height:3,heights:Array(9).fill(0)}};
@@ -375,4 +375,44 @@ test('normal press/release casts once per press and a lost release clears withou
   f.advance(4000);mark=a.mark();assert.equal(wolf(await stateAfter(a,mark)).hp,20);
   a.send({type:'attack-control',pressed:true,targetId:target.id});
   await stateAfter(a,a.mark(),m=>wolf(m).hp===0);
+});
+
+test('native chant/release/end and source cooldowns agree for two peers; forged stages and another player cannot cancel a cast',
+ {skip:!existsSync(new URL('../../game-data/converted/gameplay/native.json',import.meta.url))},async t=>{
+ const f=await fixture(t,{casting:true}),a=await enter(f,'施法状态甲',{scene:'resources'}),b=await enter(f,'施法状态乙',{scene:'resources'});
+ assert.equal(a.welcome.combat.skills.fireball.castMs,2000);assert.equal(a.welcome.combat.skills.frost_blast.cooldownMs,20000);
+ const target=wolf(await stateAfter(a,a.mark(),s=>s.players.length===2));await moveNear(a,target);
+ let ma=a.mark(),mb=b.mark();a.send({type:'skill',skillId:'fireball',targetId:target.id,stage:2,chantTime:0,sourceSkillId:17});
+ const first=await stateAfter(a,ma,s=>player(s,a.id)?.cast?.stage===1),other=await stateAfter(b,mb,s=>s.tick===first.tick);
+ const c=player(first,a.id).cast;assert.equal(c.sourceSkillId,592);assert.equal(c.releaseAt-c.startedAt,2000);assert.deepEqual(player(other,a.id).cast,c);
+ f.advance(1999);const waiting=await stateAfter(a,a.mark());assert.equal(player(waiting,a.id).cast.stage,1);assert.equal(wolf(waiting).hp,60);
+ f.advance(1);const released=await stateAfter(a,a.mark(),s=>player(s,a.id)?.cast?.stage===2);assert.equal(player(released,a.id).cast.phaseAt,c.releaseAt);
+ f.advance(350);await stateAfter(a,a.mark(),s=>wolf(s).hp===30);f.advance(150);
+ const done=await stateAfter(a,a.mark(),s=>player(s,a.id)?.cast===null);assert.equal(player(done,a.id).lastCast.stage,6);
+ ma=a.mark();a.send({type:'skill',skillId:'fireball',targetId:target.id});const repeat=await stateAfter(a,ma,s=>player(s,a.id)?.cast?.stage===1),active=player(repeat,a.id).cast;
+ mb=b.mark();b.send({type:'cancel-skill',castId:active.id});await b.wait(m=>m.type==='notice',{after:mb});assert.equal(player(await stateAfter(a,a.mark()),a.id).cast.id,active.id);
+ ma=a.mark();mb=b.mark();a.send({type:'cancel-skill',castId:active.id});
+ const ca=await a.wait(m=>m.action==='skill-cancel'&&m.castId===active.id,{after:ma}),cb=await b.wait(m=>m.action==='skill-cancel'&&m.castId===active.id,{after:mb});assert.deepEqual(ca,cb);
+ f.advance(333);ma=b.mark();b.send({type:'skill',skillId:'frost_blast',targetId:target.id});
+ const ice=await b.wait(m=>m.action==='skill-cast'&&m.cast.skillId==='frost_blast',{after:ma});assert.equal(ice.cast.stage,2);assert.equal(ice.cast.sourceSkillId,94);assert.equal(ice.cast.releaseAt,ice.cast.startedAt);
+ await stateAfter(b,b.mark(),s=>wolf(s).hp===10);f.advance(700);const back=await stateAfter(b,b.mark(),s=>player(s,b.id)?.cast===null);assert.equal(player(back,b.id).lastCast.phaseVisual.id,138);
+ ma=b.mark();b.send({type:'skill',skillId:'frost_blast',targetId:target.id,cooldownMs:0});await b.wait(m=>m.type==='notice'&&m.message.includes('冷却'),{after:ma});
+ publicStateHasNoCredentials(b,[a.welcome.resumeToken,b.welcome.resumeToken]);
+});
+
+test('moving source-shape gate blocks both peers, opens authoritatively, isolates rooms and keeps lab positions out of character saves',async t=>{
+ const profile={format:'oc2-scene-collision-v2',query:{forwardMargin:.31,stepProbeCap:.5,stepProbeMultiplier:3.5,wallNormalYThreshold:.5},sources:{gate:{shapes:[{kind:'box',center:[0,2,0],halfExtents:[.2,2,1],yawRadians:0,flags:0}]}},instances:[],
+  dynamicLab:{sourcePHY:'gate',sourceModel:'/assets/models/synthetic-gate.json',logicalPosition:[920,360],lift:9,transitionMs:800,interactDistance:4}};
+ const terrain={bounds:{min:[0,0,0],max:[192,0,192]},grid:{width:3,height:3,heights:Array(9).fill(0)}};
+ const f=await fixture(t,{motion:createCollision(profile,terrain)}),a=await enter(f,'门前甲',{scene:'resources',lab:'collision'}),b=await enter(f,'门后乙',{scene:'resources',lab:'collision'}),normal=await enter(f,'普通房间',{scene:'resources'});
+ assert.equal((await stateAfter(normal,normal.mark())).objects.length,0);
+ const start=await stateAfter(a,a.mark(),s=>s.players.length===2);assert.equal(start.objects[0].position[1],0);
+ async function walkRight(until){const timer=setInterval(()=>a.send({type:'input',x:1,y:0}),50);try{return await stateAfter(a,a.mark(),until);}finally{clearInterval(timer);a.send({type:'input',x:0,y:0});}}
+ const blocked=await walkRight(s=>s.tick>start.tick+18);assert(player(blocked,a.id).x<920);assert(player(blocked,a.id).x>915);
+ let ma=a.mark(),mb=b.mark();a.send({type:'interact',targetId:'source-door'});await stateAfter(a,ma,s=>s.objects[0].transition);f.advance(800);
+ const opened=await stateAfter(a,a.mark(),s=>s.objects[0].position[1]===9),observed=await stateAfter(b,mb,s=>s.tick===opened.tick);assert.deepEqual(opened.objects,observed.objects);
+ const crossed=await walkRight(s=>player(s,a.id).x>925);assert(player(crossed,a.id).x>925);
+ ma=a.mark();a.send({type:'save'});await a.wait(m=>m.type==='notice'&&m.message.includes('保存'),{after:ma});
+ const data=JSON.parse(await readFile(f.saveFile,'utf8'));assert.deepEqual(data.characters.find(c=>c.id===a.id).positions,{});
+ publicStateHasNoCredentials(b,[a.welcome.resumeToken,b.welcome.resumeToken]);
 });

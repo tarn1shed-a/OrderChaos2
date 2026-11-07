@@ -150,6 +150,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
             obj = model(path,f'scene-{i:02d}',scene_model=True);obj['instances']=instances;scenery.append(obj)
         except Exception as e:warnings.append({'model':path,'error':str(e)})
     collision=recover_collision(extract,scenery)
+    dynamic_door=model('model/scene_generator_temple_000/god_door_01.bdae','dynamic-door',scene_model=True)
     (output/'maps/collision.json').write_text(json.dumps(collision,ensure_ascii=False,indent=2))
     surface = texture('texture/tiles/textures/cliffside/cliffside_rock05.tga')
     effects = {}
@@ -188,7 +189,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     chinese = recover_chinese_fonts(read_loose, output, required_text)
     if chinese['requiredTextStatus'] != 'complete':raise ValueError('Original Chinese fonts do not cover the current interface')
     icons = recover_skill_icons(extract, output)
-    ui['format'] = 'oc2-original-ui-v11'
+    ui['format'] = 'oc2-original-ui-v12'
     ui['fonts']['faces'].update(chinese['faces'])
     ui['fonts']['chineseStatus'] = chinese['chineseStatus']
     ui['fonts']['requiredTextStatus'] = chinese['requiredTextStatus']
@@ -219,6 +220,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
                 'ui':{'url':'/assets/ui/profile.json','format':ui['format']},
                 'gameplay':{'url':'/assets/gameplay/native.json','format':gameplay['format']},
                 'collision':{'url':'/assets/maps/collision.json','format':collision['format']},
+                'dynamicModels':[dynamic_door],
                 'summary':f'真实新手地图 3×3 地块；可换装玩家精灵、狼与熊；接入 {sum(len(s["instances"]) for s in scenery)} 个原作场景摆放。已恢复场景节点与静态PHY碰撞；地表混合材质及完整物理引擎尚未恢复。',
                 'warnings':warnings}
     archive_names = {entry['pack'] for entry in entries}

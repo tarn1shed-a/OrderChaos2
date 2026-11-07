@@ -7,7 +7,8 @@ import { equipmentAppearanceKey } from './character-equipment.js';
 import { lookKey } from './character-look.js';
 import { createCharacterMaterial } from './character-materials.js';
 import { applyCombatAnimations } from './combat-animation.js';
-import { SKILLS, skillById } from './skills.js';
+import { SKILLS, skillById,configureSkills } from './skills.js';
+import {castActive,castStageName} from './cast-pose.js';
 import { createCombatEffects } from './combat-effects.js';
 import { createSceneEnvironment } from './scene-environment.js';
 import { createRecoveredHDR } from './hdr-renderer.js';
@@ -42,6 +43,9 @@ let hotbar, mobileHUD, joystick, jumpControl, attackControl,controlProfile, game
 let joystickInput={x:0,y:0,active:false};
 let activeCredentials=null;
 const monsterViews = new Map();
+const dynamicTemplates=new Map(),dynamicViews=new Map();
+let dynamicSnapshot=[];
+const collisionLab=new URLSearchParams(location.search).get('lab')==='collision';
 let target = null, keys = new Set(), avatars = new Map(), rosterSignature = '', generation = 0, retryTimer, manualExit = false;
 let azimuth = .65, elevation = .58, distance = 24, previous = performance.now(), pointer = null;
 const focus = new THREE.Vector3(), raycaster = new THREE.Raycaster(), pointerNDC = new THREE.Vector2(), textureCache = new Map();
@@ -137,19 +141,19 @@ function attack(pressed=false) {
 function useSkill(id) {
   if(skillBook?.isOpen||hotbar?.isEditing)return;
   const skill=skillById(id), me=snapshot.find(p=>p.id===selfId), now=Date.now()+serverOffset;
-  if(!skill||!connected||!me||me.hp<=0||me.cast||Date.now()<nextSkillRequestAt||now<(me.skillReadyAt?.[id]||0))return;
+  if(!skill||!connected||!me||me.hp<=0||castActive(me.cast)||Date.now()<nextSkillRequestAt||now<(me.skillReadyAt?.[id]||0)||now<(me.globalReadyAt||0))return;
   const enemy=chosenMonster();if(!enemy)return;
   target=null;nextSkillRequestAt=Date.now()+200;
   send({type:'skill',skillId:id,targetId:enemy.id});canvas.focus({preventScroll:true});
 }
 function updateSkills() {
   const me=snapshot.find(p=>p.id===selfId),now=Date.now()+serverOffset;
-  const casting=me?.cast&&now<me.cast.impactAt;
+  const casting=castActive(me?.cast);
   const blocked=inputBlocked()||!connected||!me||me.hp<=0;
   if(blocked||casting)jumpControl?.reset();
   $('field-interaction').disabled=blocked||Boolean(casting);
   for(const skill of Object.values(SKILLS)) {
-    const remaining=Math.max(0,(me?.skillReadyAt?.[skill.id]||0)-now);
+    const remaining=Math.max(0,Math.max(me?.skillReadyAt?.[skill.id]||0,me?.globalReadyAt||0)-now);
     const hotkey=hotbar?.keyForSkill(skill.id)||skill.hotkey;
     const text=`${skill.name}${remaining>0?` · ${(remaining/1000).toFixed(1)}s`: ` · ${hotkey}`}`;
     for(const id of [`skill-${skill.id}`,`field-${skill.id}`]) {
@@ -314,6 +318,9 @@ async function init() {
       }});
     controlProfile=uiProfile.controls;
     gameplayProfile=uiProfile.gameplay;
+    configureSkills(gameplayProfile.casting);
+    $('fireball-summary').textContent=`远程火球 · 吟唱 ${SKILLS.fireball.castMs/1000} 秒 · 30 伤害`;
+    $('frost-summary').textContent=`20 伤害 · 减速 2.5 秒 · 冷却 ${SKILLS.frost_blast.cooldownMs/1000} 秒`;
     mobileHUD=createMobileHUD(uiProfile.hud);
     jumpControl=createPressControl($('field-interaction'),{enabled:()=>connected&&Boolean(snapshot.find(p=>p.id===selfId)?.hp>0)&&!inputBlocked(),change:pressed=>send({type:'jump',pressed})});
     attackControl=createPressControl($('field-attack'),{enabled:()=>connected&&!$('field-attack').disabled&&!inputBlocked(),change:pressed=>{
@@ -378,6 +385,7 @@ async function init() {
         model.quaternion.fromArray(inst.quaternion); model.scale.fromArray(inst.scale); scene.add(model);
       }
     }
+    for(const item of assets.dynamicModels||[])dynamicTemplates.set(item.url,await loadModel(item));
     $('map-title').textContent = assets.map.label; $('scene-subtitle').textContent = assets.map.subtitle;
     $('asset-detail').textContent = assets.summary;
     $('load-note').textContent = '进入营地 · 空格攻击 · 1 火球术 · 2 冰霜爆破';
@@ -404,6 +412,18 @@ function updateRoster() {
   }
 }
 function entityPosition(entity){const p=localPosition(entity.x,entity.y);if(Number.isFinite(entity.worldY))p.y=entity.worldY-origin.y;return p;}
+function syncDynamic(){
+  const ids=new Set(dynamicSnapshot.map(o=>o.id));
+  for(const [id,view]of dynamicViews)if(!ids.has(id)){scene.remove(view);dynamicViews.delete(id);}
+  for(const object of dynamicSnapshot){
+    let view=dynamicViews.get(object.id);
+    if(!view){const template=dynamicTemplates.get(object.sourceModel);if(!template)continue;view=template.clone(true);view.children[0].position.set(0,0,0);scene.add(view);dynamicViews.set(object.id,view);}
+    view.position.set(object.position[0]-origin.x,object.position[1]-origin.y,object.position[2]-origin.z);
+    view.quaternion.fromArray(object.quaternion);view.scale.fromArray(object.scale);
+  }
+  const door=dynamicSnapshot[0];$('field-lab-door').hidden=!door;
+  if(door){$('field-lab-door').disabled=Boolean(door.transition);$('field-lab-door').textContent=door.transition?'试验门移动中':door.open?'关闭试验门':'打开试验门';$('field-lab-door').dataset.height=String(door.position[1]);}
+}
 function syncAvatars(serverTime = Date.now()) {
   const ids = new Set(snapshot.map(p => p.id));
   for (const [id, a] of avatars) if (!ids.has(id)) { disposeFighter(a.body); scene.remove(a.root); a.label.remove(); avatars.delete(id); }
@@ -421,6 +441,8 @@ function syncAvatars(serverTime = Date.now()) {
     }
     const a = avatars.get(p.id); a.target.copy(entityPosition(p));
     a.label.dataset.worldY=String(p.worldY??'');a.label.dataset.grounded=String(p.grounded??true);
+    a.label.dataset.castStage=String(p.cast?.stage??p.lastCast?.stage??'');
+    a.label.dataset.sourceSkill=String(p.cast?.sourceSkillId??p.lastCast?.sourceSkillId??'');
     setCharacterEquipment(a.body,p.equipment);
     setCharacterLook(a.body,p.look);
     a.label.dataset.equipment=characterEquipmentState(a.body)?.key||'';
@@ -429,7 +451,7 @@ function syncAvatars(serverTime = Date.now()) {
     a.lastState = { x: p.x, y: p.y }; a.lastStateAt = serverTime;
     syncCharacterCombat(a.body, p, serverTime, a.attackSeconds);
     if(p.cast)a.combatFacing=Math.atan2(p.cast.target.x-p.cast.origin.x,p.cast.target.y-p.cast.origin.y);
-    a.health.textContent = p.hp <= 0 ? '倒下了 · 即将恢复' : `${p.hp ?? 100} / ${p.maxHp ?? 100}`;
+    a.health.textContent = p.hp <= 0 ? '倒下了 · 即将恢复' : `${p.hp ?? 100} / ${p.maxHp ?? 100}${castActive(p.cast)?' · '+castStageName(p.cast.stage):''}`;
     a.label.classList.toggle('dead',p.hp <= 0);
     a.body.visible = true;
     if (p.id === selfId && character && (p.hp !== character.hp || p.maxHp !== character.maxHp)) updateCharacter({ ...character, hp:p.hp, maxHp:p.maxHp });
@@ -468,7 +490,7 @@ function resetConnection() {
   hud?.clear();
   inventoryUI?.update(null);
   $('field-inventory').disabled=true;$('session-open').hidden=false;
-  connected = false; snapshot = []; monsterSnapshot = []; selfId = null; keys.clear(); target = null; selectedMonsterId=null; updateRoster(); syncAvatars(); syncMonsters();
+  connected = false; snapshot = []; monsterSnapshot = [];dynamicSnapshot=[];syncDynamic(); selfId = null; keys.clear(); target = null; selectedMonsterId=null; updateRoster(); syncAvatars(); syncMonsters();
   for (const id of ['name', 'room','profession']) $(id).disabled = false;
   $('join').disabled = !ready; $('join').firstElementChild.textContent = '进入试炼'; $('invite').disabled = $('second').disabled = true; $('leave').hidden = true;
   updateSkills();
@@ -478,7 +500,7 @@ function connect(name, room, retry = false, importedCredentials=null) {
   status(retry ? '正在重连' : '正在加入'); for (const id of ['name', 'room', 'profession','join','recovery-code','recovery-join']) $(id).disabled = true; $('leave').hidden = false;
   const ws = new WebSocket(webSocketEndpoint()); socket = ws; let denied = false;
   const credentials = importedCredentials || (retry&&activeCredentials?.name===name?{characterId:activeCredentials.characterId,resumeToken:activeCredentials.resumeToken}:restoreCredentials(name));
-  ws.addEventListener('open', () => { if (generation === gen) send({ type: 'join', scene: 'resources', name, room, profession:Number($('profession').value), ...credentials }); });
+  ws.addEventListener('open', () => { if (generation === gen) send({ type: 'join', scene: 'resources', name, room, ...(collisionLab?{lab:'collision'}:{}),profession:Number($('profession').value), ...credentials }); });
   ws.addEventListener('message', event => {
     if (generation !== gen) return; const msg = JSON.parse(event.data);
     if (msg.type === 'welcome') {
@@ -496,7 +518,7 @@ function connect(name, room, retry = false, importedCredentials=null) {
       const restored = msg.restored ? '已恢复角色进度。' : '已创建角色，开始第一次试炼。';
       message(characterSessionWarning() || restored); logEvent(restored);
       const url = new URL(location.href); url.searchParams.set('room', msg.room); history.replaceState(null, '', url); canvas.focus({ preventScroll: true });
-    } else if (msg.type === 'state') { snapshot = msg.players;monsterSnapshot=msg.monsters||[]; if(msg.serverTime)serverOffset=msg.serverTime-Date.now(); updateRoster(); syncAvatars(msg.serverTime || Date.now());syncMonsters(msg.serverTime || Date.now());combatEffects?.sync(snapshot,monsterSnapshot,msg.serverTime||Date.now());updateSkills(); }
+    } else if (msg.type === 'state') { snapshot = msg.players;monsterSnapshot=msg.monsters||[];dynamicSnapshot=msg.objects||[]; if(msg.serverTime)serverOffset=msg.serverTime-Date.now(); updateRoster(); syncAvatars(msg.serverTime || Date.now());syncMonsters(msg.serverTime || Date.now());syncDynamic();combatEffects?.sync(snapshot,monsterSnapshot,msg.serverTime||Date.now(),msg.projectiles||[]);updateSkills(); }
     else if (msg.type === 'progress') {
       const before=character; updateCharacter(msg.character,msg.savedAt);
       if(before&&msg.character.gold>before.gold){const gain=`获得 ${msg.character.xp-before.xp} 经验、${msg.character.gold-before.gold} 金币和狼皮`;logEvent(gain,true);flash(gain);}
@@ -542,6 +564,7 @@ $('recovery-show').addEventListener('click',()=>{
 });
 $('leave').addEventListener('click', () => { stop(); manualExit = true; generation++; clearTimeout(retryTimer); socket?.close(); resetConnection(); status('已离开'); message('已离开。使用相同浏览器和角色名字可恢复进度。'); openSession(); });
 $('attack').addEventListener('click',attack);
+$('field-lab-door').addEventListener('click',()=>{const door=dynamicSnapshot[0];if(door)send({type:'interact',targetId:door.id});canvas.focus({preventScroll:true});});
 for(const skill of Object.values(SKILLS))for(const id of [`skill-${skill.id}`,`field-${skill.id}`])$(id).addEventListener('click',()=>useSkill(skill.id));
 function inviteURL() { const url = new URL(location.href); url.search = ''; url.searchParams.set('room', $('room').value.trim().toUpperCase()); return url.href; }
 $('invite').addEventListener('click', async () => { const url = inviteURL(); try { await navigator.clipboard.writeText(url); message('已复制实验场邀请链接。'); } catch { message(`邀请地址：${url}`); } });
@@ -577,6 +600,7 @@ window.addEventListener('keydown', e => {
   if(e.code==='KeyB'||e.code==='KeyC'){e.preventDefault();if(!e.repeat){if(inventoryUI?.isOpen)inventoryUI.close();else{setCampPanel(false);inventoryUI?.open();}}return;}
   if(!$('camp-panel').hidden)return;
   if(inventoryUI?.isOpen||['BUTTON','SELECT'].includes(document.activeElement?.tagName))return;
+  if(e.code==='Escape'){const cast=snapshot.find(p=>p.id===selfId)?.cast;if(castActive(cast)){e.preventDefault();send({type:'cancel-skill',castId:cast.id});return;}}
   if(e.code==='Space'||e.code==='KeyF'){e.preventDefault();if(!e.repeat)attack();return;}
   const skillId=hotbar?.skillForEvent(e);
   if(skillId){e.preventDefault();useSkill(skillId);return;}

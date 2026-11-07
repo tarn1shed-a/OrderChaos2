@@ -4,7 +4,7 @@ import { playCharacterAction, respawnCharacterAnimation, playCharacterSkill, can
 export function applyCombatAnimations(event, findView, now) {
   const at = Number.isFinite(event.serverTime) ? event.serverTime : now;
   const actor = findView(event.attackerId), victim = findView(event.targetId);
-  if (event.action === 'skill-cast' && actor) {
+  if (['skill-cast','skill-stage'].includes(event.action) && actor) {
     playCharacterSkill(actor.body, event.cast, { now });
     if (victim) actor.combatFacing = Math.atan2(victim.root.position.x-actor.root.position.x, victim.root.position.z-actor.root.position.z);
   } else if (event.action === 'skill-cancel' && actor) cancelCharacterSkill(actor.body, event.castId);

@@ -3,9 +3,10 @@ const EMPTY=0xffff;
 export function loadGameplay(path=new URL('../../game-data/converted/gameplay/native.json',import.meta.url)) {
   if(!existsSync(path))return null;
   const profile=JSON.parse(readFileSync(path,'utf8'));
-  if(profile.format!=='oc2-native-gameplay-v2'||!Array.isArray(profile.comboRows)||
+  if(profile.format!=='oc2-native-gameplay-v3'||!Array.isArray(profile.comboRows)||
     !profile.skills||!profile.weapons||profile.comboRows.some(r=>r.isNormalAttack!==1||
       !['id','skillId','nextSkillId','reqMainWeaponType','reqOffWeaponType','timeOutTime','timeOutSkill','probability','summonNormalSkill'].every(k=>Number.isSafeInteger(r[k])&&r[k]>=0)))throw new Error('原版普攻数据无效，请重新构建本地资源');
+  if(profile.casting?.format!=='oc2-native-cast-v1'||!profile.casting.spells?.fireball||!profile.casting.spells?.frost_blast)throw new Error('原版施法资源缺失，请整体重建本地资源');
   return profile;
 }
 // Direct reconstruction of filter 0x5bf5d0. 0xffff means empty, not any weapon.

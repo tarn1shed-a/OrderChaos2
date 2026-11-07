@@ -19,7 +19,7 @@ const CONVERTED = fileURLToPath(new URL('../game-data/converted/', import.meta.u
 const THREE_BUILD = fileURLToPath(new URL('./node_modules/three/build/', import.meta.url));
 const COLORS = ['#80e5d1', '#ffc47c', '#b7a2f7', '#f39da9', '#90bdec', '#d4e993', '#ffdfaa', '#b4e4ed'];
 
-export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGameplay(), motion=loadCollision(), allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean) } = {}) {
+export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGameplay(), motion=loadCollision(), casting=true, allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean) } = {}) {
   if (saveFile && [PUBLIC, CONVERTED].some(root => resolve(saveFile).startsWith(root.endsWith(sep) ? root : root + sep))) throw new Error('角色存档必须放在静态资源目录之外');
   const store = new CharacterStore(saveFile);
   const rooms = new Map();
@@ -66,8 +66,9 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
   const notice = (ws, message) => send(ws, { type: 'notice', message });
   const emit = (room, data) => { for (const ws of room.values()) send(ws, data); };
   const progress = ws => send(ws, { type: 'progress', character: characterView(ws.character), savedAt: store.savedAt });
+  const savePosition=ws=>{if(!ws.lab)store.savePosition(ws.character,ws.scene,ws.player);};
   const changed = (ws, immediate = false) => {
-    store.touch(ws.character); store.savePosition(ws.character, ws.scene, ws.player);
+    store.touch(ws.character); savePosition(ws);
     if (immediate) store.flush();
     progress(ws);
   };
@@ -98,7 +99,10 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
         const roomId = typeof msg.room === 'string' ? msg.room.trim().toUpperCase() : '';
         const name = typeof msg.name === 'string' ? msg.name.trim().slice(0, 16) : '';
         if (!/^[A-Z0-9-]{3,16}$/.test(roomId) || !name) return reject(ws, '请输入名字和 3–16 位英文或数字房间号');
-        const roomKey = scene === 'camp' ? roomId : `resources:${roomId}`;
+        if(msg.lab!==undefined&&msg.lab!=='collision')return reject(ws,'未知验证场');
+        const lab=scene==='resources'&&msg.lab==='collision';
+        if(lab&&!motion?.profile.dynamicLab)return reject(ws,'碰撞验证资源未就绪，请重建本地资源');
+        const roomKey = scene === 'camp' ? roomId : `resources:${lab?'lab:':''}${roomId}`;
         if (!rooms.has(roomKey) && rooms.size >= 32) return reject(ws, '房间已满，请稍后重试');
         const room = rooms.get(roomKey) || new Map();
         if (room.size >= 8) return reject(ws, '这个房间已满（最多 8 人）');
@@ -111,10 +115,11 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
           return reject(ws, error.message);
         }
         if (activeCharacters.has(identity.record.id)) return reject(ws, '这个角色已在另一个窗口在线，请先退出原窗口');
-        ws.character = identity.record; ws.scene = scene;
-        ws.motion=scene==='resources'?motion:null;ws.gameplay=gameplay;
+        ws.character = identity.record; ws.scene = scene;ws.lab=lab;
+        if (!combatRooms.has(roomKey)) combatRooms.set(roomKey, new CombatRoom(roomKey, world, scene, room, { changed, emit: data => emit(room, data), notice,gameplay,motion,casting,lab }));
+        ws.motion=combatRooms.get(roomKey).motion;ws.gameplay=gameplay;
         const position = ws.character.positions[scene];
-        const restorePosition = position && walkable(position.x, position.y, world) && ws.character.hp > 0;
+        const restorePosition = !lab&&position && walkable(position.x, position.y, world) && ws.character.hp > 0;
         ws.player = { id: ws.character.id, name: ws.character.name,
           x: restorePosition ? position.x : world.spawn.x + index * 35,
           y: restorePosition ? position.y : world.spawn.y,
@@ -131,19 +136,25 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
         ws.input = { x: 0, y: 0 }; ws.inputAt = Date.now(); ws.roomId = roomKey; ws.world = world;
         activeCharacters.set(ws.player.id, ws);
         room.set(ws.player.id, ws); rooms.set(roomKey, room); clearTimeout(deadline);
-        if (!combatRooms.has(roomKey)) combatRooms.set(roomKey, new CombatRoom(roomKey, world, scene, room, { changed, emit: data => emit(room, data), notice,gameplay,motion }));
         const basic=prepareBasicAttack(scene==='resources'?gameplay:null,ws.character);ws.basicCombo=basic.state;
         ws.player.basicSlot=basic.slot;ws.player.basicAttack=null;
-        store.savePosition(ws.character, scene, ws.player); store.touch(ws.character); store.flush();
-        send(ws, { type: 'welcome', id: ws.player.id, room: roomId, scene, world,
+        savePosition(ws); store.touch(ws.character); store.flush();
+        send(ws, { type: 'welcome', id: ws.player.id, room: roomId, scene, world,lab,
           character: characterView(ws.character), resumeToken: identity.resumeToken, restored: identity.restored,
-          savedAt: store.savedAt, combat: { attackRange: combatRooms.get(roomKey).range, cooldownMs: COMBAT.playerCooldownMs, monsterCooldownMs: COMBAT.monsterCooldownMs, skills: SKILLS } });
+          savedAt: store.savedAt, combat: { attackRange: combatRooms.get(roomKey).range, cooldownMs: COMBAT.playerCooldownMs, monsterCooldownMs: COMBAT.monsterCooldownMs,
+            skills:Object.fromEntries(Object.keys(SKILLS).map(id=>[id,combatRooms.get(roomKey).skillDefinition(id)])) } });
       } else if (msg.type === 'input' && ws.player) {
         if (typeof msg.x !== 'number' || typeof msg.y !== 'number' || !Number.isFinite(msg.x) || !Number.isFinite(msg.y) || Math.abs(msg.x) > 1 || Math.abs(msg.y) > 1) return reject(ws, '无效移动输入');
         ws.input = { x: msg.x, y: msg.y }; ws.inputAt = Date.now();
       } else if (msg.type === 'jump' && ws.player) {
         if(typeof msg.pressed!=='boolean')return reject(ws,'无效跳跃输入');
         const result=setJumpPressed(ws,msg.pressed,clock(),combatRooms.get(ws.roomId).casts.has(ws.player.id));
+        if(result)notice(ws,result);
+      } else if(msg.type==='interact'&&ws.player){
+        const encounter=combatRooms.get(ws.roomId);
+        if(!encounter.dynamic)return notice(ws,'当前场景没有试验门');
+        if(encounter.casts.has(ws.player.id))return notice(ws,'施法结束后再操作');
+        const result=encounter.dynamic.interact(ws.player,msg.targetId,clock(),[...rooms.get(ws.roomId).values()].map(s=>s.player).concat(encounter.monster));
         if(result)notice(ws,result);
       } else if (msg.type === 'attack-control' && ws.player) {
         if(typeof msg.pressed!=='boolean')return reject(ws,'无效普攻输入');
@@ -158,6 +169,10 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
       } else if (msg.type === 'skill' && ws.player) {
         if(ws.player.jump&&clock()<ws.player.jump.endsAt)return notice(ws,'跳跃结束后再施法');
         combatRooms.get(ws.roomId).skill(ws, msg.skillId, msg.targetId, clock());
+      } else if(msg.type==='cancel-skill'&&ws.player){
+        const encounter=combatRooms.get(ws.roomId),cast=encounter.casts.get(ws.player.id);
+        if(typeof msg.castId!=='string'||!cast||cast.cast.id!==msg.castId)return notice(ws,'当前施法已结束');
+        if(encounter.runtime)encounter.runtime.cancel(cast,'已取消施法',clock());
       } else if (['equip', 'unequip'].includes(msg.type) && ws.player) {
         if (combatRooms.get(ws.roomId).casts.has(ws.player.id)) return notice(ws, '施法时无法更换装备');
         const result = changeEquipment(ws.character, msg);
@@ -186,7 +201,7 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
       clearTimeout(deadline);
       const room = rooms.get(ws.roomId);
       if (ws.character && activeCharacters.get(ws.character.id) === ws) {
-        store.savePosition(ws.character, ws.scene, ws.player);
+        savePosition(ws);
         if (!closing) { try { store.flush(); } catch (error) { storageFailure(error); } }
         activeCharacters.delete(ws.character.id);
       }
@@ -202,22 +217,25 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
     if (storageError) return;
     try {
     for (const [roomKey, room] of rooms) {
+      const encounter = combatRooms.get(roomKey);
+      encounter.dynamic?.update(clock());
       for (const ws of room.values()) {
         // A lost pointer release must not latch the control forever; recovery
         // clears input only and never schedules an automatic second attack.
         if(ws.attackPressed&&clock()-ws.attackInputAt>3000)ws.attackPressed=false;
-        if (ws.player.hp > 0 && !combatRooms.get(roomKey).casts.has(ws.player.id)) {
+        if (ws.player.hp > 0 && (encounter.runtime||!encounter.casts.has(ws.player.id))) {
           const input=Date.now()-ws.inputAt>350?{x:0,y:0}:ws.input;
+          encounter.runtime?.move(ws,input,clock());
           if(ws.motion)ws.motion.move(ws.player,input,.05,ws.world);else advance(ws.player,input,.05,ws.world);
         }
-        store.savePosition(ws.character, ws.scene, ws.player);
+        savePosition(ws);
       }
-      const encounter = combatRooms.get(roomKey);
       encounter.tick(clock(), 0.05);
       if(encounter.motion&&encounter.monster.alive)encounter.motion.settle(encounter.monster);
       for(const ws of room.values())updateJump(ws,clock());
       const snapshot = { type: 'state', tick, serverTime: clock(), players: [...room.values()].map(ws => ({ ...ws.player, animation: { ...ws.player.animation },
-        skillReadyAt: { ...ws.player.skillReadyAt }, cast: ws.player.cast ? structuredClone(ws.player.cast) : null })), monsters: encounter.snapshot() };
+        skillReadyAt: { ...ws.player.skillReadyAt }, cast: ws.player.cast ? structuredClone(ws.player.cast) : null })), monsters: encounter.snapshot(),
+        objects:encounter.dynamic?.snapshot()||[],projectiles:encounter.runtime?.snapshot()||[] };
       for (const ws of room.values()) send(ws, snapshot);
     }
     } catch (error) { storageFailure(error); }
@@ -241,7 +259,7 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
       closing = (async () => {
         clearInterval(ticker); clearInterval(heartbeat); clearInterval(saveTimer);
         try {
-          for (const ws of activeCharacters.values()) store.savePosition(ws.character, ws.scene, ws.player);
+          for (const ws of activeCharacters.values()) savePosition(ws);
           store.flush();
         } finally {
           // Even a full/unwritable disk must not leave the game listening or sockets alive.

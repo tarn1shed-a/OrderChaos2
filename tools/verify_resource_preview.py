@@ -31,6 +31,8 @@ def verify(output=OUT):
     terrain_materials=json.loads(asset(m['map']['materials']['url'],output).read_text())
     assert terrain_materials['format']==m['map']['materials']['format']=='oc2-terrain-materials-v1'
     assert len(terrain_materials['tiles'])==9 and terrain_materials['coordinates']['uv0UnitsPerRepeat']==8
+    assert terrain_materials['maskUpload']['sourceFormatName']=='RGBA8' and terrain_materials['maskUpload']['channelToByteLane']==[0,1,2,3]
+    assert not terrain_materials['maskUpload']['textureDefaults']['appliedAsActiveQualityPreset']
     for tile in terrain_materials['tiles']:
         assert len(tile['chunks'])==64
         for entry in tile['textures']:asset(entry['url'],output)

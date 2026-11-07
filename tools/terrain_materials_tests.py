@@ -1,6 +1,7 @@
 import json,struct,tempfile,unittest
 from pathlib import Path
-from terrain_materials import tile_materials,mask_channels,effective_indices,verify_native,recover_materials
+from terrain_materials import tile_materials,mask_channels,effective_indices,verify_native,recover_materials,ROUTINES
+from texture_sampling import verify_sampling,mask_upload_profile,FORMAT_ADDRESS
 from resource_packs import DEFAULT_SOURCE,index,ResourceArchive
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -24,6 +25,11 @@ class TerrainMaterialsTests(unittest.TestCase):
   self.assertEqual(mask_channels([None]*4),(None,[[0]*4 for _ in range(64)]))
   for channels in [[b'123',None,None,None],[bytes(64),bytes(256),None,None],[bytes(100),None,None,None]]:
    with self.assertRaises(ValueError):mask_channels(channels)
+ def test_red_blue_and_alpha_lanes_keep_distinct_values_in_source_rgba8_order(self):
+  image,_=mask_channels([bytes([17])*64,bytes([67])*64,bytes([149])*64,bytes([239])*64])
+  self.assertEqual(image.getpixel((0,0)),(17,67,149,239));self.assertEqual(image.getpixel((7,7)),(17,67,149,239))
+  p=mask_upload_profile();self.assertEqual(p['channelToByteLane'],[0,1,2,3]);self.assertEqual(p['sourceFormatName'],'RGBA8')
+  self.assertFalse(p['textureDefaults']['appliedAsActiveQualityPreset'])
  def test_upper_five_bits_classify_zero_full_and_mixed_chunks(self):
   for value,expected in [(0,0),(7,0),(8,2),(247,2),(248,1),(255,1)]:
    _,classes=mask_channels([bytes([value])*256,None,None,None]);self.assertTrue(all(c[0]==expected for c in classes))
@@ -38,7 +44,11 @@ class TerrainMaterialsTests(unittest.TestCase):
  @unittest.skipUnless((ROOT/'analysis/raw/beff-native/library.so').is_file(),'Original native library stays local')
  def test_real_native_material_and_uv_fingerprints(self):
   from analyze_native_resources import NativeImage
-  self.assertEqual(len(verify_native(NativeImage((ROOT/'analysis/raw/beff-native/library.so').read_bytes()))),8)
+  image=NativeImage((ROOT/'analysis/raw/beff-native/library.so').read_bytes());self.assertEqual(len(verify_native(image)),len(ROUTINES))
+  class ChangedDescriptor:
+   elf=image.elf
+   def read(self,address,size):return bytes(size) if address==FORMAT_ADDRESS else image.read(address,size)
+  with self.assertRaisesRegex(ValueError,'descriptor changed'):verify_sampling(ChangedDescriptor())
  @unittest.skipUnless((DEFAULT_SOURCE/'tutorial.bin').is_file(),'Original terrain stays local')
  def test_real_region_links_source_chunks_to_raw_mask_and_shader(self):
   rows=index(DEFAULT_SOURCE);archives={}

@@ -46,4 +46,5 @@ const path=new URL('../../game-data/converted/maps/terrain-materials.json',impor
 test('real converted region uses nine source tiles and one recovered green mask',{skip:!existsSync(path)},()=>{
  const p=JSON.parse(readFileSync(path));assert.equal(p.format,'oc2-terrain-materials-v1');assert.equal(p.tiles.length,9);assert.equal(p.tiles.filter(t=>t.mask).length,1);
  assert.equal(p.coordinates.uv0UnitsPerRepeat,8);assert(p.tiles.every(t=>t.chunks.length===64));
+ assert.equal(p.maskUpload.sourceFormatName,'RGBA8');assert.deepEqual(p.maskUpload.channelToByteLane,[0,1,2,3]);assert.equal(p.maskUpload.textureDefaults.appliedAsActiveQualityPreset,false);
 });

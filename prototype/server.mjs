@@ -7,6 +7,7 @@ import { WORLD, RESOURCE_WORLD, advance, walkable } from './public/world.js';
 import { CharacterStore, characterView } from './game/character-store.mjs';
 import { CombatRoom, COMBAT, syncPlayerStats } from './game/combat.mjs';
 import { SKILLS } from './public/skills.js';
+import { changeEquipment } from './game/equipment.mjs';
 
 const PUBLIC = fileURLToPath(new URL('./public/', import.meta.url));
 const CONVERTED = fileURLToPath(new URL('../game-data/converted/', import.meta.url));
@@ -130,6 +131,11 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
         combatRooms.get(ws.roomId).attack(ws, msg.targetId, clock());
       } else if (msg.type === 'skill' && ws.player) {
         combatRooms.get(ws.roomId).skill(ws, msg.skillId, msg.targetId, clock());
+      } else if (['equip', 'unequip'].includes(msg.type) && ws.player) {
+        if (combatRooms.get(ws.roomId).casts.has(ws.player.id)) return notice(ws, '施法时无法更换装备');
+        const result = changeEquipment(ws.character, msg);
+        if (result.error) return notice(ws, result.error);
+        syncPlayerStats(ws); changed(ws, true); notice(ws, result.message);
       } else if (msg.type === 'save' && ws.player) {
         changed(ws, true); notice(ws, '角色进度已保存');
       } else if (msg.type === 'ping' && ws.player) send(ws, { type: 'pong', at: msg.at });

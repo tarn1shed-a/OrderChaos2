@@ -2,7 +2,7 @@ import { characterAttachment, disposeCharacterAnimation } from './character-anim
 
 // The source HUD uses Model3D. Geometry, rig and textures are original; this
 // small portrait camera/light setup is a web adaptation, not recovered optics.
-export function createPortraitScene(THREE, createModel, { headNode, frameHeight = .52, direction = [.16,.04,1] }) {
+export function createPortraitScene(THREE, createModel, { headNode, frameHeight = .52, direction = [.16,.04,1], fullBody = false }) {
   const scene = new THREE.Scene(), body = createModel(), materials = [];
   scene.add(body);
   body.traverse(object => {
@@ -12,7 +12,7 @@ export function createPortraitScene(THREE, createModel, { headNode, frameHeight 
     object.castShadow=object.receiveShadow=false;
   });
   body.updateMatrixWorld(true);
-  const at=characterAttachment(body,headNode,new THREE.Vector3());
+  const at=fullBody ? new THREE.Box3().setFromObject(body).getCenter(new THREE.Vector3()) : characterAttachment(body,headNode,new THREE.Vector3());
   if(!at){for(const material of materials)material.dispose();disposeCharacterAnimation(body);throw new Error(`原模型头像缺少头部节点 ${headNode}`);}
   const span=body.userData.height*frameHeight;
   if(!Number.isFinite(span)||span<=0){for(const material of materials)material.dispose();disposeCharacterAnimation(body);throw new Error('原模型头像尺寸无效');}
@@ -27,7 +27,7 @@ export function createPortraitScene(THREE, createModel, { headNode, frameHeight 
 }
 
 export function renderCharacterPortrait(THREE,renderer,createModel,options) {
-  const size=192,portrait=createPortraitScene(THREE,createModel,options);
+  const size=options.fullBody?384:192,portrait=createPortraitScene(THREE,createModel,options);
   const target=new THREE.WebGLRenderTarget(size,size,{depthBuffer:true,type:THREE.UnsignedByteType});
   target.texture.colorSpace=THREE.SRGBColorSpace;
   const previous=renderer.getRenderTarget(),clear=renderer.getClearColor(new THREE.Color()),alpha=renderer.getClearAlpha();

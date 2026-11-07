@@ -59,7 +59,11 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
 
 技能特效版本需要匹配的 `converted/models/forest-elf.json`、`wolf.json`、`effects/combat.json`、新增特效贴图与 `manifest.json`，请整体复制本次构建的 `converted/`。只有旧资源时，三维页会明确要求重建；在拥有原始包的开发机执行 `.venv/bin/python tools/build_resource_preview.py` 即可，再把产物单独传给正式服。更新代码与资源后重启服务，让战斗消息和快照包含技能与动作时间。角色存档不随资源重建改变；待结算施法、技能冷却和怪物减速为当前会话/房间状态，不写入角色存档。
 
-当前要求 `oc2-combat-effects-v3` 与 `oc2-original-ui-v3`，包括 `rendering/`、原 LUT、`ui/profile.json`、`ui/hud.json`、`ui/portraits.json`、9 张基础 UI 裁片、13 张 HUD 裁片、2 张技能图标、4 个 WOFF。请完整同步 `converted/`，旧版清单会明确要求重建。原材质库、源表和松散 TTF 只由开发机转换时读取；运行机器只需转换产物，无须 BDAE、SWF、APK 或反汇编。头像在浏览器中由原模型渲染并缓存，无需另传截图。更新后重启服务并刷新页面；本次更新不修改服务端规则或存档格式。源字体覆盖常用中文，未覆盖的稀有字仍回退系统字体。
+当前要求 `oc2-combat-effects-v3` 与 `oc2-original-ui-v4`，包括 `rendering/`、原 LUT、`ui/profile.json`、`ui/hud.json`、`ui/portraits.json`、`ui/inventory.json`、`ui/item-icons.json`、9 张基础 UI 裁片、13 张 HUD 裁片、14 张背包/装备裁片、2 张技能图标、4 张物品图标、4 个 WOFF。请完整同步 `converted/`，旧版清单会明确要求重建。原材质库、源表和松散 TTF 只由开发机转换时读取；运行机器只需转换产物，无须 BDAE、SWF、APK 或反汇编。头像和装备全身预览在浏览器中由原模型渲染并缓存，无需另传截图。源字体覆盖常用中文，未覆盖的稀有字仍回退系统字体。
+
+这次背包功能将角色存档升至 **version 2**。读取旧版时先验证全文件；首次落盘前，在同一个 `runtime/` 留下原字节的 `characters.json.v1-backup-….json`，再原子写入新格式。原奖励、生命、位置与恢复凭据保留，每个旧角色补入一次三件未穿戴的本地新手装备；新版重启不会重复发放。不要用旧版程序打开 v2 存档。回退时先停服，同时恢复旧代码与对应 v1 备份；备份后的新进度不会包含在旧文件里。
+
+三维页按 B / C 或“背包与装备”打开，查看时停止自己的移动输入，世界仍继续运行。物品选择/筛选、三件装备穿脱及属性保存可用；暂未实现角色外观换装、制作、交易、分解或背包扩容。原窗口美术与原数值槽来自 SWF，装备身体部位映射、40 格容量、新手装备数值均是本地玩法。
 
 当前角色进度保存在根目录 `runtime/characters.json`，始终不进 Git。奖励立即保存，移动定期保存，离开和正常关闭服务会保存最新状态。异常强制断电时，尚未落盘的短时间移动可能丢失；正常关闭请使用 Control-C。
 

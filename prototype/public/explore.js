@@ -11,6 +11,7 @@ import { createRecoveredHDR } from './hdr-renderer.js';
 import { loadOriginalUI } from './original-ui.js';
 import { createRecoveredHUD } from './recovered-hud.js';
 import { renderCharacterPortrait } from './character-portraits.js';
+import { createInventoryUI } from './inventory-ui.js';
 import { restoreCredentials, rememberCharacter, lastCharacterName, characterSessionWarning } from './character-session.js';
 
 const $ = id => document.getElementById(id);
@@ -22,7 +23,7 @@ let renderer, scene, camera, terrainMeshes = [], terrainData, mapBounds, origin,
 let assets, modelTemplate, ready = false, world = RESOURCE_WORLD, snapshot = [], selfId, socket, connected = false;
 let wolfTemplate, monsterSnapshot = [], selectedMonsterId = null, character = null, nextAttackAt = 0, feedbackUntil = 0, saveAt = null;
 let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset = 0;
-let combatEffects, environment, hdrRenderer, hud, nextSkillRequestAt = 0;
+let combatEffects, environment, hdrRenderer, hud, inventoryUI, nextSkillRequestAt = 0;
 const monsterViews = new Map();
 let target = null, keys = new Set(), avatars = new Map(), rosterSignature = '', generation = 0, retryTimer, manualExit = false;
 let azimuth = .65, elevation = .58, distance = 24, previous = performance.now(), pointer = null;
@@ -57,6 +58,7 @@ function updateCharacter(data, savedAt = null) {
   const warning = characterSessionWarning();
   $('save-status').textContent = warning || (saveAt ? `服务器已保存 · ${new Date(saveAt).toLocaleTimeString('zh-CN')}` : '恢复凭据已记住 · 进度由服务器保存');
   hud?.character(data);
+  inventoryUI?.update(data);
   updateTarget();
 }
 function nearestMonster() {
@@ -231,6 +233,7 @@ async function init() {
     assets = await json('/assets/manifest.json');
     if (!assets.player?.attachmentPoints||!assets.effects||!assets.rendering||!assets.ui) throw new Error('原始挂点、光影与界面资源需要更新，请重新运行本地资源构建工具');
     const uiProfile=await loadOriginalUI(await json(assets.ui.url));hud=createRecoveredHUD(uiProfile.hud);
+    inventoryUI=createInventoryUI(uiProfile,{send,stop,focusGame:()=>canvas.focus({preventScroll:true})});
     terrainData = await json(assets.map.url);
     mapBounds = [terrainData.bounds.min, terrainData.bounds.max];
     origin = new THREE.Vector3((mapBounds[0][0] + mapBounds[1][0]) / 2, mapBounds[0][1], (mapBounds[0][2] + mapBounds[1][2]) / 2);
@@ -259,6 +262,7 @@ async function init() {
       player:renderCharacterPortrait(THREE,renderer,modelFactories.get(modelTemplate),{headNode:portraits.player.headNode,...portraits.player.webFraming}),
       targetWolf:renderCharacterPortrait(THREE,renderer,modelFactories.get(wolfTemplate),{headNode:portraits.targetWolf.headNode,...portraits.targetWolf.webFraming}),
     });
+    inventoryUI.setModel(renderCharacterPortrait(THREE,renderer,modelFactories.get(modelTemplate),{fullBody:true,frameHeight:1.18,direction:[.22,.02,1]}).url);
     const effectData=await json(assets.effects.url),effectTextures=new Map();
     const effectURLs=[...new Set(Object.values(effectData.effects).flatMap(effect=>Object.values(effect.textureURLs)))];
     await Promise.all(effectURLs.map(async url=>effectTextures.set(url,await texture(url))));
@@ -353,6 +357,7 @@ function syncMonsters(serverTime = Date.now()) {
 function resetConnection() {
   $('field-hud').hidden=true;$('field-attack').hidden=true;$('field-actions').hidden=true;combatEffects?.clear();
   hud?.clear();
+  inventoryUI?.update(null);
   connected = false; snapshot = []; monsterSnapshot = []; selfId = null; keys.clear(); target = null; selectedMonsterId=null; updateRoster(); syncAvatars(); syncMonsters();
   for (const id of ['name', 'room']) $(id).disabled = false;
   $('join').disabled = !ready; $('join').firstElementChild.textContent = '进入试炼'; $('invite').disabled = $('second').disabled = true; $('leave').hidden = true;
@@ -384,7 +389,7 @@ function connect(name, room, retry = false) {
       if(before&&msg.character.gold>before.gold){const gain=`获得 ${msg.character.xp-before.xp} 经验、${msg.character.gold-before.gold} 金币和狼皮`;logEvent(gain,true);flash(gain);}
       if(before&&msg.character.level>before.level){logEvent(`升级至 Lv.${msg.character.level}，生命已恢复。`,true);flash(`升级！Lv.${msg.character.level}`);}
     }
-    else if (msg.type === 'notice') { message(msg.message); }
+    else if (msg.type === 'notice') { message(msg.message); inventoryUI?.notice(msg.message); }
     else if (msg.type === 'combat') handleCombat(msg);
     else if (msg.type === 'error') { denied = true; message(msg.message); }
     else if (msg.type === 'pong') $('network').textContent = `${Math.max(0, Date.now() - msg.at)} ms · 角色由本地服务器保存`;
@@ -414,6 +419,8 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) stop(
 const codes = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 window.addEventListener('keydown', e => {
   if(!connected||['INPUT','TEXTAREA'].includes(document.activeElement?.tagName))return;
+  if(e.code==='KeyB'||e.code==='KeyC'){e.preventDefault();if(!e.repeat){if(inventoryUI?.isOpen)inventoryUI.close();else inventoryUI?.open();}return;}
+  if(inventoryUI?.isOpen||['BUTTON','SELECT'].includes(document.activeElement?.tagName))return;
   if(e.code==='Space'||e.code==='KeyF'){e.preventDefault();if(!e.repeat)attack();return;}
   const skill=Object.values(SKILLS).find(skill=>skill.key===e.code);
   if(skill){e.preventDefault();if(!e.repeat)useSkill(skill.id);return;}
@@ -447,6 +454,7 @@ for (const button of document.querySelectorAll('[data-key]')) {
 }
 setInterval(() => {
   if (!connected || document.hidden) return;
+  if(inventoryUI?.isOpen){send({type:'input',x:0,y:0});return;}
   const right = Number(keys.has('KeyD')||keys.has('ArrowRight')) - Number(keys.has('KeyA')||keys.has('ArrowLeft'));
   const back = Number(keys.has('KeyS')||keys.has('ArrowDown')) - Number(keys.has('KeyW')||keys.has('ArrowUp'));
   let x = right*Math.cos(azimuth)+back*Math.sin(azimuth), y = -right*Math.sin(azimuth)+back*Math.cos(azimuth);

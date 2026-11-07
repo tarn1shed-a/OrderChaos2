@@ -29,3 +29,13 @@ for(const[name,headNode]of [['forest-elf','Bip01_Head'],['wolf','Bip001_Head']])
     assert(portrait.span>0&&Number.isFinite(portrait.span));portrait.dispose();
   });
 }
+
+test('equipment preview frames an independent whole body without requiring a portrait head alias',()=>{
+  const data=socketCharacter(),material=new THREE.MeshStandardMaterial();
+  const factory=createCharacterFactory(THREE,data,[material]),fighter=factory();
+  const preview=createPortraitScene(THREE,factory,{fullBody:true,frameHeight:1.18,direction:[.22,.02,1]});
+  const box=new THREE.Box3().setFromObject(preview.body),center=box.getCenter(new THREE.Vector3());
+  assert(preview.head.distanceTo(center)<1e-7);
+  const projected=center.clone().project(preview.camera);assert(Math.abs(projected.x)<1e-6&&Math.abs(projected.y)<1e-6);
+  assert.notEqual(preview.body,fighter);assert.deepEqual(fighter.position.toArray(),[0,0,0]);preview.dispose();
+});

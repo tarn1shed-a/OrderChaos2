@@ -17,6 +17,8 @@ from skill_icons import recover_skill_icons
 from art_library import build_catalog
 from hud_assets import recover_hud_assets
 from character_portraits import recover_character_portraits
+from inventory_assets import recover_inventory_assets
+from item_icons import recover_item_icons
 from terrain_convert import convert as terrain_convert
 from texture_decode import convert as texture_convert
 
@@ -153,12 +155,12 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         if path not in allowed_loose:raise ValueError(f'Unexpected loose resource: {path}')
         return safe_output(source, path)
     # Check actual Chinese interface characters, including dynamic combat labels.
-    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','recovered-hud.js'])
+    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','recovered-hud.js','inventory-ui.js','items.js'])
     required_text = ''.join(sorted({ch for ch in ui_text if '\u3400' <= ch <= '\u9fff'}))
     chinese = recover_chinese_fonts(read_loose, output, required_text)
     if chinese['requiredTextStatus'] != 'complete':raise ValueError('Original Chinese fonts do not cover the current interface')
     icons = recover_skill_icons(extract, output)
-    ui['format'] = 'oc2-original-ui-v3'
+    ui['format'] = 'oc2-original-ui-v4'
     ui['fonts']['faces'].update(chinese['faces'])
     ui['fonts']['chineseStatus'] = chinese['chineseStatus']
     ui['fonts']['requiredTextStatus'] = chinese['requiredTextStatus']
@@ -167,6 +169,8 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     ui['skillIcons'] = icons
     ui['hud'] = recover_hud_assets(extract, output)
     ui['portraits'] = recover_character_portraits(extract, output)
+    ui['inventory'] = recover_inventory_assets(extract, output)
+    ui['itemIcons'] = recover_item_icons(extract, output)
     ui['provenance']['limitations'] = [
         'Original art and full source CJK fonts are reused in the web layout; complete original Flash UI behavior is not restored.',
         'Rare CJK extensions and characters absent from the source fonts require system fallback.',

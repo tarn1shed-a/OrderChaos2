@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/field-hud.css">
   <link rel="stylesheet" href="/original-ui.css">
   <link rel="stylesheet" href="/recovered-hud.css">
+  <link rel="stylesheet" href="/inventory.css">
   <script type="module" src="/explore.js"></script>
 </head>
 <body>
@@ -45,6 +46,7 @@
         <div class="stat-label"><span>经验</span><span id="xp-text">0 / 60</span></div><progress id="xp" max="60" value="0" aria-label="升级经验"></progress><div id="card-xp-track" class="hud-card-xp-track" aria-hidden="true"></div>
         <div class="reward-totals"><span>金币 <b id="gold">0</b></span><span>狼皮 <b id="pelts">0</b></span><span>击杀 <b id="kills">0</b></span></div>
         <p id="save-status">角色进度由服务器保存</p>
+        <button id="inventory-open" class="inventory-open" disabled><span>背包与装备</span><kbd>B</kbd></button>
       </section>
       <section class="combat-panel"><div class="section-title"><h3>战斗目标</h3><span id="target-name">等待进入</span></div><p id="target-detail">靠近野狼，按空格、F 或下方按钮攻击。</p><button id="attack" class="attack-button" disabled>攻击野狼 <kbd>Space</kbd></button><p id="combat-rule">服务器判定距离、伤害与冷却；野狼会反击。</p></section>
       <section class="skill-panel"><div class="section-title"><h3>技能</h3><span>选择目标后施放</span></div>
@@ -54,12 +56,22 @@
       <section class="battle-log"><h3>冒险记录</h3><ol id="events"><li>完成第一次击杀，获得你的第一份奖励。</li></ol></section>
       <section class="party"><div class="section-title"><h3>同行者</h3><span id="count">0 / 8</span></div><ul id="players"><li class="empty">等待冒险者进入。</li></ul></section>
       <div class="invite-actions"><button id="invite" disabled>⌁ 复制邀请链接</button><button id="second" disabled>↗ 打开第二个玩家窗口</button></div>
-      <div class="controls"><h3>探索指南</h3><p>WASD / 方向键：相对视角移动</p><p>点击野狼选中 · 空格 / F：攻击</p><p>右键拖动：旋转镜头 · 滚轮：缩放</p><p>点击地面：直线移动 · 手机：方向按钮</p></div>
+      <div class="controls"><h3>探索指南</h3><p>WASD / 方向键：相对视角移动</p><p>点击野狼选中 · 空格 / F：攻击</p><p>B / C：背包与装备 · Esc：关闭</p><p>右键拖动：旋转镜头 · 滚轮：缩放</p><p>点击地面：直线移动 · 手机：方向按钮</p></div>
       <p class="skill-hint">1：火球术 · 2：冰霜爆破<br>施法时短暂停步，倒地或目标失效会中断。</p>
       <section class="recovery"><h3>资源与玩法</h3><p id="asset-detail">正在核对资源…</p><p>原版生命弧、经验条和战斗技能栏已接入。头像由原模型渲染，取景为网页适配；玩法数值由本地服务器判定并保存。</p><a class="asset-library-link" href="/assets/library/index.html" target="_blank" rel="noopener">浏览本地美术素材库 ↗</a></section>
       <button id="leave" class="leave" hidden>离开营地</button><a class="back-link" href="/">← 返回营地原型</a>
     </aside>
   </main>
+  <dialog id="inventory-dialog" class="inventory-dialog" aria-labelledby="inventory-title">
+    <div class="inventory-window">
+      <header class="inventory-heading"><div><span class="inventory-eyebrow">冒险者行囊</span><h2 id="inventory-title">背包与装备</h2></div><button id="inventory-close" type="button" aria-label="关闭背包">×</button></header>
+      <div class="inventory-columns">
+        <section class="equipment-pane" aria-labelledby="equipment-name"><h3 id="equipment-name">冒险者</h3><div class="equipment-stage"><div id="equipment-canvas"><img id="equipment-model" alt="原版精灵角色全身预览"><div id="equipment-slots"></div></div></div><p class="equipment-preview-note">角色预览 · 穿脱目前只改变属性</p><dl class="equipment-stats"><div><dt>普通攻击</dt><dd id="equipment-attack">20</dd></div><div><dt>防御</dt><dd id="equipment-armor">0</dd></div><div><dt>生命</dt><dd id="equipment-life">100 / 100</dd></div></dl></section>
+        <section class="bag-pane" aria-labelledby="bag-title"><div class="bag-heading"><h3 id="bag-title">背包 <small id="bag-count">0 / 40 格</small></h3><span class="bag-gold"><i aria-hidden="true"></i><b id="inventory-gold">0</b> 金币</span></div><nav class="bag-filters" aria-label="物品筛选"><button type="button" data-bag-filter="all" aria-pressed="true">全部</button><button type="button" data-bag-filter="equipment" aria-pressed="false">装备</button><button type="button" data-bag-filter="material" aria-pressed="false">材料</button></nav><div id="bag-slots" class="bag-slots" aria-label="背包物品"></div><section class="item-detail" aria-label="选中物品"><div id="item-detail-content"><p>选择物品查看详情，或点击装备槽卸下装备。</p></div><button id="item-action" type="button" hidden>穿戴装备</button></section></section>
+      </div>
+      <footer class="inventory-footer"><span id="inventory-status" role="status">物品和装备由本地服务器保存。</span><small>查看背包时世界仍在运行 · 新手装备与数值为本地玩法</small></footer>
+    </div>
+  </dialog>
   <footer class="site-footer"><span>原作资源本地研究 · 独立实现的本地玩法</span><span id="network">角色进度由本地服务器保存</span></footer>
 </body>
 </html>

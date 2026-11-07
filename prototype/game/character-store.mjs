@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, openSync, fsyncSync, closeSync, unlinkSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { ITEMS, EQUIPMENT_SLOTS, itemById, starterInventory, emptyEquipment, equipmentStats } from '../public/items.js';
 
 const hash = token => createHash('sha256').update(token).digest('hex');
 const integer = value => Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000_000;
@@ -8,17 +9,32 @@ const integer = value => Number.isSafeInteger(value) && value >= 0 && value <= 1
 export function characterView(record) {
   // Recovery credentials and saved positions are private; never spread a record into a room snapshot.
   return { id: record.id, name: record.name, level: record.level, xp: record.xp, gold: record.gold,
-    kills: record.kills, hp: record.hp, maxHp: record.maxHp, inventory: { ...record.inventory } };
+    kills: record.kills, hp: record.hp, maxHp: record.maxHp, inventory: { ...record.inventory },
+    equipment: { ...record.equipment }, stats: equipmentStats(record) };
 }
 
-function validate(record) {
+function validate(record, legacy = false) {
   if (!record || typeof record.id !== 'string' || !/^[0-9a-f-]{36}$/.test(record.id) ||
       typeof record.name !== 'string' || !record.name.trim() || record.name.length > 16 ||
       typeof record.tokenHash !== 'string' || !/^[0-9a-f]{64}$/.test(record.tokenHash) ||
       !['xp', 'level', 'gold', 'kills', 'hp', 'maxHp'].every(k => integer(record[k])) ||
-      record.level !== 1 + Math.floor(record.xp / 60) || record.maxHp !== 100 + (record.level - 1) * 20 || record.hp > record.maxHp ||
+      record.level !== 1 + Math.floor(record.xp / 60) || record.hp > record.maxHp ||
       !record.inventory || !integer(record.inventory.wolfPelt) || !record.positions || typeof record.positions !== 'object' || Array.isArray(record.positions)) {
     throw new Error('角色存档结构无效');
+  }
+  if (legacy) {
+    if (record.maxHp !== 100 + (record.level - 1) * 20) throw new Error('旧版角色生命存档无效');
+  } else {
+    if (!record.equipment || Array.isArray(record.equipment) || typeof record.equipment !== 'object' ||
+        Object.keys(record.inventory).length !== Object.keys(ITEMS).length ||
+        Object.keys(record.inventory).some(key => !itemById(key)) ||
+        !Object.keys(ITEMS).every(key => integer(record.inventory[key])) ||
+        Object.keys(record.equipment).length !== Object.keys(EQUIPMENT_SLOTS).length ||
+        !Object.keys(EQUIPMENT_SLOTS).every(slot => record.equipment[slot] === null || itemById(record.equipment[slot])?.slot === slot)) throw new Error('角色物品或装备存档无效');
+    for (const item of Object.values(ITEMS).filter(item => item.slot)) {
+      if (record.inventory[item.id] + Number(record.equipment[item.slot] === item.id) !== 1) throw new Error('新手装备数量存档无效');
+    }
+    if (record.maxHp !== equipmentStats(record).maxHp) throw new Error('角色装备属性存档无效');
   }
   for (const [scene, p] of Object.entries(record.positions)) {
     if (!['camp', 'resources'].includes(scene) || !p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) throw new Error('角色位置存档无效');
@@ -32,14 +48,20 @@ export class CharacterStore {
     if (this.saveFile && existsSync(this.saveFile)) {
       // An unreadable/corrupt save is an error, never permission to replace it with a blank world.
       let data;
-      try { data = JSON.parse(readFileSync(this.saveFile, 'utf8')); }
+      let original;
+      try { original = readFileSync(this.saveFile); data = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(original)); }
       catch (error) { throw new Error(`无法读取角色存档，原文件保留：${error.message}`); }
-      if (data.version !== 1 || !Array.isArray(data.characters)) throw new Error('不支持的角色存档版本，原文件保留');
+      if (![1, 2].includes(data.version) || !Array.isArray(data.characters)) throw new Error('不支持的角色存档版本，原文件保留');
       for (const record of data.characters) {
-        validate(record);
+        validate(record, data.version === 1);
         if (this.records.has(record.id)) throw new Error('角色存档含重复 ID');
+        if (data.version === 1) {
+          record.inventory = { ...starterInventory(), wolfPelt: record.inventory.wolfPelt };
+          record.equipment = emptyEquipment(); validate(record);
+        }
         this.records.set(record.id, record);
       }
+      if (data.version === 1) { this.legacySource = original; this.dirty = true; }
       this.savedAt = data.savedAt || null;
     }
   }
@@ -53,7 +75,7 @@ export class CharacterStore {
     }
     const token = randomBytes(32).toString('hex');
     const record = { id: randomUUID(), name, tokenHash: hash(token), createdAt: Date.now(), updatedAt: Date.now(),
-      level: 1, xp: 0, gold: 0, kills: 0, hp: 100, maxHp: 100, inventory: { wolfPelt: 0 }, positions: {} };
+      level: 1, xp: 0, gold: 0, kills: 0, hp: 100, maxHp: 100, inventory: starterInventory(), equipment: emptyEquipment(), positions: {} };
     this.records.set(record.id, record); this.touch(record); this.flush();
     return { record, resumeToken: token, restored: false };
   }
@@ -74,7 +96,14 @@ export class CharacterStore {
     const temporary = `${this.saveFile}.${randomUUID()}.tmp`;
     try {
       mkdirSync(dirname(this.saveFile), { recursive: true, mode: 0o700 });
-      writeFileSync(temporary, JSON.stringify({ version: 1, savedAt: now, characters: [...this.records.values()] }, null, 2), { mode: 0o600, flag: 'wx' });
+      if (this.legacySource !== undefined) {
+        const backup = `${this.saveFile}.v1-backup-${randomUUID()}.json`;
+        writeFileSync(backup, this.legacySource, { mode: 0o600, flag: 'wx' });
+        const backupFd = openSync(backup, 'r');
+        try { fsyncSync(backupFd); } finally { closeSync(backupFd); }
+        this.legacySource = undefined;
+      }
+      writeFileSync(temporary, JSON.stringify({ version: 2, savedAt: now, characters: [...this.records.values()] }, null, 2), { mode: 0o600, flag: 'wx' });
       const fd = openSync(temporary, 'r');
       try { fsyncSync(fd); } finally { closeSync(fd); }
       renameSync(temporary, this.saveFile);

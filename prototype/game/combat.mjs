@@ -1,12 +1,14 @@
 import { advance, walkable } from '../public/world.js';
 import { skillById } from '../public/skills.js';
+import { equipmentStats } from '../public/items.js';
 
 export const COMBAT = Object.freeze({ playerDamage: 20, playerCooldownMs: 700, monsterHp: 60, monsterDamage: 6,
   monsterCooldownMs: 1000, monsterRespawnMs: 8000, playerRespawnMs: 4000,
   reward: Object.freeze({ xp: 30, gold: 10, wolfPelt: 1 }) });
 
 export function syncPlayerStats(ws) {
-  Object.assign(ws.player, { level: ws.character.level, hp: ws.character.hp, maxHp: ws.character.maxHp });
+  Object.assign(ws.player, { level: ws.character.level, hp: ws.character.hp, maxHp: ws.character.maxHp,
+    equipment: { ...ws.character.equipment }, stats: equipmentStats(ws.character) });
 }
 
 export class CombatRoom {
@@ -37,7 +39,7 @@ export class CombatRoom {
     ws.player.attackAt = now;
     ws.player.animation ||= { attackAt: null, hitAt: null, deathAt: null };
     ws.player.animation.attackAt = now;
-    this.damageMonster(ws, COMBAT.playerDamage, now);
+    this.damageMonster(ws, equipmentStats(ws.character).attack, now);
   }
 
   skill(ws, skillId, targetId, now) {
@@ -82,7 +84,7 @@ export class CombatRoom {
       const c = recipient.character, oldLevel = c.level;
       c.xp += COMBAT.reward.xp; c.gold += COMBAT.reward.gold; c.kills++;
       c.inventory.wolfPelt += COMBAT.reward.wolfPelt;
-      c.level = 1 + Math.floor(c.xp / 60); c.maxHp = 100 + (c.level - 1) * 20;
+      c.level = 1 + Math.floor(c.xp / 60); c.maxHp = equipmentStats(c).maxHp;
       if (c.level > oldLevel) c.hp = c.maxHp;
       syncPlayerStats(recipient);
       this.changed(recipient, true);
@@ -144,7 +146,7 @@ export class CombatRoom {
     m.attackAt = now;
     m.animation.attackAt = now;
     const victim = target.ws;
-    const damage = Math.min(victim.character.hp, COMBAT.monsterDamage);
+    const damage = Math.min(victim.character.hp, Math.max(1, COMBAT.monsterDamage - equipmentStats(victim.character).armor));
     victim.character.hp -= damage; syncPlayerStats(victim);
     victim.player.animation ||= { attackAt: null, hitAt: null, deathAt: null };
     victim.player.animation.hitAt = now;

@@ -91,7 +91,7 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v3' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v4' and not ui['provenance']['swfScriptExecution']
     for entry in ui['assets'].values():
         with Image.open(asset(entry['url'], output)) as image:
             assert image.size == (entry['width'], entry['height'])
@@ -132,6 +132,20 @@ def verify(output=OUT):
         entry=portraits['models'][key];model=json.loads(asset(entry['modelURL'],output).read_text())
         assert entry['mode']=='source-model-web-framing'
         assert any(entry['headNode'] in [node['name'],*node.get('aliases',[])] for node in model['rig']['nodes'])
+    inventory=ui['inventory'];assert inventory['format']=='oc2-original-inventory-v1'
+    assert not inventory['provenance']['swfScriptExecution']
+    assert inventory['layouts']['bag']['columns']==8 and len(inventory['layouts']['bag']['slots'])==40
+    assert inventory['layouts']['bag']['visibleRowsAreNotTotalCapacity']
+    assert {slot['index'] for slot in inventory['layouts']['equipment']['slots']}=={0,1,2,4,6,7,8,9,13,21}
+    for entry in inventory['assets'].values():
+        with Image.open(asset(entry['url'],output)) as image:assert image.size==(entry['width'],entry['height'])
+    item_icons=ui['itemIcons'];assert item_icons['format']=='oc2-item-icons-v1'
+    assert set(item_icons['icons'])=={'trainingSword','linenArmor','travelerBoots','wolfPelt'}
+    assert not item_icons['provenance']['nativeZeroDisplayFallbackVerified']
+    for entry in item_icons['icons'].values():
+        image_path=asset(entry['url'],output)
+        assert hashlib.sha256(image_path.read_bytes()).hexdigest()==entry['sourceSHA256']
+        with Image.open(image_path) as image:assert image.size==(96,96)
     catalog = json.loads(asset('/assets/library/catalog.json', output).read_text())
     assert catalog['format'] == 'oc2-art-catalog-v1'
     assert catalog['sourceFormats'] == {'web':m['format'], **{key:m[key]['format'] for key in ('effects','rendering','ui')}}
@@ -148,6 +162,7 @@ def verify(output=OUT):
                      'renderZones':len(rendering['zones']), 'uiCrops':len(ui['assets']),
                      'skillIcons':len(icons['icons']), 'fontCharacters':glyphs,
                      'hudAssets':len(hud['assets']),'modelPortraits':len(portraits['models']),
+                     'inventoryAssets':len(inventory['assets']),'itemIcons':len(item_icons['icons']),
                      'artFiles':catalog['fileCount'], 'warnings':m['warnings']}
 
 def main():

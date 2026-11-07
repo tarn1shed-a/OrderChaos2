@@ -1,4 +1,5 @@
 import {createQuestBook} from './quest-book.js';
+import {createSourceTerrain} from './terrain-materials.js';
 import {createContextControl} from './context-control.js';
 import {monsterStateText} from './monster-state.js';
 import {buffText} from './buff-presentation.js';
@@ -344,11 +345,10 @@ async function init() {
     const renderProfile=await json(assets.rendering.url);environment=createSceneEnvironment(THREE,renderProfile);
     const spawn=localPosition(world.spawn.x,world.spawn.y);environment.update(spawn.x+origin.x,spawn.z+origin.z,scene);
     hdrRenderer=createRecoveredHDR(THREE,renderer,renderProfile,await texture(renderProfile.lut.url));
-    const tg = geometry(terrainData); tg.translate(-origin.x, -origin.y, -origin.z);
-    const surfaceTexture = await texture(assets.map.surfaceTexture);
-    if (surfaceTexture) { surfaceTexture.wrapS = surfaceTexture.wrapT = THREE.RepeatWrapping; surfaceTexture.repeat.set(36, 36); }
-    const ground = new THREE.Mesh(tg, new THREE.MeshStandardMaterial({ map: surfaceTexture, vertexColors: !!terrainData.colors?.length, color: surfaceTexture || terrainData.colors?.length ? 0xffffff : 0x789565, roughness: 1, side: THREE.DoubleSide }));
-    ground.receiveShadow = true; scene.add(ground); terrainMeshes.push(ground);
+    if(assets.map.materials?.format!=='oc2-terrain-materials-v1')throw new Error('原地形分层资源需要更新，请重建本地资源');
+    const terrainMaterials=await json(assets.map.materials.url);
+    terrainMeshes=await createSourceTerrain(THREE,terrainData,terrainMaterials,origin,texture);
+    scene.add(...terrainMeshes);canvas.dataset.terrainMaterials=terrainMaterials.format;canvas.dataset.terrainTiles=String(terrainMeshes.length);
     modelTemplate = await loadModel(assets.player);
     // The wolf uses server state; only the bear remains a passive asset exhibit.
     for (const [i, entry] of (assets.exhibits || []).entries()) {

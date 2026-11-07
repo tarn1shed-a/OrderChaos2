@@ -29,6 +29,7 @@ from scene_collision import apply_scene_transforms, recover_collision
 from character_hair import recover_character_hair
 from character_materials import recover_character_materials
 from terrain_convert import convert as terrain_convert
+from terrain_materials import recover_materials as recover_terrain_materials
 from texture_decode import convert as texture_convert
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -181,6 +182,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     if not rendering['lut']['url']:raise ValueError('Source HDR lookup texture missing')
     render_output=output/'rendering/tutorial.json';render_output.parent.mkdir(parents=True,exist_ok=True)
     render_output.write_text(json.dumps(rendering,ensure_ascii=False,indent=2))
+    terrain_materials=recover_terrain_materials(extract,lambda p:normalize_resource_name(p) in by_name,output,terrain,texture)
     ui = recover_ui_assets(extract, output)
     ui['skillUI'] = recover_skill_ui(extract, output)
     ui['questUI'] = recover_quest_ui(extract, output, gameplay['quests'])
@@ -189,7 +191,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         if path not in allowed_loose:raise ValueError(f'Unexpected loose resource: {path}')
         return safe_output(source, path)
     # Check actual Chinese interface characters, including dynamic combat labels.
-    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','professions.js','recovered-hud.js','inventory-ui.js','skill-book.js','quest-book.js','quest-list-state.js','object-interaction-state.js','mobile-hud.js','touch-joystick.js','items.js','character-equipment.js','character-look.js','character-materials.js'])
+    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','professions.js','recovered-hud.js','inventory-ui.js','skill-book.js','quest-book.js','terrain-materials.js','quest-list-state.js','object-interaction-state.js','mobile-hud.js','touch-joystick.js','items.js','character-equipment.js','character-look.js','character-materials.js'])
     ui_text += (ROOT/'prototype/public/monster-state.js').read_text()+(ROOT/'prototype/public/buff-presentation.js').read_text()+(ROOT/'prototype/public/context-control.js').read_text()
     ui_text += json.dumps(ui['skillUI'], ensure_ascii=False) + json.dumps(ui['questUI'], ensure_ascii=False)
     required_text = ''.join(sorted({ch for ch in ui_text if '\u3400' <= ch <= '\u9fff'}))
@@ -220,7 +222,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         'Original square skill images are adapted to the existing circular web HUD slots.',
     ]
     (output/'ui/profile.json').write_text(json.dumps(ui,ensure_ascii=False,indent=2))
-    manifest = {'format':'oc2-web-preview-v1','map':{'url':'/assets/maps/tutorial-preview.json','label':'新手区域 · 神殿遗迹','subtitle':'原作地形高程与场景摆放 · 地表使用单层材质预览','surfaceTexture':surface},
+    manifest = {'format':'oc2-web-preview-v1','map':{'url':'/assets/maps/tutorial-preview.json','label':'新手区域 · 神殿遗迹','subtitle':'','surfaceTexture':surface,'materials':{'url':'/assets/maps/terrain-materials.json','format':terrain_materials['format']}},
                 'player':player,'exhibits':exhibits,'scenery':scenery,'textures':textures,
                 'effects': {'url':'/assets/effects/combat.json','format':'oc2-combat-effects-v4'},
                 'rendering':{'url':'/assets/rendering/tutorial.json','format':'oc2-scene-render-v1'},

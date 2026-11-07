@@ -162,7 +162,7 @@ def convert(world, tile_x, tile_z, side, destination, source=EXTRACTED):
         grid=dict(width=side_vertices, height=side_vertices, step=1,
                   origin=[tile_x*64,tile_z*64], heights=[h/100 for h in heights]),
         positions=positions, normals=flat_normals, uvs=uvs, indices=indices,
-        materialNote='UVs normalized over preview region; original blend materials, masks and UV tiling are not reconstructed.',
+        materialNote='Main-grid UVs are legacy preview coordinates. The companion terrain-materials profile supplies source per-tile UVs, layer indices and masks; native terrain lighting remains pending.',
         sourceTextures=texture_refs, sourceVertexColorSummary={'unique16':len(set(colors16)), 'white16':all(c == 65535 for c in colors16)},
         instances=instances,
         verification={'seamSamplesMatched':seam_samples,

@@ -28,6 +28,16 @@ def verify(output=OUT):
     assert all(math.isfinite(v) for v in terrain['grid']['heights'])
     assert len(terrain['grid']['heights']) == terrain['grid']['width']*terrain['grid']['height']
     assert terrain['verification']['seamSamplesMatched'] > 0
+    terrain_materials=json.loads(asset(m['map']['materials']['url'],output).read_text())
+    assert terrain_materials['format']==m['map']['materials']['format']=='oc2-terrain-materials-v1'
+    assert len(terrain_materials['tiles'])==9 and terrain_materials['coordinates']['uv0UnitsPerRepeat']==8
+    for tile in terrain_materials['tiles']:
+        assert len(tile['chunks'])==64
+        for entry in tile['textures']:asset(entry['url'],output)
+        for chunk in tile['chunks']:assert all(-1<=v<len(tile['textures']) for v in chunk['effectiveIndices'])
+        if tile['mask']:
+            with Image.open(asset(tile['mask']['url'],output)) as image:assert image.size==(tile['mask']['width'],tile['mask']['height']) and image.mode=='RGBA'
+    asset(terrain_materials['fallback'],output)
     refs = [m['player'],*m['exhibits'],*m['scenery'],*m['dynamicModels']]
     mesh_count = 0
     for ref in refs:
@@ -256,6 +266,8 @@ def verify(output=OUT):
     assert catalog['totalBytes'] == sum(entry['bytes'] for entry in catalog['entries'])
     asset('/assets/library/index.html', output); asset('/assets/library/style.css', output)
     return {'status':'passed','terrainVertices':vertices,'terrainTriangles':len(terrain['indices'])//3,
+                     'terrainMaterialTiles':len(terrain_materials['tiles']),
+                     'terrainMaterialGroups':sum(len({tuple(c['effectiveIndices']) for c in t['chunks']}) for t in terrain_materials['tiles']),
                      'modelsReferenced':len(refs),'meshes':mesh_count,'textures':len(m['textures']), 'combatEffects':len(effects['effects']),
                      'sceneInstances':sum(len(s['instances']) for s in m['scenery']),
                      'renderZones':len(rendering['zones']), 'uiCrops':len(ui['assets']),

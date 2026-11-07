@@ -96,7 +96,7 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v17' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v18' and not ui['provenance']['swfScriptExecution']
     controls=ui['controls'];assert controls['format']=='oc2-original-controls-v1' and not controls['scriptExecution']
     assert m['player']['jumpAnimations']
     collision=json.loads(asset(m['collision']['url'],output).read_text())
@@ -106,10 +106,12 @@ def verify(output=OUT):
     assert all(mesh.get('sourceNodeTransform') for ref in m['scenery'] for mesh in json.loads(asset(ref['url'],output).read_text())['meshes'])
     assert controls==json.loads((output/'ui/controls.json').read_text())
     gameplay=json.loads(asset(m['gameplay']['url'],output).read_text())
-    assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v8'
+    assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v9'
     quests=gameplay['quests'];assert quests['format']=='oc2-source-quests-v1' and not quests['serverScriptsRecovered']
-    quest_ui=ui['questUI'];assert quest_ui['format']=='oc2-original-quest-ui-v1' and quest_ui['data']==quests
-    assert len(quests['catalog'])==2 and len(quests['objects'])==3 and len(quest_ui['methods'])==9
+    quest_ui=ui['questUI'];assert quest_ui['format']=='oc2-original-quest-ui-v2' and quest_ui['data']==quests
+    assert len(quests['catalog'])==2 and len(quests['objects'])==3 and len(quest_ui['methods'])==11 and len(quest_ui['assets'])==4
+    assert quests['clientStates']['status']['QMGR_QUEST_FINISHED']==9 and quests['clientStates']['status']['QMGR_QUEST_NOT_FINISHED']==4
+    assert quest_ui['strings']['GENERAL_QUESTHUD_NOQUEST']['text']=='无可用任务！'
     assert quest_ui==json.loads(asset('/assets/ui/quests.json',output).read_text())
     for entry in quest_ui['assets'].values():
         with Image.open(asset(entry['url'],output)) as image:assert image.size==(entry['width'],entry['height'])

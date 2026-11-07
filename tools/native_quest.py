@@ -4,6 +4,7 @@ from pathlib import Path
 from native_combat import descriptor_fields
 from native_interaction import recover_interactions
 from skill_icons import decode_localized_names
+from client_quest_states import recover_client_quest_states
 
 PROTOCOL={
  'GS2C_ObjectStaticObj':(0x2029120,558,'0879594cceac9c52685f4c636c1a9a87c3dec8dd19885a5a630e3bb4dddccf77'),
@@ -40,8 +41,8 @@ def recover_quest_data(extract):
    'sourceType':proto['Type'],'sourceState':spawn['State'],'sourcePosition':[spawn['position_x'],spawn['position_y'],spawn['position_z']],
    'sourceScript':proto['script'],'sourceSpell':proto['spellid'],'sourceRange':proto['interactiveRange'],
    'sourceRefresh':proto['refreshTime'],'sourceDisplayId':proto['DisplayID']})
- return {'format':'oc2-source-quests-v1','catalog':catalog,'objects':objects,'tableProofs':interaction['tableProofs'],
+ return {'format':'oc2-source-quests-v1','catalog':catalog,'objects':objects,'clientStates':recover_client_quest_states(raw('ui/Flash/mainUI.swf')),'tableProofs':interaction['tableProofs'],
   'localizedProof':localized['verification'],'serverScriptsRecovered':False,
   'limits':['Original task data is reference material, not an accepted quest or a reward entitlement.',
    'Source spawn State is not the runtime quest_status/can_loot/interactives supplied by the server. Missing fields stay unknown.',
-   'Original quest accept/abandon/completion/collection and static-object visibility scripts are not implemented. Objects are inspected in the journal, not spawned into the live world.']}
+   'Original quest accept/abandon/completion/collection and static-object visibility scripts are not implemented. Source objects stay in research data; they are neither journal inspector entries nor live world spawns.']}

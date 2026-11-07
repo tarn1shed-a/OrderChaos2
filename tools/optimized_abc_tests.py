@@ -2,7 +2,7 @@ import struct
 import unittest
 
 from character_portraits_tests import u30, swf, abc, tag
-from optimized_abc import parse_abc, disassemble, extract_abc, named_method
+from optimized_abc import parse_abc, disassemble, extract_abc, extract_named_abc, named_method
 from resource_packs import ResourceArchive, DEFAULT_SOURCE
 
 
@@ -56,6 +56,15 @@ class OptimizedABCTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'one optimized'):extract_abc(duplicate)
         for raw in [b'',b'FWS'+bytes(20),b'CWS'+bytes(20)]:
             with self.assertRaises(ValueError):extract_abc(raw)
+
+    def test_exact_named_block_in_multi_block_swf_rejects_prefixes_and_duplicate_names(self):
+        raw=swf(['foo']);addition=tag(300,b'\x01\0\0\0Common/ASDefines\0'+fixture())
+        def extend(data,extra):
+            value=data[:-2]+extra+data[-2:]
+            return value[:4]+struct.pack('<I',len(value))+value[8:]
+        combined=extend(raw,addition);self.assertEqual(extract_named_abc(combined,'Common/ASDefines'),fixture())
+        with self.assertRaisesRegex(ValueError,'missing'):extract_named_abc(combined,'Common/AS')
+        with self.assertRaisesRegex(ValueError,'ambiguous'):extract_named_abc(extend(combined,addition),'Common/ASDefines')
 
     @unittest.skipUnless((DEFAULT_SOURCE/'ui.bin').is_file(),'Original game scripts are local-only')
     def test_original_containers_consume_eof_and_named_controls_disassemble(self):

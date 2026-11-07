@@ -31,6 +31,22 @@ def extract_abc(raw):
     return blocks[0]
 
 
+def extract_named_abc(raw, name):
+    """Select an exact named block from a multi-block mainUI, never execute it."""
+    if raw[:3] != b'FWS' or len(raw) < 12 or struct.unpack_from('<I', raw, 4)[0] != len(raw):
+        raise ValueError('Expected complete uncompressed SWF')
+    bits=Bits(raw,8);bits.rect();matches=[]
+    for kind,at,size in tags(raw,bits.pos()+4,len(raw)):
+        if kind!=300:continue
+        payload=raw[at:at+size];end=payload.find(b'\0',4)
+        if end<4:raise ValueError('Invalid named ABC wrapper')
+        try:block=payload[4:end].decode('utf-8')
+        except UnicodeDecodeError as error:raise ValueError('Invalid named ABC UTF-8') from error
+        if block==name:matches.append(payload[end+1:])
+    if len(matches)!=1:raise ValueError('Named ABC block missing or ambiguous')
+    return matches[0]
+
+
 def parse_abc(data):
     meta = decode_abc_metadata(data)
     r = _ABC(data); r.at = meta['constantPoolBytes']

@@ -126,16 +126,9 @@
       <footer class="inventory-footer"><span id="inventory-status" role="status">物品和装备由本地服务器保存。</span><small>查看面板时世界仍在运行 · 新手装备与数值为本地玩法</small></footer>
     </div>
   </dialog>
-  <dialog id="quest-book" class="quest-book" aria-labelledby="quest-book-title" aria-describedby="quest-book-note">
-    <header><h2 id="quest-book-title">任务 <small>原任务资料 · 已接取 0</small></h2><button id="quest-book-close" type="button" aria-label="关闭任务面板">×</button></header>
-    <div class="quest-stage-viewport"><div id="quest-stage-size"><div id="quest-stage">
-      <h3 class="quest-source-label">任务列表</h3><div id="quest-list" aria-label="原版任务列表"></div><i class="quest-divider" aria-hidden="true"></i>
-      <h3 id="quest-selected-title"></h3><section id="quest-description" aria-label="任务描述"><h4 id="quest-objective" class="quest-objective"></h4><p id="quest-detail-text"></p></section>
-      <section class="quest-rewards" aria-label="原表奖励"><h4>任务奖励 <small>原表资料</small></h4><p id="quest-reward-values"></p><p id="quest-requirement"></p></section>
-      <section id="quest-object-states" aria-label="关联对象交互状态"></section>
-      <button id="quest-map" class="quest-action" disabled>地图</button><button id="quest-abandon" class="quest-action" disabled>放弃任务</button><button id="quest-track" class="quest-action" disabled>追踪任务</button>
-    </div></div></div>
-    <footer id="quest-book-note">资料预览：可查看原任务和关联对象；原服接取、进度与奖励尚未接通。对象状态未知时，不代表可以交互。</footer>
+  <dialog id="quest-book" class="quest-book" aria-labelledby="quest-book-title">
+    <header><h2 id="quest-book-title">任务手册</h2><button id="quest-book-close" type="button" aria-label="关闭任务面板">×</button></header>
+    <div class="quest-stage-viewport"><div id="quest-stage-size"><div id="quest-stage"><p id="quest-empty"></p></div></div></div>
   </dialog>
   <dialog id="skill-book" class="skill-book" aria-labelledby="skill-book-title" aria-describedby="skill-book-note">
     <header class="skill-book-heading"><h2 id="skill-book-title">技能 <small>法师</small></h2><button id="skill-book-close" type="button" aria-label="关闭技能面板">×</button></header>

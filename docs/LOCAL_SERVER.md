@@ -59,7 +59,7 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
 
 技能及换装版本需要匹配的 `converted/models/elf-female.json`、`wolf.json`、`effects/combat.json`、角色/装备贴图与 `manifest.json`，请整体复制本次构建的 `converted/`。旧 `forest-elf.json` 只保留为研究参考，不能代替新玩家基体。只有旧资源时页面会明确要求重建；开发机执行 `.venv/bin/python tools/build_resource_preview.py` 后把产物单独传给正式服。本轮代码会将旧角色存档安全升级到v6，原装备、外观、奖励和技能栏保留，仅v4及更早角色补上法师职业（2）、法杖和大剑各一件，v5已有职业与装备不变；更新后刷新页面。待结算施法、技能冷却和怪物减速仍为会话/房间状态。
 
-当前要求 `oc2-combat-effects-v4` 与 `oc2-original-ui-v17` 与 `oc2-native-gameplay-v8`（`converted/gameplay/native.json`）及 `oc2-scene-collision-v2`（`converted/maps/collision.json`）与 `oc2-source-navigation-v1`（`converted/maps/navigation.json`），玩家模型内含 `oc2-equipment-appearance-v1`、`oc2-character-hair-v1` 与 `oc2-character-materials-v1`。整包包括原LUT、各界面清单与图标（含手机摇杆/小地图边框、技能面板及法师资料）、108张场景/特效/角色贴图、4个WOFF，请完整同步 `converted/`。原材质库、源表和松散TTF只由开发机转换时读取；运行机器只需转换产物，无须BDAE、SWF、APK或反汇编。角色头像和装备全身预览随穿脱渲染并缓存，无需另传截图。未覆盖的稀有字仍回退系统字体。
+当前要求 `oc2-combat-effects-v4` 与 `oc2-original-ui-v18` 与 `oc2-native-gameplay-v9`（`converted/gameplay/native.json`）及 `oc2-scene-collision-v2`（`converted/maps/collision.json`）与 `oc2-source-navigation-v1`（`converted/maps/navigation.json`），玩家模型内含 `oc2-equipment-appearance-v1`、`oc2-character-hair-v1` 与 `oc2-character-materials-v1`。整包包括原LUT、各界面清单与图标（含手机摇杆/小地图边框、技能面板及法师资料）、108张场景/特效/角色贴图、4个WOFF，请完整同步 `converted/`。原材质库、源表和松散TTF只由开发机转换时读取；运行机器只需转换产物，无须BDAE、SWF、APK或反汇编。角色头像和装备全身预览随穿脱渲染并缓存，无需另传截图。未覆盖的稀有字仍回退系统字体。
 
 角色存档当前为 **version 6**，v5职业/物品结构保留；v6在首个空技能槽加入奥术飞弹，不改变任何旧绑定。v4及更早版本仍补上职业与两件练习武器。读取v1/v2/v3/v4/v5时先验证全文件；首次落盘前，在同一个runtime目录保留精确原字节的characters.json.vN-backup-….json，再原子写入v6。仅v4及更早角色迁入法师原型（2）并补发一次新增法杖/大剑；旧奖励、生命、装备、外观、位置、凭据哈希与已有技能栏不变。尚无服务器技能栏的旧版本继续执行原一次性导入。坏存档拒绝启动并保留原文件，不使用旧版程序打开v6。回退需停服，同时恢复旧代码与对应旧版本备份。
 
@@ -73,7 +73,7 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
 
 布局和键位配置本身仍为version1，嵌入v6服务器角色存档中，只通过本角色welcome/progress及保存回执返回，不进入房间公开快照。修改即时写盘，成功回执后显示“已保存到服务器”；待确认期间的连续改动会排队保留最后一份，超时显示“重试保存”，断线后未确认的改动不冒称已保存。已有服务器设置始终优先于旧浏览器缓存；一次性旧设置导入请求不会覆盖服务器已有值。刷新、重连、服务器重启或换设备恢复同一角色后均载入服务器配置。
 
-本轮需要同时更新前后端代码和UI v17 / gameplay v8完整资源包。务必整体同步包含gameplay/native.json和maps/collision.json的新converted，再启动服务器并刷新页面。仅git pull不足以获得原版资源。
+本轮需要同时更新前后端代码和UI v18 / gameplay v9完整资源包。务必整体同步包含gameplay/native.json和maps/collision.json的新converted，再启动服务器并刷新页面。仅git pull不足以获得原版资源。
 
 当前角色进度保存在根目录 `runtime/characters.json`，始终不进 Git。奖励立即保存，移动定期保存，离开和正常关闭服务会保存最新状态。异常强制断电时，尚未落盘的短时间移动可能丢失；正常关闭请使用 Control-C。
 
@@ -91,7 +91,7 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
 
 ## 动态碰撞与施法验证
 
-开发检查顺序和未完成分支见 [逆向目录](REVERSE_ROADMAP.md)。UI v17 / gameplay v8 / collision v2 / navigation v1 需要整体更新，额外包含原门模型和三个原施法动作片段。普通地图仍为39个原场景实例；`explore.html?room=DYNAMIC-01&lab=collision` 单独启用门体试验（近门点右上“打开/关闭试验门”）。两个窗口使用不同角色、相同房间和同一lab参数；普通房间与试验房间隔离。试验摆放与升降轨迹是本地验证工具，不写回常规角色位置，重启后门关闭。
+开发检查顺序和未完成分支见 [逆向目录](REVERSE_ROADMAP.md)。UI v18 / gameplay v9 / collision v2 / navigation v1 需要整体更新，额外包含原门模型和三个原施法动作片段。普通地图仍为39个原场景实例；`explore.html?room=DYNAMIC-01&lab=collision` 单独启用门体试验（近门点右上“打开/关闭试验门”）。两个窗口使用不同角色、相同房间和同一lab参数；普通房间与试验房间隔离。试验摆放与升降轨迹是本地验证工具，不写回常规角色位置，重启后门关闭。
 
 三维炎爆术17吟唱1500ms、独立CD0/公共CD600ms；霜爆术94无吟唱、CD20000ms/公共CD700ms；奥术飞弹90引导1500ms、300ms间隔、CD4000ms。默认新角色1/2/3，旧角色Q等已有设置保留，新技能使用首个空槽原绑定。三种原玩家法术当前限法师；尚未接原MP/学习条件。Esc在没有面板时取消在施技能，炎爆/奥术移动按源位标记中断；奥术每发使用独立事件ID和待命中快照，延迟批量命中只结算一次击杀奖励。
 
@@ -105,10 +105,12 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
 未拾取物只保留到尸体8秒重生或服务进程重启，不写入角色存档；已拾取狼皮立即使用现有v6存档保存。本轮不迁移存档、不补发历史掉落。源任务572/632与对象610/621保留为研究资料，没有可证明的原服务端脚本，尚未激活为可接取任务。需要整体更新UI16 / gameplay7素材，其中新增原loot.png；只git pull不能获得这些素材。
 
 
-## 原任务资料与对象状态（R10 B分支）
+## 原任务状态与空列表（R10 C）
 
-右上“任务”打开原任务资料面板，左侧选择“阴谋败露”或“苹果苹果红酒”，右侧查看原中文目标/描述、最低等级/前置和奖励表值；方向键上下/Home/End切换，Esc关闭，展开关联对象查看出生记录与运行状态。该窗口与背包/技能面板互斥，打开时停止自己的移动，世界继续运行。原任务尚不能接取/完成/领奖，地图/追踪/放弃按钮禁用，不把仅有数据表的任务当成已接取。RewMoney单位未核实，界面显示“钱币”表值，不承诺等同当前玩法金币。
+严格按1:1目标推进，不添加自创玩法、界面布局和美术；研究图例、对象检查及原表资料留在开发资料，不混入正常游戏界面。任务窗口已移除此前的资料预览列表、对象检查区和新增状态图例。
 
-对象的出生State和运行quest_status、quest_type、can_loot、haschatmenu、interactives是不同字段；原服运行数据缺失时显示未知，不显示成false/0/可拾取。状态按角色隔离、同房间重连可恢复临时投影，服务进程重启后重新未知；无客户端写入口、无新存档字段，也不生成这些原任务对象到地图中。源UI位图normalquest只有元数据，未找到准确外部图；资料列表复用已证实的源未完成图标，原界面完整合成/字体尺寸/动画仍不是逐像素1:1。
+当前本地服务器没有已接取的原任务。收到明确active=[]后，按原QuestListHero.getQuestList空分支显示GENERAL_QUESTHUD_NOQUEST原中文“无可用任务！”，隐藏列表、详情、奖励和任务操作。原文本位置/边界、36px高度、白色、居中与leading来自源EditText，标题“任务手册”来自源通用中文键；不是自行设计的空页面。缺失状态不当作空列表，原非空任务和接取/交付/发奖尚未接通，原窗口外框/字体回退仍待继续核实。
 
-本轮要求UI17 / gameplay8完整素材包（含ui/quests.json、3张任务状态PNG和选定中文文本），请在服务器停服时整体同步converted后刷新页面；原始表/完整文本/素材和角色存档继续单独管理，不上传Git。仅拉取Git无法获得这些资料。
+原QMGR UI常量4/8/9分别用于未完成/每日完成/完成图标，失败为独立IsFailed分支且优先；它们不是原服务器解锁或发奖规则，也未用于解释静态对象quest_status。源出生State、运行对象状态和任务列表状态继续分开；v6存档无新字段/迁移。
+
+本轮要求UI18 / gameplay9完整素材包（questUI2、clientQuestStates1，含4张原任务状态PNG、原公共常量和中文键引用）。停服后整体同步converted并刷新页面；只git pull无法获得素材。下一项优先核对并恢复原WindowContainerIGM容器，替换现有尚未完整恢复的旧外框。

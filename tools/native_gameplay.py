@@ -16,6 +16,7 @@ from native_combat import recover_combat,recover_protocol
 from native_ai import recover_ai,verify_ai_native,NATIVE_ROUTINES
 from native_interaction import recover_interactions,verify_interaction_native,NATIVE_ROUTINES as INTERACTION_ROUTINES
 from native_quest import recover_quest_data,verify_quest_native
+from client_quest_states import NATIVE_ROUTINES as QUEST_LIST_ROUTINES
 
 LIB_SHA256 = '77f449f2100a4717578e282bb04f1f8fff25d25c7bfa461d7d39ee49d1cb8ca4'
 ROUTINES = {
@@ -84,6 +85,7 @@ ROUTINES = {
 }
 ROUTINES.update(NATIVE_ROUTINES)
 ROUTINES.update(INTERACTION_ROUTINES)
+ROUTINES.update(QUEST_LIST_ROUTINES)
 CONSTANTS = {0x250b8cc:-41.6,0x250b8d0:-20,0x250b8d4:-75,0x250b8d8:-6.7,
              0x250b8dc:10,0x250b8e0:3.5,0x250b8e4:13.1,0x250b8ec:5,0x250b8f0:8,
              0x1df7a48:100,0x1df79f4:.001,0x1e39a7c:.31}
@@ -182,7 +184,7 @@ def recover_gameplay(extract, output, selected_items):
                       'word':second+(third<<16),'allowedProfessions':[i+1 for i,k in enumerate(fields) if r[k]],
                       'legacy':not any(r[k] for k in fields),'sourceTypeName':r['weapon_type']}
     casting,cast_actions=recover_cast(extract,animation);actions.update(cast_actions)
-    result={'format':'oc2-native-gameplay-v8','comboRows':rows,'skills':skills,'weapons':weapons,'icons':icons,'casting':casting,
+    result={'format':'oc2-native-gameplay-v9','comboRows':rows,'skills':skills,'weapons':weapons,'icons':icons,'casting':casting,
         'combat':recover_combat(extract,output),
         'npc':recover_ai(extract,output),
         'interaction':recover_interactions(extract),

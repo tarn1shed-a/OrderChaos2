@@ -3,7 +3,7 @@ const EMPTY=0xffff;
 export function loadGameplay(path=new URL('../../game-data/converted/gameplay/native.json',import.meta.url)) {
   if(!existsSync(path))return null;
   const profile=JSON.parse(readFileSync(path,'utf8'));
-  if(profile.format!=='oc2-native-gameplay-v8'||!Array.isArray(profile.comboRows)||
+  if(profile.format!=='oc2-native-gameplay-v9'||!Array.isArray(profile.comboRows)||
     !profile.skills||!profile.weapons||profile.comboRows.some(r=>r.isNormalAttack!==1||
       !['id','skillId','nextSkillId','reqMainWeaponType','reqOffWeaponType','timeOutTime','timeOutSkill','probability','summonNormalSkill'].every(k=>Number.isSafeInteger(r[k])&&r[k]>=0)))throw new Error('原版普攻数据无效，请重新构建本地资源');
   if(profile.casting?.format!=='oc2-native-cast-v2'||!profile.casting.spells?.fireball||!profile.casting.spells?.frost_blast||!profile.casting.spells?.arcane_missile)throw new Error('原版施法资源缺失，请整体重建本地资源');
@@ -11,7 +11,7 @@ export function loadGameplay(path=new URL('../../game-data/converted/gameplay/na
     profile.combat.mechanics?.burnDurationMs!==7000||profile.combat.mechanics?.freezeDurationMs!==2000||profile.combat.mechanics?.burnTicks!==5||profile.combat.mechanics?.arcaneBurnBonus!==.5)throw new Error('原版战斗资料缺失，请整体重建本地资源');
   if(profile.npc?.format!=='oc2-npc-evidence-v1'||profile.npc.navigation?.format!=='oc2-source-navigation-v1')throw new Error('原版NPC与导航资料缺失，请整体重建本地资源');
   if(profile.interaction?.format!=='oc2-source-interaction-v1')throw new Error('原版交互资料缺失，请整体重建本地资源');
-  if(profile.quests?.format!=='oc2-source-quests-v1')throw new Error('原版任务资料缺失，请整体重建本地资源');
+  if(profile.quests?.format!=='oc2-source-quests-v1'||profile.quests?.clientStates?.format!=='oc2-client-quest-states-v1')throw new Error('原版任务资料缺失，请整体重建本地资源');
   return profile;
 }
 // Direct reconstruction of filter 0x5bf5d0. 0xffff means empty, not any weapon.

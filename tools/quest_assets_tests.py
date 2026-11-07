@@ -3,8 +3,18 @@ from pathlib import Path
 from resource_packs import ResourceArchive,DEFAULT_SOURCE,index
 from native_quest import recover_quest_data,verify_quest_native,PROTOCOL
 from quest_assets import recover_quest_ui,METHODS
+from client_quest_states import constant_values,EXPECTED_STATUS,EXPECTED_TYPES
 ROOT=Path(__file__).resolve().parents[1]
 class QuestAssetsTests(unittest.TestCase):
+ def test_constant_metadata_and_initializer_must_both_agree(self):
+  from optimized_abc import parse_abc
+  from optimized_abc_tests import fixture
+  a=parse_abc(fixture());a['ints']=[0,4];a['names']=['*','QMGR_QUEST_NOT_FINISHED']
+  cls={'staticTraits':[{'name':'QMGR_QUEST_NOT_FINISHED','kind':6,'valueKind':3,'value':1}],'cinit':0}
+  a['bodies'][0]['code']=b'\x5e\x01\x24\x04\x68\x01\x47'
+  self.assertEqual(constant_values(a,cls,{'QMGR_QUEST_NOT_FINISHED':4}),{'QMGR_QUEST_NOT_FINISHED':4})
+  a['bodies'][0]['code']=b'\x5e\x01\x24\x05\x68\x01\x47'
+  with self.assertRaisesRegex(ValueError,'mismatch'):constant_values(a,cls,{'QMGR_QUEST_NOT_FINISHED':4})
  def test_changed_native_descriptor_requires_retrace(self):
   class Changed:
    def read(self,a,n):return bytes(n)
@@ -25,10 +35,12 @@ class QuestAssetsTests(unittest.TestCase):
    if pack not in archives:archives[pack]=ResourceArchive(DEFAULT_SOURCE/pack)
    return archives[pack].read(path)
   data=recover_quest_data(extract);self.assertFalse(data['serverScriptsRecovered'])
+  self.assertEqual(data['clientStates']['status'],EXPECTED_STATUS);self.assertEqual(data['clientStates']['types'],EXPECTED_TYPES)
   self.assertEqual({r['id']:r['title'] for r in data['catalog']},{572:'阴谋败露',632:'苹果苹果红酒'})
   self.assertEqual(len(data['objects']),3);self.assertEqual(next(q for q in data['catalog'] if q['id']==632)['sourceObjects'],[621])
   with tempfile.TemporaryDirectory() as temp:
    p=recover_quest_ui(extract,temp,data);self.assertEqual({k:v['codeSHA256'] for k,v in p['methods'].items()},METHODS)
+   self.assertEqual(p['strings']['GENERAL_QUESTHUD_NOQUEST'],{'id':984,'text':'无可用任务！'});self.assertEqual(p['emptyTextStyle']['fontHeight'],36)
    fields=p['layouts']['book']['fields'];self.assertAlmostEqual(fields['panel_list.item_1']['matrixPixels'][5]-fields['panel_list.item_0']['matrixPixels'][5],63.8)
    self.assertEqual(p['assets']['unfinished']['sourcePath'],'ui/icons/head_obj/quest_unfinished.png');self.assertTrue((Path(temp)/'ui/quest-unfinished.png').is_file());self.assertFalse(p['provenance']['swfScriptExecution'])
 if __name__=='__main__':unittest.main()

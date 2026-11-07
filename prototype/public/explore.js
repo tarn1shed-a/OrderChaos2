@@ -313,7 +313,6 @@ async function init() {
     }});
     skillBook=createSkillBook(uiProfile,{stop,focusGame:()=>canvas.focus({preventScroll:true}),beforeOpen:()=>{questBook?.close();hotbar?.close();inventoryUI?.close();setCampPanel(false);pointer=null;}});
     questBook=createQuestBook(uiProfile,{stop,focusGame:()=>canvas.focus({preventScroll:true}),beforeOpen:()=>{skillBook?.close();hotbar?.close();inventoryUI?.close();setCampPanel(false);pointer=null;}});
-    $('field-quests').disabled=false;
     $('field-skills').disabled=false;
     hotbar=createHotbarUI({root:$('field-actions'),panel:$('hotbar-editor'),toggle:$('hotbar-settings'),closeButton:$('hotbar-close'),
       fixedLayout:true,rows:$('hotbar-bindings'),status:$('hotbar-status'),reset:$('hotbar-reset'),retryButton:$('hotbar-retry'),send,

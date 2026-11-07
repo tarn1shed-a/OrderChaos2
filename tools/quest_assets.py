@@ -1,11 +1,15 @@
 """Recover QuestListHero layout and QuestHudNew callbacks/art, without SWF execution."""
-import hashlib,io,json
+import hashlib,io,json,struct
 from pathlib import Path
 from PIL import Image
 from hud_assets import document,named_path,_ini_blocks,sprite_frames
 from optimized_abc import parse_abc,extract_abc,named_method
+from skill_icons import decode_localized_names
+from ui_assets import Bits
 
 METHODS={
+ 'QuestListHero.initString':'2fd23042a16c9be2ba37cce4b9ba4fb978361a97743e53fe37a25a2bbbff87f7',
+ 'QuestListHero.getQuestList':'4a61cda6e462fc9916af21bb18b4277491eb015ef5c5c14e9d4dd4260c227f13',
  'QuestListHero.onEventQuestList':'f161fe380c2f95b0c8e335348ff7c643856d5ddd54e5b3dfc6417569a492a367',
  'QuestListHero.displayCurrQuest':'535c83191fd55efb1af5ccb3b2bb05016048f9cd7ec09e353450ee648f01e5a5',
  'QuestListHero.onListItemClick':'49355fd2c6c11577da3dcb915924e41d24fa4fa8124dbdee54eeb285de496dd0',
@@ -35,21 +39,34 @@ def recover_quest_ui(extract,output,data):
    found=named_method(abc,cls,method)
    if found['codeSHA256']!=digest:raise ValueError('Quest UI method changed; retrace required')
    methods[full]={k:v for k,v in found.items() if k!='instructions'}
- fields=['panel_list','panel_list.item_0','panel_list.item_1','panel_content.mc_content.txt_detail','titleScrollText','titleText','m_btnAbandon','m_btnSetActive','m_btnMap','reward_group']
+ fields=['panel_list','panel_list.item_0','panel_list.item_1','panel_content.mc_content.txt_detail','titleScrollText','titleText','m_btnAbandon','m_btnSetActive','m_btnMap','reward_group','m_TextPrompt']
  book=docs['QuestListHero'];hud=docs['QuestHudNew'];lib=docs['library']
  if book['symbols']['Window_QuestListHeroInfo']!=100 or sprite_frames(book,100)[0][0]['characterId']!=99:raise ValueError('Quest book root changed')
  layout={field:named_path(book,99,field,lib) for field in fields}
+ # Original empty-list path: no invented catalog, object inspector or diagram.
+ keys=decode_localized_names(load('tables/String_General_.tbl'),'EN');zh=decode_localized_names(load('tables/String_General_zh.tbl'),'SC')
+ key_ids={v:k for k,v in keys['values'].items()}
+ strings={name:{'id':key_ids[name],'text':zh['values'][key_ids[name]]} for name in ['GENERAL_QUESTHUD_NOQUEST','GENERAL_FREEBAR_QUESTBOOK']}
+ record=book['records'][layout['m_TextPrompt']['leafCharacterId']]
+ if record[0]!=37:raise ValueError('Quest prompt is not source EditText')
+ raw=record[1];bits=Bits(raw,2);bounds=bits.rect();at=bits.pos();flags=int.from_bytes(raw[at:at+2],'big');at+=2
+ if flags&0x80 or not flags&0x100 or not flags&0x400 or not flags&0x20 or flags&0x200:raise ValueError('Quest prompt text flags changed')
+ font_id,height=struct.unpack_from('<HH',raw,at);at+=4;color=list(raw[at:at+4]);at+=4
+ align=raw[at];left,right,indent,leading=struct.unpack_from('<HHHh',raw,at+1)
+ empty_style={'boundsPixels':[v/20 for v in bounds],'fontId':font_id,'fontHeight':height/20,'colorRGBA':color,
+  'align':align,'marginsPixels':[left/20,right/20,indent/20],'leadingPixels':leading/20}
  hud_layout={field:named_path(hud,152,field,lib) for field in ['m_CurQuestPanel','m_QuestListPanel','m_QuestIconBtn']}
  destination=Path(output)/'ui';destination.mkdir(parents=True,exist_ok=True);assets={}
- for key,path in [('unfinished','head_obj/quest_unfinished.png'),('complete','head_obj/quest_complete.png'),('failed','quest/quest_fail.png')]:
+ for key,path in [('unfinished','head_obj/quest_unfinished.png'),('complete','head_obj/quest_complete.png'),('dailyComplete','head_obj/daily_quest_complete.png'),('failed','quest/quest_fail.png')]:
   source='ui/icons/'+path;raw=load(source);image=Image.open(io.BytesIO(raw))
   if image.size!=(96,96) or image.mode not in ('RGB','RGBA'):raise ValueError('Quest art dimensions changed')
   image.verify();filename='quest-'+key+'.png';(destination/filename).write_bytes(raw)
   assets[key]={'url':'/assets/ui/'+filename,'width':96,'height':96,'sourcePath':source,'sourceSHA256':hashlib.sha256(raw).hexdigest(),
-   'sourceMethod':'MoreQuestList.setItemData','mode':'unchanged-full-source-png'}
- result={'format':'oc2-original-quest-ui-v1','layouts':{'book':{'stagePixels':book['stagePixels'],'fields':layout},'hud':{'fields':hud_layout}},
-  'methods':methods,'assets':assets,'data':data,'sources':{k:{'bytes':len(v),'sha256':hashlib.sha256(v).hexdigest()} for k,v in loaded.items()},
+   'sourceMethod':'QuestListHero.getQuestList','mode':'unchanged-full-source-png'}
+ result={'format':'oc2-original-quest-ui-v2','layouts':{'book':{'stagePixels':book['stagePixels'],'fields':layout},'hud':{'fields':hud_layout}},
+  'methods':methods,'assets':assets,'data':data,'strings':strings,'emptyTextStyle':empty_style,
+  'sources':{k:{'bytes':len(v),'sha256':hashlib.sha256(v).hexdigest()} for k,v in loaded.items()},
   'provenance':{'swfScriptExecution':False,'originalServerStateAvailable':False,
-   'limits':['Original list/detail/button transforms and HUD quest-state icon paths are verified. DOM scrolling, responsive scaling, typography, panel compositing, preview-row icon reuse and object inspector are web adaptations. The embedded normalquest bitmap has metadata only and no exact external file was found.',
-   'Catalog preview does not accept, track, abandon, complete or award original quests. Source runtime object flags remain unknown without server evidence.']}}
+   'limits':['Original list/detail/button transforms, the empty-list text branch and HUD quest-state icon paths are verified. The normalquest bitmap has metadata only and no exact external file was found.',
+   'The game enables only the verified empty accepted-list branch. Catalog rows, research legends and object inspectors are not displayed as live game UI. Original nonempty quest processing and WindowContainerIGM framing/font fallback remain incomplete.']}}
  (destination/'quests.json').write_text(json.dumps(result,ensure_ascii=False,indent=2));return result

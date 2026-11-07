@@ -18,6 +18,7 @@ import struct
 import zipfile
 from pathlib import Path
 from bdae_primitives import primitive_indices, FORMAT as PRIMITIVE_INDEX_FORMAT
+from bdae_attributes import select_attributes, FORMAT as ATTRIBUTE_FORMAT
 
 
 class BDAE:
@@ -105,35 +106,22 @@ class BDAE:
             types = self.rel(data + 36)
             components = self.rel(data + 44)
             attrs = [(self.u(strides + k * 4), self.u(offsets + k * 4), self.u(types + k * 4), self.u(components + k * 4)) for k in range(attribute_count)]
-            # Some lit scene meshes insert uint8 color before UV0. UV0 is the
-            # first float2 stream; an optional second float2 stream is lightmap UV.
-            uv_attribute = next((a for a in attrs[2:] if a[2:] == (6, 2)), None)
-            if uv_attribute is None:
-                raise ValueError(f'Missing supported float2 UV stream: {attrs}')
-            selected_attrs = attrs[:2] + [uv_attribute]
-            for stride, offset, dtype, count in selected_attrs:
-                if dtype != 6 or count not in (2, 3) or offset + count * 4 > stride:
-                    raise ValueError(f'Unsupported non-float vertex attribute {attrs}')
-            if [a[3] for a in selected_attrs] != [3, 3, 2]:
-                raise ValueError('Position, normal, and UV layout does not match observed format')
+            primitive_count, primitive_table = self.u(data + 96), self.rel(data + 100)
             vertex_ptr, vertex_bytes = self.q(data + 64), self.q(data + 72)
-            if vertex_count * attrs[0][0] > vertex_bytes:
-                raise ValueError('Vertex buffer is shorter than declared count')
             self.at(vertex_ptr, vertex_bytes)
-            values = [[], [], []]
-            for k, (stride, offset, dtype, count) in enumerate(selected_attrs):
+            streams, source_attributes = select_attributes(self, primitive_table, primitive_count,
+                                                           attrs, vertex_count, vertex_bytes)
+            values = {role: [] for role in streams}
+            for role, (stride, offset, dtype, count) in streams.items():
                 for v in range(vertex_count):
                     elements = self.unpack('f' * count, vertex_ptr + v * stride + offset)
                     if not all(math.isfinite(f) for f in elements):
                         raise ValueError('Non-finite vertex attribute')
-                    values[k].extend(round(f, 7) for f in elements)
-                    if k == 0:
+                    values[role].extend(round(f, 7) for f in elements)
+                    if role == 'positions':
                         for axis in range(3):
                             bounds[0][axis] = min(bounds[0][axis], elements[axis])
                             bounds[1][axis] = max(bounds[1][axis], elements[axis])
-            primitive_count, primitive_table = self.u(data + 96), self.rel(data + 100)
-            if not 0 < primitive_count < 256:
-                raise ValueError('Unsupported primitive count')
             indices = []
             groups = []
             for k in range(primitive_count):
@@ -147,7 +135,9 @@ class BDAE:
                 groups.append({'start': len(indices), 'count': count, 'material': material_index, 'materialName': material_name, **source_window})
                 indices.extend(face_indices)
             unique_materials = set(g['material'] for g in groups)
-            meshes.append({'name': self.string(self.q(record)), 'positions': values[0], 'normals': values[1], 'uvs': values[2], 'indices': indices, 'material': groups[0]['material'] if len(unique_materials) == 1 else None, 'groups': groups, 'vertexCount': vertex_count, 'triangleCount': len(indices) // 3})
+            meshes.append({'name': self.string(self.q(record)), **values, 'sourceAttributes': source_attributes,
+                           'indices': indices, 'material': groups[0]['material'] if len(unique_materials) == 1 else None,
+                           'groups': groups, 'vertexCount': vertex_count, 'triangleCount': len(indices) // 3})
             # Verified character/equipment layout: native VS uses T at +32 and
             # negative B at +44. Retain these streams instead of inventing TBN.
             if attrs == [(56,0,6,3),(56,12,6,3),(56,24,6,2),(56,32,6,3),(56,44,6,3)]:
@@ -159,7 +149,10 @@ class BDAE:
                         directions.extend(round(value,7) for value in vector)
                     meshes[-1][key]=directions
         warnings.append('Static source geometry only; node transforms, skinning, original shaders, and animations are not evaluated.')
-        return {'format': 'bdae946-static-v1', 'source': self.path.as_posix(), 'sourceSHA256': hashlib.sha256(self.path.read_bytes()).hexdigest(), 'version': self.version, 'coordinateSystem': 'Y_UP', 'sourceIndexing':{'format':PRIMITIVE_INDEX_FORMAT,'mode':'mesh-wide indices rebased from each source primitive vertex window'}, 'textures': textures, 'materials': materials, 'meshes': meshes, 'bounds': bounds, 'warnings': warnings}
+        return {'format': 'bdae946-static-v1', 'source': self.path.as_posix(), 'sourceSHA256': hashlib.sha256(self.path.read_bytes()).hexdigest(), 'version': self.version, 'coordinateSystem': 'Y_UP',
+                'sourceIndexing':{'format':PRIMITIVE_INDEX_FORMAT,'mode':'mesh-wide indices rebased from each source primitive vertex window'},
+                'sourceAttributes':{'format':ATTRIBUTE_FORMAT,'mode':'source semantics checked across each mesh primitive'},
+                'textures': textures, 'materials': materials, 'meshes': meshes, 'bounds': bounds, 'warnings': warnings}
 
 
 def main():

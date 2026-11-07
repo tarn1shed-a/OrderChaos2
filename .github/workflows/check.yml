@@ -30,6 +30,7 @@ jobs:
       - run: python -m pip install -r tools/requirements-resources.txt
       - run: python tools/resource_tests.py
       - run: python tools/bdae_tests.py
+      - run: python tools/bdae_attributes_tests.py
       - run: python tools/bdae_animation_tests.py
       - run: python tools/bdae_skin_tests.py
       - run: python tools/beff_effects_tests.py

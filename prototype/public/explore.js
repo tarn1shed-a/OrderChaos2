@@ -2,8 +2,10 @@ import * as THREE from '/vendor/three.module.js';
 import { RESOURCE_WORLD } from './world.js';
 import { sampleHeight } from './heightfield.js';
 import { webSocketEndpoint } from './network.js';
-import { createCharacterFactory, updateCharacterAnimation, disposeCharacterAnimation, snapshotMotion, syncCharacterCombat, characterAnimationState, setCharacterEquipment, characterEquipmentState } from './character-animation.js';
+import { createCharacterFactory, updateCharacterAnimation, disposeCharacterAnimation, snapshotMotion, syncCharacterCombat, characterAnimationState, setCharacterEquipment, characterEquipmentState, setCharacterLook } from './character-animation.js';
 import { equipmentAppearanceKey } from './character-equipment.js';
+import { lookKey } from './character-look.js';
+import { createCharacterMaterial } from './character-materials.js';
 import { applyCombatAnimations } from './combat-animation.js';
 import { SKILLS, skillById } from './skills.js';
 import { createCombatEffects } from './combat-effects.js';
@@ -26,6 +28,7 @@ let wolfTemplate, monsterSnapshot = [], selectedMonsterId = null, character = nu
 let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset = 0;
 let combatEffects, environment, hdrRenderer, hud, inventoryUI, nextSkillRequestAt = 0;
 let renderEquipmentPreview, equipmentPreviewKey;
+let playerLookProfile;
 const monsterViews = new Map();
 let target = null, keys = new Set(), avatars = new Map(), rosterSignature = '', generation = 0, retryTimer, manualExit = false;
 let azimuth = .65, elevation = .58, distance = 24, previous = performance.now(), pointer = null;
@@ -61,9 +64,11 @@ function updateCharacter(data, savedAt = null) {
   $('save-status').textContent = warning || (saveAt ? `服务器已保存 · ${new Date(saveAt).toLocaleTimeString('zh-CN')}` : '恢复凭据已记住 · 进度由服务器保存');
   hud?.character(data);
   inventoryUI?.update(data);
-  if (renderEquipmentPreview && equipmentAppearanceKey(data.equipment)!==equipmentPreviewKey) {
-    equipmentPreviewKey=equipmentAppearanceKey(data.equipment);
-    const preview=renderEquipmentPreview(data.equipment);inventoryUI.setModel(preview.model.url);hud.setPlayerPortrait(preview.portrait);
+  const previewKey=`${equipmentAppearanceKey(data.equipment)}:${lookKey(data.look)}`;
+  if (renderEquipmentPreview && previewKey!==equipmentPreviewKey) {
+    equipmentPreviewKey=previewKey;
+    const preview=renderEquipmentPreview(data.equipment,data.look);
+    inventoryUI.setModel(renderEquipmentPreview(data.equipment,inventoryUI.previewLook||data.look).model.url);hud.setPlayerPortrait(preview.portrait);
     rosterSignature='';
   }
   updateTarget();
@@ -134,7 +139,7 @@ function updateSkills() {
 }
 const fighterMaterials=new WeakMap();
 function prepareFighter(body) {
-  const materials=new Map(),clone=material=>{if(!materials.has(material))materials.set(material,material.clone());return materials.get(material);};
+  const materials=new Map(),clone=material=>{if(material.userData.characterMaterial)return material;if(!materials.has(material))materials.set(material,material.clone());return materials.get(material);};
   body.traverse(obj => {
     if (!obj.isMesh) return;
     obj.material=Array.isArray(obj.material)?obj.material.map(clone):clone(obj.material);
@@ -178,16 +183,28 @@ function geometry(data) {
   g.computeBoundingSphere(); return g;
 }
 
-async function texture(url) {
+async function texture(url,colorSpace=THREE.SRGBColorSpace) {
   if (!url) return null;
-  if (!textureCache.has(url)) textureCache.set(url, new THREE.TextureLoader().loadAsync(url).then(t => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); return t; }));
-  return textureCache.get(url);
+  const key=`${colorSpace}:${url}`;
+  if (!textureCache.has(key)) textureCache.set(key, new THREE.TextureLoader().loadAsync(url).then(t => { t.colorSpace = colorSpace; t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); return t; }));
+  return textureCache.get(key);
 }
 
 async function loadModel(entry) {
   const data = await json(entry.url), group = new THREE.Group();
-  if (entry===assets.player && data.appearance?.format!=='oc2-equipment-appearance-v1') throw new Error('原装备模型资源缺失，请重新构建本地资源');
-  const materials = await Promise.all(data.materials.map(async mat => {
+  if (entry===assets.player && (data.appearance?.hair?.format!=='oc2-character-hair-v1'||data.characterMaterials?.format!=='oc2-character-materials-v1')) throw new Error('原发型和角色材质资源缺失，请重新构建本地资源');
+  let materials;
+  if(data.characterMaterials){
+    const profile=data.characterMaterials,textures=new Map();
+    await Promise.all([...new Set(profile.materials.flatMap(mat=>Object.values(mat.samplers)))].map(async url=>{
+      const tex=await texture(url,THREE.NoColorSpace);textures.set(url,tex);
+    }));
+    for(const material of profile.materials)for(const key of ['diffusePal','specularPal','specularPalBack']){
+      const tex=textures.get(material.samplers[key]);tex.generateMipmaps=false;tex.minFilter=tex.magFilter=THREE.LinearFilter;tex.needsUpdate=true;
+    }
+    materials=profile.materials.map(entry=>createCharacterMaterial(THREE,entry,textures,profile.colors));
+    if(entry===assets.player)playerLookProfile={hair:data.appearance.hair,materials:profile};
+  }else materials = await Promise.all(data.materials.map(async mat => {
     const tex = await texture(assets.textures[mat.diffuse]);
     return new THREE.MeshStandardMaterial({ map: tex, color: tex ? 0xffffff : 0xa7bda1, roughness: .93, metalness: 0, side: THREE.DoubleSide, alphaTest: .35 });
   }));
@@ -248,7 +265,9 @@ async function init() {
     assets = await json('/assets/manifest.json');
     if (!assets.player?.attachmentPoints||!assets.effects||!assets.rendering||!assets.ui) throw new Error('原始挂点、光影与界面资源需要更新，请重新运行本地资源构建工具');
     const uiProfile=await loadOriginalUI(await json(assets.ui.url));hud=createRecoveredHUD(uiProfile.hud);
-    inventoryUI=createInventoryUI(uiProfile,{send,stop,focusGame:()=>canvas.focus({preventScroll:true})});
+    inventoryUI=createInventoryUI(uiProfile,{send,stop,focusGame:()=>canvas.focus({preventScroll:true}),previewLook:look=>{
+      if(character&&renderEquipmentPreview)inventoryUI.setModel(renderEquipmentPreview(character.equipment,look).model.url);
+    }});
     terrainData = await json(assets.map.url);
     mapBounds = [terrainData.bounds.min, terrainData.bounds.max];
     origin = new THREE.Vector3((mapBounds[0][0] + mapBounds[1][0]) / 2, mapBounds[0][1], (mapBounds[0][2] + mapBounds[1][2]) / 2);
@@ -278,16 +297,18 @@ async function init() {
       targetWolf:renderCharacterPortrait(THREE,renderer,modelFactories.get(wolfTemplate),{headNode:portraits.targetWolf.headNode,...portraits.targetWolf.webFraming}),
     });
     const equipmentPreviews=new Map(),createPlayer=modelFactories.get(modelTemplate);
-    renderEquipmentPreview=equipment=>{
-      const key=equipmentAppearanceKey(equipment);
-      const create=()=>{const body=createPlayer();setCharacterEquipment(body,equipment);return body;};
+    renderEquipmentPreview=(equipment,look)=>{
+      const key=`${equipmentAppearanceKey(equipment)}:${lookKey(look)}`;
+      const create=()=>{const body=createPlayer();setCharacterEquipment(body,equipment);setCharacterLook(body,look);return body;};
       if(!equipmentPreviews.has(key))equipmentPreviews.set(key,{
         model:renderCharacterPortrait(THREE,renderer,create,{fullBody:true,frameHeight:1.18,direction:[.22,.02,1]}),
         portrait:renderCharacterPortrait(THREE,renderer,create,{headNode:portraits.player.headNode,...portraits.player.webFraming}),
       });
+      if(equipmentPreviews.size>24)equipmentPreviews.delete(equipmentPreviews.keys().next().value);
       return equipmentPreviews.get(key);
     };
     inventoryUI.setModel(renderEquipmentPreview({}).model.url);
+    inventoryUI.setLookOptions(playerLookProfile);
     const effectData=await json(assets.effects.url),effectTextures=new Map();
     const effectURLs=[...new Set(Object.values(effectData.effects).flatMap(effect=>Object.values(effect.textureURLs)))];
     await Promise.all(effectURLs.map(async url=>effectTextures.set(url,await texture(url))));
@@ -318,13 +339,13 @@ async function init() {
 
 function updateRoster() {
   $('count').textContent = `${snapshot.length} / 8`;
-  const sig = JSON.stringify(snapshot.map(p => [p.id, p.name, p.hp, p.level, equipmentAppearanceKey(p.equipment)])); if (sig === rosterSignature) return; rosterSignature = sig;
+  const sig = JSON.stringify(snapshot.map(p => [p.id, p.name, p.hp, p.level, equipmentAppearanceKey(p.equipment),lookKey(p.look)])); if (sig === rosterSignature) return; rosterSignature = sig;
   $('players').replaceChildren();
   if (!snapshot.length) { const li = document.createElement('li'); li.className = 'empty'; li.textContent = '等待冒险者进入。'; $('players').append(li); }
   for (const p of snapshot) {
     const li = document.createElement('li'), icon = document.createElement('span'), text = document.createElement('span'), tag = document.createElement('small');
     icon.className = 'avatar';icon.style.borderColor=p.color;
-    const portrait=renderEquipmentPreview?.(p.equipment)?.portrait.url||hud?.playerPortrait;
+    const portrait=renderEquipmentPreview?.(p.equipment,p.look)?.portrait.url||hud?.playerPortrait;
     if(portrait){const image=document.createElement('img');image.src=portrait;image.alt='';icon.append(image);}else icon.textContent='◇';
     text.textContent = p.name; tag.textContent = `Lv.${p.level || 1} · ${p.hp ?? 100} HP${p.id === selfId ? ' · 你' : ''}`; li.append(icon, text, tag); $('players').append(li);
   }
@@ -346,7 +367,9 @@ function syncAvatars(serverTime = Date.now()) {
     }
     const a = avatars.get(p.id); a.target.copy(localPosition(p.x, p.y));
     setCharacterEquipment(a.body,p.equipment);
+    setCharacterLook(a.body,p.look);
     a.label.dataset.equipment=characterEquipmentState(a.body)?.key||'';
+    a.label.dataset.look=lookKey(p.look);
     a.motion = snapshotMotion(a.lastState, p, (serverTime - a.lastStateAt) / 1000, (mapBounds[1][0] - mapBounds[0][0]) / world.width);
     a.lastState = { x: p.x, y: p.y }; a.lastStateAt = serverTime;
     syncCharacterCombat(a.body, p, serverTime, a.attackSeconds);
@@ -389,7 +412,6 @@ function resetConnection() {
   connected = false; snapshot = []; monsterSnapshot = []; selfId = null; keys.clear(); target = null; selectedMonsterId=null; updateRoster(); syncAvatars(); syncMonsters();
   for (const id of ['name', 'room']) $(id).disabled = false;
   $('join').disabled = !ready; $('join').firstElementChild.textContent = '进入试炼'; $('invite').disabled = $('second').disabled = true; $('leave').hidden = true;
-  $('touch-controls').classList.remove('active');
   updateSkills();
 }
 function connect(name, room, retry = false) {
@@ -406,7 +428,7 @@ function connect(name, room, retry = false) {
       monsterCooldownMs = msg.combat?.monsterCooldownMs ?? 1000;
       selfId = msg.id; world = msg.world; connected = true; status(`营地 ${msg.room}`, true);
       rememberCharacter(msg.character,msg.resumeToken); updateCharacter(msg.character,msg.savedAt);
-      $('join').firstElementChild.textContent = '已进入试炼'; $('invite').disabled = $('second').disabled = false; $('touch-controls').classList.add('active');
+      $('join').firstElementChild.textContent = '已进入试炼'; $('invite').disabled = $('second').disabled = false;
       $('load-note').textContent = '空格 / F 攻击 · 1 火球术 · 2 冰霜爆破 · 施法时短暂停步';
       const restored = msg.restored ? '已恢复角色进度。' : '已创建角色，开始第一次试炼。';
       message(characterSessionWarning() || restored); logEvent(restored);
@@ -476,10 +498,6 @@ canvas.addEventListener('pointerup', e => {
 });
 canvas.addEventListener('pointercancel', () => { pointer = null; });
 canvas.addEventListener('wheel', e => { e.preventDefault(); distance = THREE.MathUtils.clamp(distance * Math.exp(e.deltaY * .001), 4, 160); }, { passive: false });
-for (const button of document.querySelectorAll('[data-key]')) {
-  button.addEventListener('pointerdown', e => { e.preventDefault(); if (!connected) return; button.setPointerCapture(e.pointerId); target = null; keys.add(button.dataset.key); });
-  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(type, () => keys.delete(button.dataset.key));
-}
 setInterval(() => {
   if (!connected || document.hidden) return;
   if(inventoryUI?.isOpen){send({type:'input',x:0,y:0});return;}

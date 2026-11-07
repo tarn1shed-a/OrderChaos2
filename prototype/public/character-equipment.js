@@ -1,4 +1,5 @@
 import { EQUIPMENT_SLOTS, itemById } from './items.js';
+import { defaultLook } from './character-look.js';
 
 export function equipmentAppearanceKey(equipment) {
   return Object.keys(EQUIPMENT_SLOTS).map(slot => itemById(equipment?.[slot])?.slot === slot ? equipment[slot] : '-').join('|');
@@ -23,6 +24,13 @@ export function validateEquipmentAppearance(data) {
     }
     if (!entry.hideBaseMeshIndices.every(index => base.has(index))) throw new Error('原装备隐藏部位无效');
   }
+  if(appearance.hair){
+    const hair=appearance.hair;
+    if(hair.format!=='oc2-character-hair-v1'||!['hair1','hair2','hair3'].every(key=>hair.styles?.[key]?.meshIndices?.length))throw new Error('原发型资源不完整');
+    for(const style of Object.values(hair.styles))for(const index of style.meshIndices){
+      if(!valid(index)||used.has(index))throw new Error('原发型网格索引无效');used.add(index);
+    }
+  }
   if (used.size !== data.meshes.length || !['trainingSword','linenArmor','travelerBoots'].every(id => appearance.items[id])) throw new Error('原装备外观资源不完整');
   for (const [index, mesh] of data.meshes.entries()) {
     const attachment = mesh.attachment;
@@ -33,13 +41,17 @@ export function validateEquipmentAppearance(data) {
 }
 
 // Visibility changes only. Geometry, weights, bones and animation clocks stay intact.
-export function applyEquipmentMeshes(objects, appearance, equipment) {
+export function applyEquipmentMeshes(objects, appearance, equipment, look=defaultLook()) {
   const visible = new Set(appearance.baseMeshIndices), worn = [];
   for (const [id, item] of Object.entries(appearance.items)) {
     if (equipment?.[item.slot] !== id) continue;
     for (const index of item.hideBaseMeshIndices) visible.delete(index);
     for (const index of item.meshIndices) visible.add(index);
     worn.push(id);
+  }
+  if(appearance.hair){
+    const style=appearance.hair.styles[look.hair]||appearance.hair.styles[appearance.hair.defaultStyle];
+    for(const index of style.meshIndices)visible.add(index);
   }
   objects.forEach((object, index) => { object.visible = visible.has(index); });
   return { key: equipmentAppearanceKey(equipment), items: worn, visibleMeshIndices: [...visible].sort((a,b) => a-b) };

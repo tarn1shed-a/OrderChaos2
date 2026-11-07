@@ -8,7 +8,7 @@ export const COMBAT = Object.freeze({ playerDamage: 20, playerCooldownMs: 700, m
 
 export function syncPlayerStats(ws) {
   Object.assign(ws.player, { level: ws.character.level, hp: ws.character.hp, maxHp: ws.character.maxHp,
-    equipment: { ...ws.character.equipment }, stats: equipmentStats(ws.character) });
+    equipment: { ...ws.character.equipment }, look: { ...ws.character.look }, stats: equipmentStats(ws.character) });
 }
 
 export class CombatRoom {

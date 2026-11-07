@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, openSyn
 import { dirname, resolve } from 'node:path';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ITEMS, EQUIPMENT_SLOTS, itemById, starterInventory, emptyEquipment, equipmentStats } from '../public/items.js';
+import { defaultLook, validLook } from '../public/character-look.js';
 
 const hash = token => createHash('sha256').update(token).digest('hex');
 const integer = value => Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000_000;
@@ -10,10 +11,10 @@ export function characterView(record) {
   // Recovery credentials and saved positions are private; never spread a record into a room snapshot.
   return { id: record.id, name: record.name, level: record.level, xp: record.xp, gold: record.gold,
     kills: record.kills, hp: record.hp, maxHp: record.maxHp, inventory: { ...record.inventory },
-    equipment: { ...record.equipment }, stats: equipmentStats(record) };
+    equipment: { ...record.equipment }, look: { ...record.look }, stats: equipmentStats(record) };
 }
 
-function validate(record, legacy = false) {
+function validate(record, legacy = false, requireLook = true) {
   if (!record || typeof record.id !== 'string' || !/^[0-9a-f-]{36}$/.test(record.id) ||
       typeof record.name !== 'string' || !record.name.trim() || record.name.length > 16 ||
       typeof record.tokenHash !== 'string' || !/^[0-9a-f]{64}$/.test(record.tokenHash) ||
@@ -22,6 +23,7 @@ function validate(record, legacy = false) {
       !record.inventory || !integer(record.inventory.wolfPelt) || !record.positions || typeof record.positions !== 'object' || Array.isArray(record.positions)) {
     throw new Error('角色存档结构无效');
   }
+  if(requireLook && !validLook(record.look))throw new Error('角色外观存档无效');
   if (legacy) {
     if (record.maxHp !== 100 + (record.level - 1) * 20) throw new Error('旧版角色生命存档无效');
   } else {
@@ -51,17 +53,19 @@ export class CharacterStore {
       let original;
       try { original = readFileSync(this.saveFile); data = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(original)); }
       catch (error) { throw new Error(`无法读取角色存档，原文件保留：${error.message}`); }
-      if (![1, 2].includes(data.version) || !Array.isArray(data.characters)) throw new Error('不支持的角色存档版本，原文件保留');
+      if (![1, 2, 3].includes(data.version) || !Array.isArray(data.characters)) throw new Error('不支持的角色存档版本，原文件保留');
       for (const record of data.characters) {
-        validate(record, data.version === 1);
+        validate(record, data.version === 1, data.version === 3);
         if (this.records.has(record.id)) throw new Error('角色存档含重复 ID');
         if (data.version === 1) {
           record.inventory = { ...starterInventory(), wolfPelt: record.inventory.wolfPelt };
-          record.equipment = emptyEquipment(); validate(record);
+          record.equipment = emptyEquipment();
         }
+        if(data.version<3)record.look=defaultLook();
+        validate(record);
         this.records.set(record.id, record);
       }
-      if (data.version === 1) { this.legacySource = original; this.dirty = true; }
+      if (data.version < 3) { this.legacySource = original; this.legacyVersion=data.version; this.dirty = true; }
       this.savedAt = data.savedAt || null;
     }
   }
@@ -75,7 +79,7 @@ export class CharacterStore {
     }
     const token = randomBytes(32).toString('hex');
     const record = { id: randomUUID(), name, tokenHash: hash(token), createdAt: Date.now(), updatedAt: Date.now(),
-      level: 1, xp: 0, gold: 0, kills: 0, hp: 100, maxHp: 100, inventory: starterInventory(), equipment: emptyEquipment(), positions: {} };
+      level: 1, xp: 0, gold: 0, kills: 0, hp: 100, maxHp: 100, inventory: starterInventory(), equipment: emptyEquipment(), look: defaultLook(), positions: {} };
     this.records.set(record.id, record); this.touch(record); this.flush();
     return { record, resumeToken: token, restored: false };
   }
@@ -97,13 +101,13 @@ export class CharacterStore {
     try {
       mkdirSync(dirname(this.saveFile), { recursive: true, mode: 0o700 });
       if (this.legacySource !== undefined) {
-        const backup = `${this.saveFile}.v1-backup-${randomUUID()}.json`;
+        const backup = `${this.saveFile}.v${this.legacyVersion}-backup-${randomUUID()}.json`;
         writeFileSync(backup, this.legacySource, { mode: 0o600, flag: 'wx' });
         const backupFd = openSync(backup, 'r');
         try { fsyncSync(backupFd); } finally { closeSync(backupFd); }
         this.legacySource = undefined;
       }
-      writeFileSync(temporary, JSON.stringify({ version: 2, savedAt: now, characters: [...this.records.values()] }, null, 2), { mode: 0o600, flag: 'wx' });
+      writeFileSync(temporary, JSON.stringify({ version: 3, savedAt: now, characters: [...this.records.values()] }, null, 2), { mode: 0o600, flag: 'wx' });
       const fd = openSync(temporary, 'r');
       try { fsyncSync(fd); } finally { closeSync(fd); }
       renameSync(temporary, this.saveFile);

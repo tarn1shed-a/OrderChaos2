@@ -15,25 +15,20 @@ export function createRecoveredHUD(profile) {
     $(id).querySelector('.attack-art,.skill-art').append(element);
     cooldowns[id]=mountSourceProgress(element,profile.progress[definition],profile.assets);cooldowns[id].set(0);
   }
-  const [x,y,width,height]=profile.layouts.operations.suggestedViewportPixels;
-  $('field-actions').style.aspectRatio=`${width}/${height}`;
-  for(const [slot,id]of [['0','field-attack'],['1','field-fireball'],['2','field-frost_blast'],['3','hud-empty-slot3'],['4','hud-empty-slot4']]){
-    const [left,top,w,h]=profile.layouts.operations.slots[slot].boundsPixels,element=$(id);
-    Object.assign(element.style,{left:`${(left-x)/width*100}%`,top:`${(top-y)/height*100}%`,width:`${w/width*100}%`,height:`${h/height*100}%`});
-    element.dataset.sourceSlot=slot;
-  }
+  // Reuse source artwork/masks while the desktop shortcut layout is our own.
+  $('field-actions').dataset.layout='desktop-two-bank';
   document.body.classList.add('recovered-hud');
   let portraits;
   function setPlayerPortrait(value){
     if(!portraits)portraits={};portraits.player=value;
-    for(const id of ['field-portrait','character-portrait']){$(id).src=value.url;$(id).dataset.mode=value.mode;}
+    for(const id of ['field-portrait','character-portrait','hotbar-portrait']){$(id).src=value.url;$(id).dataset.mode=value.mode;}
     if(portraits.targetWolf)$('scene').dataset.portraits=`${value.opaquePixels},${portraits.targetWolf.opaquePixels}`;
   }
   function character(data){
     const ratio=data.maxHp>0?Math.max(0,Math.min(1,data.hp/data.maxHp)):0;hp.set(ratio);
     const progress=Math.max(0,Number(data.xp)||0)%60;xp.set(progress/60);cardXP.set(progress/60);
     $('field-xp').value=progress;$('field-xp').max=60;
-    text('field-xp-text',`经验 ${progress} / 60`);text('field-name',data.name);text('field-stats',`生命 ${data.hp}/${data.maxHp} · 金币 ${data.gold}`);
+    text('field-xp-text',`经验 ${progress} / 60`);text('field-name',data.name);text('hotbar-level',data.level);text('field-stats',`生命 ${data.hp}/${data.maxHp} · 金币 ${data.gold}`);
     $('field-xp-glow').style.left=`${progress/60*100}%`;$('field-xp-glow').hidden=progress===0;
     $('field-portrait').alt=`${data.name}的角色头像`;$('character-portrait').alt=$('field-portrait').alt;
     document.body.classList.toggle('hud-dead',data.hp<=0);

@@ -81,10 +81,13 @@ def validate_equipment_references(tables):
     return result
 
 
-def merge_piece(result, source, source_skin=None, *, item=None, attachment=None):
+def merge_piece(result, source, source_skin=None, *, item=None, attachment=None, source_path=None):
     """Keep original vertices and bindings, only relocate material/mesh indices."""
     material_offset, mesh_offset = len(result['materials']), len(result['meshes'])
-    result['materials'].extend(copy.deepcopy(source['materials']))
+    materials=copy.deepcopy(source['materials'])
+    if source_path:
+        for material in materials:material['sourceModel']=source_path
+    result['materials'].extend(materials)
     indices = []
     for mesh in source['meshes']:
         value = copy.deepcopy(mesh)
@@ -122,6 +125,7 @@ def convert_equipment_character(extract):
         references = validate_equipment_references(tables)
         result = convert_character(load(BASE_MODEL), load(ANIMATION), load(BASE_MODEL), profile='player')
         result['source'] = BASE_MODEL
+        for material in result['materials']:material['sourceModel']=BASE_MODEL
         result['animationBinding'].update(source=ANIMATION, restSource=BASE_MODEL)
         base_count = len(result['meshes'])
         part_indices = {mesh['name'].removesuffix('-mesh'): index for index, mesh in enumerate(result['meshes'])}
@@ -133,7 +137,7 @@ def convert_equipment_character(extract):
             skin = recover_skin(reader, model, external_nodes=result['rig']['nodes'])
             if len(skin['skins']) != len(model['meshes']):
                 raise ValueError('Equipment garment has an unskinned mesh')
-            return merge_piece(result, model, skin, item=item)
+            return merge_piece(result, model, skin, item=item, source_path=path)
         for path in FOUNDATION:
             foundation_indices.extend(garment(path))
         base_indices.extend(foundation_indices)
@@ -155,7 +159,7 @@ def convert_equipment_character(extract):
                     'sourceBoneAlias': 'Weapon_R', 'sourceGripAlias': 'Dummy_Grip',
                     'sourceGripMatrix': grip_matrix,
                     'mode': 'source-nodes-web-grip-alignment', 'nativeAttachPipelineRestored': False}
-                mesh_indices.extend(merge_piece(result, model, item=key, attachment=attachment))
+                mesh_indices.extend(merge_piece(result, model, item=key, attachment=attachment, source_path=record['path']))
             hide = []
             for part in selection['hideParts']:
                 if part not in part_indices: raise ValueError(f'Body coverage mesh missing: {part}')

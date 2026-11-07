@@ -20,6 +20,8 @@ from character_portraits import recover_character_portraits
 from inventory_assets import recover_inventory_assets
 from item_icons import recover_item_icons
 from equipment_appearance import convert_equipment_character, BASE_MODEL
+from character_hair import recover_character_hair
+from character_materials import recover_character_materials
 from terrain_convert import convert as terrain_convert
 from texture_decode import convert as texture_convert
 
@@ -85,6 +87,14 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     def model(path, key, animated=False, profile='player', equipment=False):
         if equipment:
             result = convert_equipment_character(extract)
+            result['appearance']['hair']=recover_character_hair(extract,result)
+            result['characterMaterials']=recover_character_materials(extract,result,texture)
+            result['appearance']['provenance']['hairSelectionRecovered']=True
+            result['appearance']['provenance']['materialProfile']='oc2-character-materials-v1'
+            result['appearance']['provenance']['limitations']=[
+                value for value in result['appearance']['provenance']['limitations']
+                if not value.startswith('Original diffuse textures are used;')]
+            result['appearance']['provenance']['limitations'].append('Hair and material parameters are recovered in their dedicated profiles; full native character creation, global lighting and device-quality selection remain outside this preview.')
         elif animated:
             animation_path = ('model/npc/creature/beast/wolf/anim/animations.bdae' if profile == 'wolf'
                               else 'model/npc/character/elf/female/anim/animations.bdae')
@@ -107,7 +117,10 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
             record['combatAnimations'] = True
             record['attachmentPoints']=['Dummy_R_Hand','Dummy_L_Hand','Dummy_Chest'] if profile=='player' else ['Dummy_Chest']
             if profile == 'player': record['skillAnimations'] = True
-        if equipment: record['appearanceFormat'] = result['appearance']['format']
+        if equipment:
+            record['appearanceFormat'] = result['appearance']['format']
+            record['hairFormat']=result['appearance']['hair']['format']
+            record['materialFormat']=result['characterMaterials']['format']
         models[key] = record
         return record
     player_path=BASE_MODEL
@@ -160,12 +173,12 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         if path not in allowed_loose:raise ValueError(f'Unexpected loose resource: {path}')
         return safe_output(source, path)
     # Check actual Chinese interface characters, including dynamic combat labels.
-    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','recovered-hud.js','inventory-ui.js','items.js','character-equipment.js'])
+    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','recovered-hud.js','inventory-ui.js','items.js','character-equipment.js','character-look.js','character-materials.js'])
     required_text = ''.join(sorted({ch for ch in ui_text if '\u3400' <= ch <= '\u9fff'}))
     chinese = recover_chinese_fonts(read_loose, output, required_text)
     if chinese['requiredTextStatus'] != 'complete':raise ValueError('Original Chinese fonts do not cover the current interface')
     icons = recover_skill_icons(extract, output)
-    ui['format'] = 'oc2-original-ui-v5'
+    ui['format'] = 'oc2-original-ui-v6'
     ui['fonts']['faces'].update(chinese['faces'])
     ui['fonts']['chineseStatus'] = chinese['chineseStatus']
     ui['fonts']['requiredTextStatus'] = chinese['requiredTextStatus']

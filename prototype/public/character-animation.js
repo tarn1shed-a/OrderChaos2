@@ -1,6 +1,8 @@
 // Recovered source skeletons/clips; each character owns its bones and mixer.
 import { skillById } from './skills.js';
 import { validateEquipmentAppearance, applyEquipmentMeshes, equipmentAppearanceKey } from './character-equipment.js';
+import { defaultLook, validLook, lookKey } from './character-look.js';
+import { setCharacterMaterialLook } from './character-materials.js';
 const controllers = new WeakMap();
 
 export function snapshotMotion(previous, current, seconds, worldUnitsPerLogicalUnit) {
@@ -20,6 +22,8 @@ export function createCharacterFactory(THREE, data, materials) {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(mesh.positions, 3));
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(mesh.normals, 3));
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute(mesh.uvs, 2));
+    if(mesh.sourceTangents)geometry.setAttribute('sourceTangent',new THREE.Float32BufferAttribute(mesh.sourceTangents,3));
+    if(mesh.sourceBinormals)geometry.setAttribute('sourceBinormal',new THREE.Float32BufferAttribute(mesh.sourceBinormals,3));
     geometry.setIndex(mesh.indices);
     for (const group of mesh.groups || []) geometry.addGroup(group.start, group.count, group.material);
     const skin = skinByMesh.get(index);
@@ -50,10 +54,14 @@ export function createCharacterFactory(THREE, data, materials) {
     for (const [index, node] of data.rig.nodes.entries()) {
       if (node.parent < 0) group.add(nodes[index]); else nodes[node.parent].add(nodes[index]);
     }
-    const skeletons = [], meshObjects = [];
+    const skeletons = [], meshObjects = [], ownedMaterials=new Map();
+    const instanceMaterial=material=>{
+      if(!material?.userData.characterMaterial)return material;
+      if(!ownedMaterials.has(material))ownedMaterials.set(material,material.clone());return ownedMaterials.get(material);
+    };
     for (const [index, mesh] of data.meshes.entries()) {
       const skin = skinByMesh.get(index);
-      const material = mesh.groups?.length ? materials : materials[mesh.material ?? 0];
+      const material = mesh.groups?.length ? materials.map(instanceMaterial) : instanceMaterial(materials[mesh.material ?? 0]);
       const object = skin ? new THREE.SkinnedMesh(geometries[index], material) : new THREE.Mesh(geometries[index], material);
       if (skin) {
         const skeleton = new THREE.Skeleton(skin.boneNodes.map(node => nodes[node]), skin.inverseBindMatrices.map(matrix => new THREE.Matrix4().fromArray(matrix)));
@@ -91,7 +99,7 @@ export function createCharacterFactory(THREE, data, materials) {
     }
     const namedNodes = new Map();
     data.rig.nodes.forEach((node,index) => { for (const name of [node.name,...(node.aliases || [])]) if (name) namedNodes.set(name,nodes[index]); });
-    controllers.set(root, { mixer, idle, walk, nodes, namedNodes, skeletons, meshObjects, appearance, equipmentState, shots, weight: 0, moving: false,
+    controllers.set(root, { mixer, idle, walk, nodes, namedNodes, skeletons, meshObjects, ownedMaterials:[...ownedMaterials.values()], appearance, equipmentState, equipment:{}, look:defaultLook(), lookKey:lookKey(defaultLook()), shots, weight: 0, moving: false,
       now: 0, phase: 'idle', dead: false, lifeSince: -Infinity, lastSnapshotAt: -Infinity,
       attackAt: -Infinity, hitAt: -Infinity, deathAt: null, attackSeconds: .7, attackWeight: 0, hurtWeight: 0,
       cast: null, lastCastAt: -Infinity, skillWeight: 0 });
@@ -103,8 +111,19 @@ export function createCharacterFactory(THREE, data, materials) {
 export function setCharacterEquipment(root, equipment) {
   const c = controllers.get(root);
   if (!c?.appearance || c.equipmentState.key === equipmentAppearanceKey(equipment)) return false;
-  c.equipmentState = applyEquipmentMeshes(c.meshObjects, c.appearance, equipment);
+  c.equipment={...equipment};c.equipmentState = applyEquipmentMeshes(c.meshObjects, c.appearance, equipment,c.look);
   return true;
+}
+
+export function setCharacterLook(root,look){
+  const c=controllers.get(root);if(!c)return false;
+  const value=validLook(look)?look:defaultLook(),key=lookKey(value);
+  if(c.lookKey===key)return false;
+  const changed=true;c.look={...value};c.lookKey=key;
+  if(c.appearance)c.equipmentState=applyEquipmentMeshes(c.meshObjects,c.appearance,c.equipment,c.look);
+  const materials=new Set();for(const object of c.meshObjects)for(const material of Array.isArray(object.material)?object.material:[object.material])materials.add(material);
+  for(const material of materials)setCharacterMaterialLook(material,value);
+  return changed;
 }
 
 export function characterEquipmentState(root) {
@@ -249,5 +268,6 @@ export function disposeCharacterAnimation(root) {
   if (!controller) return;
   controller.mixer.stopAllAction(); controller.mixer.uncacheRoot(root);
   for (const skeleton of controller.skeletons) skeleton.dispose();
+  for(const material of controller.ownedMaterials)material.dispose();
   controllers.delete(root);
 }

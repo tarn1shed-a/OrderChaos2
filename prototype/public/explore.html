@@ -11,7 +11,7 @@
   <script type="module" src="/explore.js"></script>
 </head>
 <body>
-  <header class="topbar"><a class="brand" href="/"><span class="sigil">◇</span><span>重返营地<small>RETURN TO THE CAMP</small></span></a><span class="prototype">原作资源实验场 <i>02</i></span><div class="connection"><span id="lamp"></span><span id="status" role="status">载入资源</span></div></header>
+  <header class="topbar"><a class="brand" href="/"><span class="sigil">◇</span><span>重返营地<small>RETURN TO THE CAMP</small></span></a><span class="prototype">电脑浏览器原型 <i>02</i></span><div class="connection"><span id="lamp"></span><span id="status" role="status">载入资源</span></div></header>
   <main class="explore-layout">
     <section id="viewport" class="scene-panel" aria-label="原作三维场景">
       <canvas id="scene" tabindex="0" aria-label="三维地形，进入后用方向键移动，右键拖动旋转，滚轮缩放"></canvas>
@@ -22,18 +22,28 @@
         <div class="hud-player-text"><strong id="field-name">冒险者</strong><progress id="field-hp" max="100" value="100" aria-label="地图内角色生命"></progress><span id="field-stats"></span><span id="field-state" class="hud-state"></span></div>
       </div>
       <div id="target-hud" class="target-hud" hidden aria-label="目标状态"><div class="hud-target-portrait"><img id="target-portrait" class="hud-portrait" alt="目标头像"></div><div class="hud-target-text"><strong id="hud-target-name">等待目标</strong><progress id="hud-target-hp" max="60" value="60" aria-label="目标生命"></progress><span id="hud-target-health"></span><span id="hud-target-state" class="hud-state"></span></div></div>
-      <div id="field-actions" class="field-actions" hidden>
-        <span class="hud-skill-track" aria-hidden="true"></span>
-        <button id="field-attack" class="field-attack" hidden disabled aria-label="普通攻击 · 空格 / F"><span class="attack-art" aria-hidden="true"><span class="attack-label">攻击</span><span class="attack-key">F</span></span></button>
-        <button id="field-fireball" class="field-skill fire" aria-label="火球术 · 1" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">1</span></span><span class="skill-label">火球术</span></button>
-        <button id="field-frost_blast" class="field-skill frost" aria-label="冰霜爆破 · 2" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">2</span></span><span class="skill-label">冰霜爆破</span></button>
-        <span id="hud-empty-slot3" class="hud-empty-slot" aria-hidden="true"></span><span id="hud-empty-slot4" class="hud-empty-slot" aria-hidden="true"></span>
+      <div id="field-actions" class="field-actions desktop-hotbar" hidden aria-label="键盘技能快捷栏">
+        <span class="desktop-shortcuts">WASD 移动 · 鼠标控制镜头 · B 背包装备</span>
+        <div class="hotbar-bank hotbar-left">
+          <button id="field-fireball" class="field-skill fire" aria-label="火球术 · 1" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">1</span></span><kbd class="slot-key">1</kbd><span class="skill-label">火球术</span></button>
+          <button id="field-frost_blast" class="field-skill frost" aria-label="冰霜爆破 · 2" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">2</span></span><kbd class="slot-key">2</kbd><span class="skill-label">冰霜爆破</span></button>
+          <span id="hud-empty-slot3" class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">3</kbd></span>
+          <span id="hud-empty-slot4" class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">4</kbd></span>
+          <span id="hud-empty-slot5" class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">5</kbd></span>
+        </div>
+        <div class="hotbar-core"><button id="field-attack" class="field-attack" hidden disabled aria-label="普通攻击 · 空格 / F"><span class="attack-art" aria-hidden="true"><img id="hotbar-portrait" class="hud-portrait" alt=""><span class="attack-label">普通攻击</span><span class="attack-key">F</span></span></button><span id="hotbar-level" aria-label="快捷栏角色等级">1</span></div>
+        <div class="hotbar-bank hotbar-right">
+          <span class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">6</kbd></span>
+          <span class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">7</kbd></span>
+          <span class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">8</kbd></span>
+          <span class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">9</kbd></span>
+          <span class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">0</kbd></span>
+        </div>
       </div>
       <div id="field-experience" class="field-experience" hidden><span id="field-xp-text">经验 0 / 60</span><progress id="field-xp" value="0" max="60" aria-label="地图内角色经验"></progress><div class="hud-xp-track" aria-hidden="true"><i id="field-xp-fill"></i><i id="field-xp-glow"></i></div></div>
       <div id="combat-feedback" aria-live="polite"></div>
       <div class="scene-notice" id="load-note" role="status">正在读取本地转换后的地形与模型…</div>
       <div class="scene-bottom"><span id="position">等待探索</span><button id="reset-view">⌖ 回到角色视角</button></div>
-      <div id="touch-controls" aria-label="触屏方向控制"><button data-key="ArrowUp" aria-label="向上">↑</button><button data-key="ArrowLeft" aria-label="向左">←</button><button data-key="ArrowDown" aria-label="向下">↓</button><button data-key="ArrowRight" aria-label="向右">→</button></div>
     </section>
     <aside>
       <div class="chapter"><span>资源复原实验</span><span>Ⅱ</span></div>
@@ -56,9 +66,9 @@
       <section class="battle-log"><h3>冒险记录</h3><ol id="events"><li>完成第一次击杀，获得你的第一份奖励。</li></ol></section>
       <section class="party"><div class="section-title"><h3>同行者</h3><span id="count">0 / 8</span></div><ul id="players"><li class="empty">等待冒险者进入。</li></ul></section>
       <div class="invite-actions"><button id="invite" disabled>⌁ 复制邀请链接</button><button id="second" disabled>↗ 打开第二个玩家窗口</button></div>
-      <div class="controls"><h3>探索指南</h3><p>WASD / 方向键：相对视角移动</p><p>点击野狼选中 · 空格 / F：攻击</p><p>B / C：背包与装备 · Esc：关闭</p><p>右键拖动：旋转镜头 · 滚轮：缩放</p><p>点击地面：直线移动 · 手机：方向按钮</p></div>
+      <div class="controls"><h3>探索指南</h3><p>WASD / 方向键：相对视角移动</p><p>点击野狼选中 · 空格 / F：攻击</p><p>B / C：背包与装备 · Esc：关闭</p><p>右键拖动：旋转镜头 · 滚轮：缩放</p><p>点击地面：直线移动 · B：背包与外观</p></div>
       <p class="skill-hint">1：火球术 · 2：冰霜爆破<br>施法时短暂停步，倒地或目标失效会中断。</p>
-      <section class="recovery"><h3>资源与玩法</h3><p id="asset-detail">正在核对资源…</p><p>原版生命弧、经验条和战斗技能栏已接入。头像由原模型渲染，取景为网页适配；玩法数值由本地服务器判定并保存。</p><a class="asset-library-link" href="/assets/library/index.html" target="_blank" rel="noopener">浏览本地美术素材库 ↗</a></section>
+      <section class="recovery"><h3>资源与玩法</h3><p id="asset-detail">正在核对资源…</p><p>原版生命弧、经验条与技能图标已接入，技能栏按电脑键鼠操作横排。头像由原模型渲染，取景为网页适配；玩法数值由本地服务器判定并保存。</p><a class="asset-library-link" href="/assets/library/index.html" target="_blank" rel="noopener">浏览本地美术素材库 ↗</a></section>
       <button id="leave" class="leave" hidden>离开营地</button><a class="back-link" href="/">← 返回营地原型</a>
     </aside>
   </main>
@@ -66,7 +76,7 @@
     <div class="inventory-window">
       <header class="inventory-heading"><div><span class="inventory-eyebrow">冒险者行囊</span><h2 id="inventory-title">背包与装备</h2></div><button id="inventory-close" type="button" aria-label="关闭背包">×</button></header>
       <div class="inventory-columns">
-        <section class="equipment-pane" aria-labelledby="equipment-name"><h3 id="equipment-name">冒险者</h3><div class="equipment-stage"><div id="equipment-canvas"><img id="equipment-model" alt="原版玩家精灵与当前装备外观"><div id="equipment-slots"></div></div></div><p class="equipment-preview-note">原版玩家精灵 · 装备外观随穿脱更新</p><dl class="equipment-stats"><div><dt>普通攻击</dt><dd id="equipment-attack">20</dd></div><div><dt>防御</dt><dd id="equipment-armor">0</dd></div><div><dt>生命</dt><dd id="equipment-life">100 / 100</dd></div></dl></section>
+        <section class="equipment-pane" aria-labelledby="equipment-name"><h3 id="equipment-name">冒险者</h3><div class="equipment-stage"><div id="equipment-canvas"><img id="equipment-model" alt="原版玩家精灵与当前装备外观"><div id="equipment-slots"></div></div></div><p class="equipment-preview-note">原版玩家精灵 · 装备外观随穿脱更新</p><div class="look-controls" aria-label="角色外观设置"><label>发型<select id="look-hair" aria-label="发型"></select></label><label>发色<select id="look-hair-color" aria-label="发色"></select></label><label>肤色<select id="look-skin-color" aria-label="肤色"></select></label><button id="look-apply" type="button" disabled>保存外观</button></div><dl class="equipment-stats"><div><dt>普通攻击</dt><dd id="equipment-attack">20</dd></div><div><dt>防御</dt><dd id="equipment-armor">0</dd></div><div><dt>生命</dt><dd id="equipment-life">100 / 100</dd></div></dl></section>
         <section class="bag-pane" aria-labelledby="bag-title"><div class="bag-heading"><h3 id="bag-title">背包 <small id="bag-count">0 / 40 格</small></h3><span class="bag-gold"><i aria-hidden="true"></i><b id="inventory-gold">0</b> 金币</span></div><nav class="bag-filters" aria-label="物品筛选"><button type="button" data-bag-filter="all" aria-pressed="true">全部</button><button type="button" data-bag-filter="equipment" aria-pressed="false">装备</button><button type="button" data-bag-filter="material" aria-pressed="false">材料</button></nav><div id="bag-slots" class="bag-slots" aria-label="背包物品"></div><section class="item-detail" aria-label="选中物品"><div id="item-detail-content"><p>选择物品查看详情，或点击装备槽卸下装备。</p></div><button id="item-action" type="button" hidden>穿戴装备</button></section></section>
       </div>
       <footer class="inventory-footer"><span id="inventory-status" role="status">物品和装备由本地服务器保存。</span><small>查看背包时世界仍在运行 · 新手装备与数值为本地玩法</small></footer>

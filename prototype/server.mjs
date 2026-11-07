@@ -8,6 +8,7 @@ import { CharacterStore, characterView } from './game/character-store.mjs';
 import { CombatRoom, COMBAT, syncPlayerStats } from './game/combat.mjs';
 import { SKILLS } from './public/skills.js';
 import { changeEquipment } from './game/equipment.mjs';
+import { validLook } from './public/character-look.js';
 
 const PUBLIC = fileURLToPath(new URL('./public/', import.meta.url));
 const CONVERTED = fileURLToPath(new URL('../game-data/converted/', import.meta.url));
@@ -136,6 +137,10 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
         const result = changeEquipment(ws.character, msg);
         if (result.error) return notice(ws, result.error);
         syncPlayerStats(ws); changed(ws, true); notice(ws, result.message);
+      } else if (msg.type === 'look' && ws.player) {
+        if (!validLook(msg.look)) return notice(ws, '外观选项无效');
+        if (ws.player.hp<=0 || combatRooms.get(ws.roomId).casts.has(ws.player.id)) return notice(ws, '倒地或施法时暂不能更换外观');
+        ws.character.look={...msg.look};syncPlayerStats(ws);changed(ws,true);notice(ws,'角色外观已保存');
       } else if (msg.type === 'save' && ws.player) {
         changed(ws, true); notice(ws, '角色进度已保存');
       } else if (msg.type === 'ping' && ws.player) send(ws, { type: 'pong', at: msg.at });

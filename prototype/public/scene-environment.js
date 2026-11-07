@@ -27,13 +27,16 @@ export function createSceneEnvironment(THREE,profile) {
     current=zone;uniforms.sourceFogNear.value=zone.fog.near;uniforms.sourceFogSpan.value=zone.fog.halfSpan;uniforms.sourceFogColor.value.fromArray(zone.fog.color);
     // The recovered HDR pass consumes gamma-encoded scene pixels. Materials
     // encode explicitly below; the background is already supplied in that space.
-    if(scene){scene.background ||= new THREE.Color();scene.background.setRGB(...zone.fog.color,THREE.LinearSRGBColorSpace);scene.fog=null;}
+    if(scene){scene.background ||= new THREE.Color();scene.background.setRGB(...zone.fog.color,THREE.LinearSRGBColorSpace);scene.fog=null;
+      scene.userData.characterLighting={ambient:zone.sourceLighting?.ambient||[.65,.65,.65],diffuse:zone.sourceLighting?.diffuse||[1,1,1]};}
     return zone;
   }
   function apply(material) {
     if(patched.has(material)||!(material.isMeshStandardMaterial||material.isMeshBasicMaterial))return;
     patched.add(material);const additive=material.blending===THREE.AdditiveBlending;
+    const previousCompile=material.onBeforeCompile.bind(material),previousKey=material.customProgramCacheKey.bind(material);
     material.onBeforeCompile=shader=>{
+      previousCompile(shader);
       Object.assign(shader.uniforms,uniforms);
       shader.vertexShader=`uniform float sourceFogNear;uniform float sourceFogSpan;varying float recoveredFogVisibility;\n${shader.vertexShader}`
         .replace('#include <fog_vertex>','recoveredFogVisibility=exp2(-max((-mvPosition.z-sourceFogNear)/sourceFogSpan,0.0));');
@@ -41,7 +44,7 @@ export function createSceneEnvironment(THREE,profile) {
         .replace('#include <fog_fragment>',`gl_FragColor.rgb=pow(max(gl_FragColor.rgb,vec3(0.0)),vec3(1.0/2.2));
           gl_FragColor.rgb=${additive?'gl_FragColor.rgb*recoveredFogVisibility':'mix(sourceFogColor,gl_FragColor.rgb,recoveredFogVisibility)'};`);
     };
-    material.customProgramCacheKey=()=>`recovered-fog-gamma-v1:${Number(additive)}`;material.needsUpdate=true;
+    material.customProgramCacheKey=()=>`${previousKey()}:recovered-fog-gamma-v1:${Number(additive)}`;material.needsUpdate=true;
   }
   return {update,prepare(scene){scene.traverse(object=>{if(object.isMesh)for(const material of Array.isArray(object.material)?object.material:[object.material])if(material)apply(material);});},
     zone:()=>current,uniforms};

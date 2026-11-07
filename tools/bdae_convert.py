@@ -154,6 +154,16 @@ class BDAE:
                 indices.extend(face_indices)
             unique_materials = set(g['material'] for g in groups)
             meshes.append({'name': self.string(self.q(record)), 'positions': values[0], 'normals': values[1], 'uvs': values[2], 'indices': indices, 'material': groups[0]['material'] if len(unique_materials) == 1 else None, 'groups': groups, 'vertexCount': vertex_count, 'triangleCount': len(indices) // 3})
+            # Verified character/equipment layout: native VS uses T at +32 and
+            # negative B at +44. Retain these streams instead of inventing TBN.
+            if attrs == [(56,0,6,3),(56,12,6,3),(56,24,6,2),(56,32,6,3),(56,44,6,3)]:
+                for key,offset in [('sourceTangents',32),('sourceBinormals',44)]:
+                    directions=[]
+                    for v in range(vertex_count):
+                        vector=self.unpack('3f',vertex_ptr+v*56+offset)
+                        if not all(math.isfinite(value) for value in vector):raise ValueError('Non-finite source tangent/binormal')
+                        directions.extend(round(value,7) for value in vector)
+                    meshes[-1][key]=directions
         warnings.append('Static source geometry only; node transforms, skinning, original shaders, and animations are not evaluated.')
         return {'format': 'bdae946-static-v1', 'source': self.path.as_posix(), 'sourceSHA256': hashlib.sha256(self.path.read_bytes()).hexdigest(), 'version': self.version, 'coordinateSystem': 'Y_UP', 'textures': textures, 'materials': materials, 'meshes': meshes, 'bounds': bounds, 'warnings': warnings}
 

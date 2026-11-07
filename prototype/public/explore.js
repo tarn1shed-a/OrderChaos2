@@ -14,6 +14,7 @@ import { createRecoveredHDR } from './hdr-renderer.js';
 import { loadOriginalUI } from './original-ui.js';
 import { createRecoveredHUD } from './recovered-hud.js';
 import { renderCharacterPortrait } from './character-portraits.js';
+import { createSkillBook } from './skill-book.js';
 import { createInventoryUI } from './inventory-ui.js';
 import { createMinimap } from './minimap.js';
 import { createHotbarUI } from './hotbar-ui.js';
@@ -29,7 +30,7 @@ let renderer, scene, camera, terrainMeshes = [], terrainData, mapBounds, origin,
 let assets, modelTemplate, ready = false, world = RESOURCE_WORLD, snapshot = [], selfId, socket, connected = false;
 let wolfTemplate, monsterSnapshot = [], selectedMonsterId = null, character = null, nextAttackAt = 0, feedbackUntil = 0, saveAt = null;
 let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset = 0;
-let combatEffects, environment, hdrRenderer, hud, inventoryUI, minimap, nextSkillRequestAt = 0;
+let combatEffects, environment, hdrRenderer, hud, inventoryUI, skillBook, minimap, nextSkillRequestAt = 0;
 let renderEquipmentPreview, equipmentPreviewKey;
 let playerLookProfile;
 let hotbar;
@@ -106,7 +107,7 @@ function updateTarget() {
   $('field-attack').disabled=$('attack').disabled;
 }
 function attack() {
-  if(hotbar?.isEditing)return;
+  if(skillBook?.isOpen||hotbar?.isEditing)return;
   if (!connected || !character || character.hp <= 0 || Date.now() < nextAttackAt) return;
   const enemy = chosenMonster(); if (!enemy) return;
   selectedMonsterId = enemy.id; target = null;
@@ -118,7 +119,7 @@ function attack() {
   setTimeout(() => { $('attack').firstChild.textContent = '攻击野狼 '; },cooldownMs);
 }
 function useSkill(id) {
-  if(hotbar?.isEditing)return;
+  if(skillBook?.isOpen||hotbar?.isEditing)return;
   const skill=skillById(id), me=snapshot.find(p=>p.id===selfId), now=Date.now()+serverOffset;
   if(!skill||!connected||!me||me.hp<=0||me.cast||Date.now()<nextSkillRequestAt||now<(me.skillReadyAt?.[id]||0))return;
   const enemy=chosenMonster();if(!enemy)return;
@@ -278,10 +279,12 @@ async function init() {
     inventoryUI=createInventoryUI(uiProfile,{send,stop,focusGame:()=>canvas.focus({preventScroll:true}),previewLook:look=>{
       if(character&&renderEquipmentPreview)inventoryUI.setModel(renderEquipmentPreview(character.equipment,look).model.url);
     }});
+    skillBook=createSkillBook(uiProfile,{stop,focusGame:()=>canvas.focus({preventScroll:true}),beforeOpen:()=>{hotbar?.close();inventoryUI?.close();setCampPanel(false);pointer=null;}});
+    $('field-skills').disabled=false;
     hotbar=createHotbarUI({root:$('field-actions'),panel:$('hotbar-editor'),toggle:$('hotbar-settings'),closeButton:$('hotbar-close'),
       rows:$('hotbar-bindings'),status:$('hotbar-status'),reset:$('hotbar-reset'),retryButton:$('hotbar-retry'),send,
       onEditingChange:open=>{
-        if(open){setCampPanel(false);inventoryUI?.close();stop();pointer=null;}
+        if(open){skillBook?.close();setCampPanel(false);inventoryUI?.close();stop();pointer=null;}
         else if(connected)canvas.focus({preventScroll:true});
       },
       onChange:()=>{
@@ -516,13 +519,13 @@ $('second').addEventListener('click', () => window.open(inviteURL(), '_blank', '
 $('reset-view').addEventListener('click', () => { azimuth = .65; elevation = .58; distance = 12; });
 function stop() { keys.clear(); target = null; if (connected) send({ type: 'input', x: 0, y: 0 }); }
 function setCampPanel(open) {
-  if(open)hotbar?.close();
+  if(open){hotbar?.close();skillBook?.close();}
   stop();pointer=null;$('camp-panel').hidden=!open;
   $('camp-toggle').setAttribute('aria-expanded',String(open));
   if(open)$('camp-close').focus();else if(connected)canvas.focus({preventScroll:true});
 }
 function openSession() {
-  hotbar?.close();
+  skillBook?.close();inventoryUI?.close();hotbar?.close();
   setCampPanel(false);stop();
   if(!$('session-dialog').open)$('session-dialog').showModal();
 }
@@ -530,12 +533,13 @@ $('camp-toggle').addEventListener('click',()=>setCampPanel($('camp-panel').hidde
 $('camp-close').addEventListener('click',()=>setCampPanel(false));
 $('session-open').addEventListener('click',openSession);
 $('session-close').addEventListener('click',()=>$('session-dialog').close());
-$('field-inventory').addEventListener('click',()=>{hotbar?.close();setCampPanel(false);inventoryUI?.open();});
+$('field-skills').addEventListener('click',()=>skillBook?.open());
+$('field-inventory').addEventListener('click',()=>{skillBook?.close();hotbar?.close();setCampPanel(false);inventoryUI?.open();});
 window.addEventListener('blur', stop); window.addEventListener('pagehide', () => socket?.close());
 document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
 const codes = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 window.addEventListener('keydown', e => {
-  if(hotbar?.isEditing||$('session-dialog').open||e.isComposing||e.ctrlKey||e.metaKey||e.altKey||['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;
+  if(skillBook?.isOpen||hotbar?.isEditing||$('session-dialog').open||e.isComposing||e.ctrlKey||e.metaKey||e.altKey||['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;
   if(e.code==='KeyH'&&!inventoryUI?.isOpen){e.preventDefault();if(!e.repeat)setCampPanel($('camp-panel').hidden);return;}
   if(e.code==='Escape'&&!$('camp-panel').hidden){e.preventDefault();setCampPanel(false);return;}
   if(!connected)return;
@@ -549,7 +553,7 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => keys.delete(e.code));
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-canvas.addEventListener('pointerdown', e => { if(hotbar?.isEditing)return;if(!$('camp-panel').hidden)setCampPanel(false);canvas.focus({ preventScroll: true }); pointer = { x: e.clientX, y: e.clientY, button: e.button, moved: false }; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointerdown', e => { if(skillBook?.isOpen||hotbar?.isEditing)return;if(!$('camp-panel').hidden)setCampPanel(false);canvas.focus({ preventScroll: true }); pointer = { x: e.clientX, y: e.clientY, button: e.button, moved: false }; canvas.setPointerCapture(e.pointerId); });
 canvas.addEventListener('pointermove', e => {
   if (!pointer) return; const dx = e.clientX - pointer.x, dy = e.clientY - pointer.y;
   if (Math.hypot(dx, dy) > 2) pointer.moved = true;
@@ -571,7 +575,7 @@ canvas.addEventListener('pointercancel', () => { pointer = null; });
 canvas.addEventListener('wheel', e => { e.preventDefault(); distance = THREE.MathUtils.clamp(distance * Math.exp(e.deltaY * .001), 4, 160); }, { passive: false });
 setInterval(() => {
   if (!connected || document.hidden) return;
-  if(hotbar?.isEditing||inventoryUI?.isOpen||!$('camp-panel').hidden||$('session-dialog').open){send({type:'input',x:0,y:0});return;}
+  if(skillBook?.isOpen||hotbar?.isEditing||inventoryUI?.isOpen||!$('camp-panel').hidden||$('session-dialog').open){send({type:'input',x:0,y:0});return;}
   const right = Number(keys.has('KeyD')||keys.has('ArrowRight')) - Number(keys.has('KeyA')||keys.has('ArrowLeft'));
   const back = Number(keys.has('KeyS')||keys.has('ArrowDown')) - Number(keys.has('KeyW')||keys.has('ArrowUp'));
   let x = right*Math.cos(azimuth)+back*Math.sin(azimuth), y = -right*Math.sin(azimuth)+back*Math.cos(azimuth);

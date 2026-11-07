@@ -14,6 +14,7 @@ from recover_scene_render import build_scene_profile
 from ui_assets import recover_ui_assets
 from chinese_fonts import recover_chinese_fonts, SOURCE_FONTS
 from skill_icons import recover_skill_icons
+from skill_ui_assets import recover_skill_ui
 from art_library import build_catalog
 from hud_assets import recover_hud_assets
 from character_portraits import recover_character_portraits
@@ -168,17 +169,19 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     render_output=output/'rendering/tutorial.json';render_output.parent.mkdir(parents=True,exist_ok=True)
     render_output.write_text(json.dumps(rendering,ensure_ascii=False,indent=2))
     ui = recover_ui_assets(extract, output)
+    ui['skillUI'] = recover_skill_ui(extract, output)
     allowed_loose = {spec['path'] for spec in SOURCE_FONTS.values()}
     def read_loose(path):
         if path not in allowed_loose:raise ValueError(f'Unexpected loose resource: {path}')
         return safe_output(source, path)
     # Check actual Chinese interface characters, including dynamic combat labels.
-    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','recovered-hud.js','inventory-ui.js','items.js','character-equipment.js','character-look.js','character-materials.js'])
+    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','recovered-hud.js','inventory-ui.js','skill-book.js','items.js','character-equipment.js','character-look.js','character-materials.js'])
+    ui_text += json.dumps(ui['skillUI'], ensure_ascii=False)
     required_text = ''.join(sorted({ch for ch in ui_text if '\u3400' <= ch <= '\u9fff'}))
     chinese = recover_chinese_fonts(read_loose, output, required_text)
     if chinese['requiredTextStatus'] != 'complete':raise ValueError('Original Chinese fonts do not cover the current interface')
     icons = recover_skill_icons(extract, output)
-    ui['format'] = 'oc2-original-ui-v6'
+    ui['format'] = 'oc2-original-ui-v7'
     ui['fonts']['faces'].update(chinese['faces'])
     ui['fonts']['chineseStatus'] = chinese['chineseStatus']
     ui['fonts']['requiredTextStatus'] = chinese['requiredTextStatus']

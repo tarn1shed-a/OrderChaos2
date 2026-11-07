@@ -49,6 +49,7 @@ pnpm start
 - 火球蓄力分别跟随左右手Dummy的完整变换，飞行终点与命中使用胸部挂点，冰霜使用地面+0.1挂点及原缩放。当前精灵玩家基体原生包含这些Dummy；旧森林精灵参考模型曾从该骨架适配挂点。完整原版玩家技能ID链尚未证明。
 - 三维界面使用 9 张原版图集裁片、两张经技能表链确认的 96×96 原图标，以及原 Fontin / Alegreya 中文字体。两份完整字体各含 20,932 个基本汉字，当前界面汉字均已检查覆盖；稀有扩展和源字体缺字仍回退系统字体。西文数字继续使用原嵌入子集，布局与按钮行为由网页实现，不执行 SWF。美术与字体均只留在本地。
 - 状态栏使用 `Gauges2` 原自身生命半弧的 50 帧掩模及加色；经验使用 `ExpBar` 原条与变换，冷却使用 40 帧原矢量扇形。战斗面板为底部左右各五槽，默认标注 1–0，1/2 为火球/冰霜，其余槽留空。每槽采用独立半透明圆角玻璃框，没有整条背景。中间为实时小地图，普通攻击 F/空格也可从右上按钮使用。原 `OperationPanel2` 布局保留为研究数据；新排布为网页设计。没有虚构 MP 数值或未实现的技能。
+- 右上“技能”打开按原 SWF 命名显示列表恢复的法师技能资料面板：主动/被动页签，顶部横排技能，左侧说明，右侧三个铭文或两个被动槽。包含原表9主动/5被动、27铭文的中文说明、原96px图标、等级/技能点要求及基础施法数据。可翻页或用左右键选择，Esc关闭；打开时不发送移动/施法输入。当前是资料预览，学习和装配按钮不可用，不改变角色进度或现有两种战斗技能。标题栏、分页、文本排版和桌面缩放为网页适配。
 - 右上“技能栏”打开编辑：拖到空格即可移动，拖到已有技能则交换，也可点选两格或用左右方向键配合 Enter / 空格操作。拖出栏外取消，冷却跟随技能保留。点击设置中的按键后输入数字/字母，可加 Shift；冲突会提示，WASD、方向键、F/空格与 B/C/H 保留。Esc 取消改键或关闭编辑；“恢复默认”重置位置和键位。编辑时停止自己的移动与施法输入，世界继续运行。
 - 技能栏布局与键位随角色自动保存到服务器，刷新、换房间、服务器重启，以及新设备恢复同一角色后会载入。旧版本机偏好仅在服务器尚无记录时导入一次；之后以服务器为准，旧缓存不会覆盖新设置。界面收到写盘成功回执才显示“已保存”，超时可重试；快速连续修改会依次确认并保存最新结果。它们仅发给本角色，不广播给队友，也不进入 Git。
 - 头像由当前玩家精灵/狼模型生成192px缩略图，不改战斗骨架；角色卡、同行者头像和装备页全身预览跟随装备更新，按装备与外观组合缓存，最多保留24组。角度、取景、灯光与头像用途均是网页适配。原PlayerGauges的Model3D槽属于选中玩家，自身Gauges2中心含小地图，原狼目标槽是精英状态图标，不能把这些冒称原版静态肖像绑定。
@@ -112,6 +113,7 @@ python3 -m venv .venv
 .venv/bin/python tools/ui_assets_tests.py
 .venv/bin/python tools/chinese_fonts_tests.py
 .venv/bin/python tools/skill_icons_tests.py
+.venv/bin/python tools/skill_ui_assets_tests.py
 .venv/bin/python tools/hud_assets_tests.py
 .venv/bin/python tools/character_portraits_tests.py
 .venv/bin/python tools/inventory_assets_tests.py
@@ -149,7 +151,7 @@ python3 tools/art_library_tests.py
 .venv/bin/python tools/analyze_native_effects.py /path/to/game.apk
 ```
 
-转换入口按原索引提取194个包内源文件并校验长度/CRC，另按精确SHA256/长度读取两个松散原字体。生成21个模型、74张场景/特效/角色贴图、9张基础UI裁片、2张技能原图、13张HUD裁片、14张背包/装备裁片、4张物品原图、4个WOFF及各清单和地图。玩家 `models/elf-female.json` 合并23个原网格、22份蒙皮、10份材质，保留124节点与7段动作，内含 `oc2-equipment-appearance-v1`、`oc2-character-hair-v1`、`oc2-character-materials-v1`。完整中文字体来自原松散文件，不从系统字体替代转换。原始包不修改，产物留在忽略目录。当前要求 `oc2-combat-effects-v3`、`oc2-scene-render-v1` 和 `oc2-original-ui-v6`，请整体重建或同步匹配版本的 `converted/` 后刷新页面。
+转换入口按原索引提取215个包内源文件并校验长度/CRC，另按精确SHA256/长度读取两个松散原字体。生成21个模型、74张场景/特效/角色贴图、9张基础UI裁片、2张战斗技能原图、18张技能目录原图、4张技能面板裁片、13张HUD裁片、14张背包/装备裁片、4张物品原图、4个WOFF及各清单和地图。玩家 `models/elf-female.json` 合并23个原网格、22份蒙皮、10份材质，保留124节点与7段动作，内含 `oc2-equipment-appearance-v1`、`oc2-character-hair-v1`、`oc2-character-materials-v1`。完整中文字体来自原松散文件，不从系统字体替代转换。原始包不修改，产物留在忽略目录。当前要求 `oc2-combat-effects-v3`、`oc2-scene-render-v1` 和 `oc2-original-ui-v7`，请整体重建或同步匹配版本的 `converted/` 后刷新页面。
 
 ## 美术素材复用与同步
 

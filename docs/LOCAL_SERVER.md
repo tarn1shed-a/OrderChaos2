@@ -59,7 +59,7 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
 
 技能及换装版本需要匹配的 `converted/models/elf-female.json`、`wolf.json`、`effects/combat.json`、角色/装备贴图与 `manifest.json`，请整体复制本次构建的 `converted/`。旧 `forest-elf.json` 只保留为研究参考，不能代替新玩家基体。只有旧资源时页面会明确要求重建；开发机执行 `.venv/bin/python tools/build_resource_preview.py` 后把产物单独传给正式服。本轮代码会将旧角色存档安全升级到v4，原装备、外观和奖励保留，新增服务器技能栏字段；更新后刷新页面。待结算施法、技能冷却和怪物减速仍为会话/房间状态。
 
-当前要求 `oc2-combat-effects-v3` 与 `oc2-original-ui-v6`，玩家模型内含 `oc2-equipment-appearance-v1`、`oc2-character-hair-v1` 与 `oc2-character-materials-v1`。整包包括原LUT、各界面清单与图标、74张场景/特效/角色贴图、4个WOFF，请完整同步 `converted/`。原材质库、源表和松散TTF只由开发机转换时读取；运行机器只需转换产物，无须BDAE、SWF、APK或反汇编。角色头像和装备全身预览随穿脱渲染并缓存，无需另传截图。未覆盖的稀有字仍回退系统字体。
+当前要求 `oc2-combat-effects-v3` 与 `oc2-original-ui-v7`，玩家模型内含 `oc2-equipment-appearance-v1`、`oc2-character-hair-v1` 与 `oc2-character-materials-v1`。整包包括原LUT、各界面清单与图标（含技能面板及法师资料）、74张场景/特效/角色贴图、4个WOFF，请完整同步 `converted/`。原材质库、源表和松散TTF只由开发机转换时读取；运行机器只需转换产物，无须BDAE、SWF、APK或反汇编。角色头像和装备全身预览随穿脱渲染并缓存，无需另传截图。未覆盖的稀有字仍回退系统字体。
 
 角色存档当前为 **version 4**，新增私有技能栏布局与键位字段。读取v1/v2/v3时先验证全文件；首次落盘前，在同一个runtime目录保留精确原字节的characters.json.v1/v2/v3-backup-….json，再原子写入v4。v1补发一次原新手装备，v2/v3不会重复补发，旧奖励、生命、装备、外观、位置和凭据哈希保留。旧版尚无服务器技能栏时字段为null，当前客户端首次进入时导入该角色的有效旧本机设置，或写入默认设置。坏存档拒绝启动并保留原文件，不使用旧版程序打开v4。回退需停服，同时恢复旧代码与对应旧版本备份。
 

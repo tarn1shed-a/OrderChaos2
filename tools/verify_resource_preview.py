@@ -91,7 +91,7 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v6' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v7' and not ui['provenance']['swfScriptExecution']
     for entry in ui['assets'].values():
         with Image.open(asset(entry['url'], output)) as image:
             assert image.size == (entry['width'], entry['height'])
@@ -140,6 +140,18 @@ def verify(output=OUT):
     assert inventory['layouts']['bag']['visibleRowsAreNotTotalCapacity']
     assert {slot['index'] for slot in inventory['layouts']['equipment']['slots']}=={0,1,2,4,6,7,8,9,13,21}
     for entry in inventory['assets'].values():
+        with Image.open(asset(entry['url'],output)) as image:assert image.size==(entry['width'],entry['height'])
+    skill_ui=ui['skillUI'];assert skill_ui['format']=='oc2-original-skill-ui-v1'
+    assert not skill_ui['provenance']['swfScriptExecution'] and not skill_ui['provenance']['nativeProgressionImplemented']
+    assert len(skill_ui['skills'])==14
+    assert [sum(skill['kind']==kind for skill in skill_ui['skills']) for kind in ('active','passive')]==[9,5]
+    for skill in skill_ui['skills']:
+        assert len(skill['runes'])==(3 if skill['kind']=='active' else 0)
+        for entry in [skill['base'],*skill['runes']]:
+            path=asset(entry['icon']['url'],output)
+            assert hashlib.sha256(path.read_bytes()).hexdigest()==entry['icon']['sourceSHA256']
+            with Image.open(path) as image:assert image.size==(96,96)
+    for entry in skill_ui['assets'].values():
         with Image.open(asset(entry['url'],output)) as image:assert image.size==(entry['width'],entry['height'])
     item_icons=ui['itemIcons'];assert item_icons['format']=='oc2-item-icons-v1'
     assert set(item_icons['icons'])=={'trainingSword','linenArmor','travelerBoots','wolfPelt'}
@@ -192,6 +204,7 @@ def verify(output=OUT):
                      'renderZones':len(rendering['zones']), 'uiCrops':len(ui['assets']),
                      'skillIcons':len(icons['icons']), 'fontCharacters':glyphs,
                      'hudAssets':len(hud['assets']),'modelPortraits':len(portraits['models']),
+                     'skillCatalog':len(skill_ui['skills']),'skillUIAssets':len(skill_ui['assets']),
                      'inventoryAssets':len(inventory['assets']),'itemIcons':len(item_icons['icons']),
                      'equipmentAppearances':len(appearance['items']),
                      'hairStyles':len(hair['styles']),'characterMaterials':len(materials['materials']),

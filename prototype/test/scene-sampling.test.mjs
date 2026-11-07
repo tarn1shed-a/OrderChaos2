@@ -32,6 +32,11 @@ test('current 39 source instances have checked 2D diffuse profiles with source P
  assert.equal(manifest.scenery.reduce((n,m)=>n+m.instances.length,0),39);
  for(const entry of manifest.scenery){
   const model=JSON.parse(readFileSync(new URL(entry.url.slice('/assets/'.length),root)));
+  assert.equal(model.sourceIndexing.format,'oc2-primitive-index-windows-v1');
+  for(const mesh of model.meshes)for(const group of mesh.groups){
+   const indices=mesh.indices.slice(group.start,group.start+group.count);
+   assert(Math.min(...indices)>=group.sourceVertexStart);assert(Math.max(...indices)<=group.sourceVertexEnd);
+  }
   assert.equal(model.sceneSampling.format,'oc2-scene-sampling-v1');assert.equal(model.sceneSampling.materials.length,model.materials.length);
   for(const [i,material]of model.materials.entries()){
    const png=readFileSync(new URL(manifest.textures[material.diffuse].slice('/assets/'.length),root));

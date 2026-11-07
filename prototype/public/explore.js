@@ -238,6 +238,7 @@ async function loadModel(entry) {
   if (entry===assets.player && (data.appearance?.hair?.format!=='oc2-character-hair-v1'||data.characterMaterials?.format!=='oc2-character-materials-v1')) throw new Error('原发型和角色材质资源缺失，请重新构建本地资源');
   let materials;
   if(assets.scenery?.includes(entry)&&data.sceneSampling?.format!=='oc2-scene-sampling-v1')throw new Error('原场景采样资源缺失，请更新本地素材包');
+  if(assets.scenery?.includes(entry)&&data.sourceIndexing?.format!=='oc2-primitive-index-windows-v1')throw new Error('原场景顶点索引资源缺失，请更新本地素材包');
   if(data.characterMaterials){
     const profile=data.characterMaterials,textures=new Map();
     await Promise.all([...new Set(profile.materials.flatMap(mat=>Object.values(mat.samplers)))].map(async url=>{

@@ -17,6 +17,7 @@ import math
 import struct
 import zipfile
 from pathlib import Path
+from bdae_primitives import primitive_indices, FORMAT as PRIMITIVE_INDEX_FORMAT
 
 
 class BDAE:
@@ -137,20 +138,13 @@ class BDAE:
             groups = []
             for k in range(primitive_count):
                 primitive = primitive_table + k * 88
-                count = self.u(primitive + 36)
-                if count % 3 or count != self.u(primitive + 16) * 3:
-                    raise ValueError('Only triangle lists supported')
-                ptr, length = self.q(primitive + 48), self.q(primitive + 56)
-                if count * 2 > length:
-                    raise ValueError('Index buffer too short')
-                face_indices = self.unpack('H' * count, ptr)
-                if max(face_indices, default=0) >= vertex_count:
-                    raise ValueError('Triangle references a vertex outside the mesh')
+                face_indices, source_window = primitive_indices(self, primitive, vertex_count)
+                count = len(face_indices)
                 material_name = self.string(primitive + 8 + self.q(primitive + 8))
                 material_index = next((i for i, m in enumerate(materials) if m['name'] == material_name), None)
                 if material_index is None:
                     warnings.append(f'Unresolved primitive material: {material_name}')
-                groups.append({'start': len(indices), 'count': count, 'material': material_index, 'materialName': material_name})
+                groups.append({'start': len(indices), 'count': count, 'material': material_index, 'materialName': material_name, **source_window})
                 indices.extend(face_indices)
             unique_materials = set(g['material'] for g in groups)
             meshes.append({'name': self.string(self.q(record)), 'positions': values[0], 'normals': values[1], 'uvs': values[2], 'indices': indices, 'material': groups[0]['material'] if len(unique_materials) == 1 else None, 'groups': groups, 'vertexCount': vertex_count, 'triangleCount': len(indices) // 3})
@@ -165,7 +159,7 @@ class BDAE:
                         directions.extend(round(value,7) for value in vector)
                     meshes[-1][key]=directions
         warnings.append('Static source geometry only; node transforms, skinning, original shaders, and animations are not evaluated.')
-        return {'format': 'bdae946-static-v1', 'source': self.path.as_posix(), 'sourceSHA256': hashlib.sha256(self.path.read_bytes()).hexdigest(), 'version': self.version, 'coordinateSystem': 'Y_UP', 'textures': textures, 'materials': materials, 'meshes': meshes, 'bounds': bounds, 'warnings': warnings}
+        return {'format': 'bdae946-static-v1', 'source': self.path.as_posix(), 'sourceSHA256': hashlib.sha256(self.path.read_bytes()).hexdigest(), 'version': self.version, 'coordinateSystem': 'Y_UP', 'sourceIndexing':{'format':PRIMITIVE_INDEX_FORMAT,'mode':'mesh-wide indices rebased from each source primitive vertex window'}, 'textures': textures, 'materials': materials, 'meshes': meshes, 'bounds': bounds, 'warnings': warnings}
 
 
 def main():

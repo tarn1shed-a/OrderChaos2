@@ -1,3 +1,4 @@
+import {buffText} from './buff-presentation.js';
 import * as THREE from '/vendor/three.module.js';
 import { RESOURCE_WORLD } from './world.js';
 import { sampleHeight } from './heightfield.js';
@@ -141,7 +142,7 @@ function attack(pressed=false) {
 function useSkill(id) {
   if(skillBook?.isOpen||hotbar?.isEditing)return;
   const skill=skillById(id), me=snapshot.find(p=>p.id===selfId), now=Date.now()+serverOffset;
-  if(!skill||!connected||!me||me.hp<=0||castActive(me.cast)||Date.now()<nextSkillRequestAt||now<(me.skillReadyAt?.[id]||0)||now<(me.globalReadyAt||0))return;
+  if(!skill||!connected||!me||me.hp<=0||me.controls?.skill||castActive(me.cast)||Date.now()<nextSkillRequestAt||now<(me.skillReadyAt?.[id]||0)||now<(me.globalReadyAt||0))return;
   const enemy=chosenMonster();if(!enemy)return;
   target=null;nextSkillRequestAt=Date.now()+200;
   send({type:'skill',skillId:id,targetId:enemy.id});canvas.focus({preventScroll:true});
@@ -150,14 +151,14 @@ function updateSkills() {
   const me=snapshot.find(p=>p.id===selfId),now=Date.now()+serverOffset;
   const casting=castActive(me?.cast);
   const blocked=inputBlocked()||!connected||!me||me.hp<=0;
-  if(blocked||casting)jumpControl?.reset();
-  $('field-interaction').disabled=blocked||Boolean(casting);
+  if(blocked||casting||me?.controls?.jump)jumpControl?.reset();
+  $('field-interaction').disabled=blocked||Boolean(casting)||Boolean(me?.controls?.jump);
   for(const skill of Object.values(SKILLS)) {
     const remaining=Math.max(0,Math.max(me?.skillReadyAt?.[skill.id]||0,me?.globalReadyAt||0)-now);
     const hotkey=hotbar?.keyForSkill(skill.id)||skill.hotkey;
     const text=`${skill.name}${remaining>0?` · ${(remaining/1000).toFixed(1)}s`: ` · ${hotkey}`}`;
     for(const id of [`skill-${skill.id}`,`field-${skill.id}`]) {
-      const button=$(id);button.disabled=Boolean(hotbar?.isEditing)||!connected||!chosenMonster()||!me||me.hp<=0||Boolean(casting)||remaining>0;
+      const button=$(id);button.disabled=Boolean(hotbar?.isEditing)||!connected||!chosenMonster()||!me||me.hp<=0||Boolean(casting)||Boolean(me?.controls?.skill)||remaining>0;
       // Preserve the original icon and frame while updating the server cooldown.
       const label=button.querySelector('.skill-label'),state=button.querySelector('.skill-status');
       if(label&&state){
@@ -200,6 +201,7 @@ function handleCombat(event) {
   if (event.action === 'hit' && event.attackerId === selfId) flash(`命中 −${event.damage}`);
   else if(event.action==='skill-cast'&&event.attackerId===selfId) { flash(`${skillById(event.cast?.skillId)?.name||'技能'} · 施法中`);logEvent(`开始施放${skillById(event.cast?.skillId)?.name||'技能'}。`); }
   else if(event.action==='skill-hit'&&event.attackerId===selfId) { flash(`${skillById(event.skillId)?.name||'技能'} −${event.damage}`);logEvent(`${skillById(event.skillId)?.name||'技能'}命中，造成 ${event.damage} 点伤害。`); }
+  else if(event.action==='periodic-hit'&&event.attackerId===selfId){flash(`燃烧 −${event.damage}`);logEvent(`燃烧造成 ${event.damage} 点伤害。`);}
   else if(event.action==='skill-cancel'&&event.attackerId===selfId) { flash(event.message);message(event.message); }
   else if (event.action === 'player-hit' && event.targetId === selfId) flash(`受到 ${event.damage} 点伤害`);
   else if (event.action === 'kill') { flash('野狼已被击败'); logEvent('野狼倒下了。参与战斗者获得奖励。',true); }
@@ -476,9 +478,10 @@ function syncMonsters(serverTime = Date.now()) {
     }
     const view=monsterViews.get(m.id);view.target.copy(entityPosition(m));view.alive=m.alive;view.root.visible=true;
     view.motion=snapshotMotion(view.lastState,m,(serverTime-view.lastStateAt)/1000,(mapBounds[1][0]-mapBounds[0][0])/world.width);
+    view.label.dataset.buffs=(m.buffs||[]).map(b=>b.kind).join(',');view.label.dataset.hp=String(m.hp);
     view.lastState={x:m.x,y:m.y};view.lastStateAt=serverTime;
     syncCharacterCombat(view.body,m,serverTime,view.attackSeconds);
-    view.fill.style.width=`${Math.max(0,m.hp/m.maxHp*100)}%`;view.health.textContent=m.alive?`${m.hp} / ${m.maxHp}${m.slowUntil>serverTime?' · 减速':''}`:'已击败 · 等待重生';
+    view.fill.style.width=`${Math.max(0,m.hp/m.maxHp*100)}%`;view.health.textContent=m.alive?`${m.hp} / ${m.maxHp}${buffText(m,serverTime)?' · '+buffText(m,serverTime):m.slowUntil>serverTime?' · 减速':''}`:'已击败 · 等待重生';
   }
   updateTarget();
 }

@@ -19,6 +19,7 @@ async function fixture(t,options={}) {
     advance(ms) { now += ms; },
     async start() {
       game = createGameServer({ saveFile, motion:null,casting:false,clock: () => now,...options });
+      f.game=game;
       await new Promise(resolve => game.server.listen(0, '127.0.0.1', resolve));
       f.url = `ws://127.0.0.1:${game.server.address().port}/ws`;
       return f;
@@ -440,4 +441,56 @@ test('original player channel shares five source-timed pulses and late projectil
  await stateAfter(a,a.mark(),s=>wolf(s).hp===0);const reward=await a.wait(m=>m.type==='progress'&&m.character.kills>0,{after:mark});
  assert.equal(reward.character.gold,10);assert.equal(reward.character.xp,30);assert.equal(reward.character.kills,1);assert.equal(reward.character.inventory.wolfPelt,1);
  assert.equal(a.messages.filter(m=>m.action==='kill').length,1);
+});
+
+test('native burn/freeze and final damage agree for both peers and a late join; forged stats/buffs cannot alter authoritative results',
+ {skip:!existsSync(new URL('../../game-data/converted/gameplay/native.json',import.meta.url))},async t=>{
+ const f=await fixture(t,{casting:true}),a=await enter(f,'状态甲',{scene:'resources'}),b=await enter(f,'状态乙',{scene:'resources'});
+ const target=wolf(await stateAfter(a,a.mark(),s=>s.players.length===2));await moveNear(a,target);
+ let ma=a.mark();a.send({type:'skill',skillId:'fireball',targetId:target.id,damage:99999,buffs:[{kind:'burn',stacks:999}]});
+ await a.wait(m=>m.action==='skill-cast',{after:ma});f.advance(1850);
+ const burn=await stateAfter(a,a.mark(),s=>wolf(s).buffs?.some(b=>b.kind==='burn'));
+ const peer=await stateAfter(b,b.mark(),s=>s.tick===burn.tick);assert.deepEqual(wolf(burn),wolf(peer));assert.equal(wolf(burn).hp,30);
+ const late=await enter(f,'状态迟到',{scene:'resources'}),seen=await stateAfter(late,late.mark(),s=>wolf(s).buffs?.length===1);
+ assert.deepEqual(wolf(seen).buffs,wolf(burn).buffs);assert.equal(wolf(seen).buffs[0].durationMs,7000);
+ const forged=late.mark();late.send({type:'buff',kind:'freeze',targetId:target.id,durationMs:999999});await late.wait(m=>m.type==='error',{after:forged});
+ ma=b.mark();b.send({type:'skill',skillId:'arcane_missile',targetId:target.id,damage:99999,bonus:9999});await b.wait(m=>m.action==='skill-cast',{after:ma});
+ f.advance(550);const hit=await b.wait(m=>m.action==='skill-hit'&&m.skillId==='arcane_missile',{after:ma});
+ assert.equal(hit.damage,12);assert.equal(hit.bonus,.5);assert.equal(hit.damageRule,'local-v2');assert.equal(hit.damageAttribute,16);
+ const peerHit=await a.wait(m=>m.action==='skill-hit'&&m.castId===hit.castId);assert.deepEqual(hit,peerHit);
+ // Stop channel, then verify one lethal hit clears the surviving burn.
+ const current=player(await stateAfter(b,b.mark()),b.id).cast;b.send({type:'cancel-skill',castId:current.id});await b.wait(m=>m.action==='skill-cancel');
+ ma=a.mark();a.send({type:'skill',skillId:'frost_blast',targetId:target.id});await a.wait(m=>m.action==='skill-cast',{after:ma});
+ const death=await stateAfter(a,a.mark(),s=>!wolf(s).alive);assert.equal(wolf(death).hp,0);assert.deepEqual(wolf(death).buffs,[]);
+ const rewards=await a.wait(m=>m.type==='progress'&&m.character.kills===1);assert.equal(rewards.character.gold,10);
+ a.send({type:'save'});await a.wait(m=>m.type==='notice'&&m.message.includes('保存'));
+ const disk=JSON.parse(await readFile(f.saveFile,'utf8'));assert(!JSON.stringify(disk).includes('buff:'));
+ publicStateHasNoCredentials(late,[a.welcome.resumeToken,b.welcome.resumeToken]);
+});
+
+test('native freeze stops movement at both peers until expiry; server-owned overlapping player controls gate input/jump/attack/cast and clear on reconnect',
+ {skip:!existsSync(new URL('../../game-data/converted/gameplay/native.json',import.meta.url))},async t=>{
+ const f=await fixture(t,{casting:true}),a=await enter(f,'冻结甲',{scene:'resources'}),b=await enter(f,'冻结乙',{scene:'resources'});
+ const initial=await stateAfter(a,a.mark(),s=>s.players.length===2),target=wolf(initial);
+ let ma=a.mark();a.send({type:'skill',skillId:'frost_blast',targetId:target.id});
+ const frozen=await stateAfter(a,ma,s=>wolf(s).buffs?.some(v=>v.kind==='freeze'));
+ assert.equal(wolf(frozen).hp,40);assert.equal(wolf(frozen).buffs[0].durationMs,2000);assert.equal(wolf(frozen).slowUntil,0);
+ f.advance(1999);const held=await stateAfter(a,a.mark()),peer=await stateAfter(b,b.mark(),s=>s.tick===held.tick);
+ assert.deepEqual(wolf(held),wolf(peer));assert.equal(wolf(held).x,target.x);assert.equal(wolf(held).y,target.y);
+ f.advance(1);const released=await stateAfter(a,a.mark(),s=>!wolf(s).buffs?.length);assert.notEqual(wolf(released).x,target.x);
+ const room=[...f.game.combatRooms.values()][0],ws=[...room.clients.values()].find(ws=>ws.player.id===a.id),owner=[...room.clients.values()].find(ws=>ws.player.id===b.id);
+ const now=released.serverTime;room.applyStatus(ws.player,'freeze',owner,now,{durationMs:2000});
+ room.applyStatus(ws.player,'silence',owner,now,{durationMs:4000});
+ const p=player(await stateAfter(a,a.mark()),a.id),jump=p.jump;
+ ma=a.mark();a.send({type:'jump',pressed:true});a.send({type:'attack',targetId:target.id});a.send({type:'skill',skillId:'fireball',targetId:target.id});
+ const timer=setInterval(()=>a.send({type:'input',x:1,y:0}),50);
+ try {const still=await stateAfter(a,ma,s=>s.tick>released.tick+5);assert.equal(player(still,a.id).x,p.x);assert.deepEqual(player(still,a.id).jump,jump);}
+ finally{clearInterval(timer);a.send({type:'input',x:0,y:0});a.send({type:'jump',pressed:false});}
+ assert(a.messages.slice(ma).filter(m=>m.type==='notice'&&m.message.includes('控制')).length>=3);
+ f.advance(2000);const silent=await stateAfter(a,a.mark(),s=>player(s,a.id).buffs.length===1);assert.equal(player(silent,a.id).controls.move,false);assert.equal(player(silent,a.id).controls.skill,true);
+ a.send({type:'save'});await a.wait(m=>m.type==='notice'&&m.message.includes('保存'));
+ const disk=JSON.parse(await readFile(f.saveFile,'utf8'));assert(!JSON.stringify(disk).includes('buff:'));
+ const creds={characterId:a.id,resumeToken:a.welcome.resumeToken};await a.close();
+ const resumed=await enter(f,'冻结甲',{scene:'resources',...creds});assert.deepEqual(player(await stateAfter(resumed,resumed.mark()),a.id).buffs,[]);
+ publicStateHasNoCredentials(b,[creds.resumeToken]);
 });

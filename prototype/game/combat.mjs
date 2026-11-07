@@ -4,6 +4,8 @@ import { equipmentStats } from '../public/items.js';
 import {chooseBasicAttack,prepareBasicAttack,updateBasicAttack} from './basic-attack.mjs';
 import {SpellRuntime} from './spell-runtime.mjs';
 import {DynamicScene} from './dynamic-scene.mjs';
+import {BuffRuntime} from './buffs.mjs';
+import {resolveDamage} from './damage.mjs';
 
 export const COMBAT = Object.freeze({ playerDamage: 20, playerCooldownMs: 700, monsterHp: 60, monsterDamage: 6,
   monsterCooldownMs: 1000, monsterRespawnMs: 8000, playerRespawnMs: 4000,
@@ -32,9 +34,18 @@ export class CombatRoom {
     if(this.motion)this.motion.place(this.monster);
     this.casts = new Map(); this.castSequence = 0;
     this.castProfile=casting&&scene==='resources'?gameplay?.casting:null;
+    this.combatProfile=this.castProfile?gameplay?.combat:null;
+    if(this.combatProfile)this.buffs=new BuffRuntime(this.combatProfile,{emit,
+      valid:v=>v.target.hp>0&&this.clients.get(v.source.player.id)===v.source,
+      pulse:(v,now,scheduledAt)=>{
+        if(v.target!==this.monster)return;
+        this.damageMonster(v.source,v.amount,now,{id:`${v.id}:tick:${v.pulsed}`,skillId:v.skillId},
+          {periodic:true,auraId:this.combatProfile.auras[v.kind].id,scheduledAt});
+      }});
     if(this.castProfile)this.runtime=new SpellRuntime(this.castProfile,{executions:this.casts,emit,
       check:(r,now)=>{
         if(this.clients.get(r.ws.player.id)!==r.ws||r.ws.player.hp<=0)return '施法已中断';
+        if(this.blocked(r.ws.player,'skill',now))return '控制效果中断施法';
         if(!r.hit&&!this.monster.alive)return '目标已倒地';
         if(!r.hit&&(r.channel||now>=r.cast.impactAt)&&Math.hypot(r.ws.player.x-this.monster.x,r.ws.player.y-this.monster.y)>r.skill.range)return '目标离开技能范围';
         return null;
@@ -42,7 +53,30 @@ export class CombatRoom {
     if(lab){if(!this.motion)throw new Error('碰撞验证场需要本地资源');this.dynamic=new DynamicScene(this.motion,Date.now());}
   }
 
-  snapshot() { return [{ ...this.monster, animation: { ...this.monster.animation } }]; }
+  snapshot() { return [{ ...this.monster, buffs:structuredClone(this.monster.buffs||[]), animation: { ...this.monster.animation } }]; }
+
+  blocked(target,action,now){return this.buffs?.blocked(target,action,now)||false;}
+  applyStatus(target,kind,source,now,options){
+    if(!this.buffs||target.hp<=0)return null;
+    const value=this.buffs.apply(target,kind,source,now,options);
+    if(target!==this.monster){
+      const ws=this.clients.get(target.id);
+      if(ws&&this.blocked(target,'move',now))ws.input={x:0,y:0};
+      if(ws&&this.blocked(target,'attack',now))ws.attackPressed=false;
+      if(ws&&this.blocked(target,'skill',now))for(const r of [...(this.runtime?.pending.values()||[])]){
+        if(r.ws===ws)this.runtime.cancel(r,'控制效果中断施法',now);
+      }
+    }
+    this.publishStatuses(now);return value;
+  }
+  publishStatuses(now){
+    if(!this.buffs)return;
+    for(const target of [this.monster,...[...this.clients.values()].map(ws=>ws.player)]){
+      target.buffs=this.buffs.snapshot(target,now);
+      target.controls=Object.fromEntries(['move','attack','skill','jump'].map(k=>[k,this.blocked(target,k,now)]));
+    }
+  }
+  updateStatuses(now){this.buffs?.tick(now);this.publishStatuses(now);}
 
   skillDefinition(id) {
     const base=skillById(id),native=this.castProfile?.spells[id];
@@ -54,6 +88,7 @@ export class CombatRoom {
     const m = this.monster;
     if (typeof targetId !== 'string' || targetId !== m.id) return this.notice(ws, '目标不在当前营地');
     if (ws.player.hp <= 0) return this.notice(ws, '倒地后稍等片刻，会自动回到出生点');
+    if(this.blocked(ws.player,'attack',now))return this.notice(ws,'控制效果中无法攻击');
     if (this.casts.has(ws.player.id)) return this.notice(ws, '正在施法，稍后再攻击');
     if (!m.alive) return this.notice(ws, '野狼已被击败，稍后会重新出现');
     if (Math.hypot(ws.player.x - m.x, ws.player.y - m.y) > this.range) return this.notice(ws, '距离太远，先靠近野狼');
@@ -75,6 +110,7 @@ export class CombatRoom {
     if(native&&ws.character.profession!==2)return this.notice(ws,'当前接入的原玩家法术需要法师职业');
     if (targetId !== m.id || typeof targetId !== 'string') return this.notice(ws, '目标不在当前营地');
     if (ws.player.hp <= 0) return this.notice(ws, '倒地后无法施法');
+    if(this.blocked(ws.player,'skill',now))return this.notice(ws,'控制效果中无法施法');
     if (!m.alive) return this.notice(ws, '目标已倒地，无法施法');
     if (this.casts.has(ws.player.id)) return this.notice(ws, '正在施法，请稍候');
     if (now < (ws.player.skillReadyAt?.[skill.id] ?? 0)) return this.notice(ws, `${skill.name}还在冷却中`);
@@ -94,21 +130,31 @@ export class CombatRoom {
     this.emit({ type: 'combat', action: 'skill-cast', attackerId: ws.player.id, targetId: m.id, serverTime: now, cast });
   }
 
-  damageMonster(ws, amount, now, cast = null) {
+  damageMonster(ws, amount, now, cast = null, {periodic=false,auraId=null,scheduledAt=null}={}) {
     const m = this.monster;
     if(!m.alive||m.hp<=0)return;
     this.contributors.add(ws.player.id);
-    const damage = Math.min(amount, m.hp); m.hp -= damage;
+    const source=cast?this.combatProfile?.spells[cast.skillId]:ws.player.basicAttack;
+    const bonus=!periodic&&cast?.skillId==='arcane_missile'&&this.buffs?.has(m,'burn',now)?this.combatProfile.mechanics.arcaneBurnBonus:0;
+    const result=resolveDamage({base:amount,bonus,damageType:source?.damageType??null,damageAttribute:source?.damageAttribute??null},m.hp);
+    const {damage}=result;m.hp=result.targetHp;
     m.animation.hitAt = now;
     if (m.hp <= 0) m.animation.deathAt = now;
     const skill = cast && skillById(cast.skillId);
-    if (m.hp > 0 && skill?.slowMs) m.slowUntil = Math.max(m.slowUntil || 0, now + skill.slowMs);
-    this.emit({ type: 'combat', action: cast ? 'skill-hit' : 'hit', attackerId: ws.player.id, targetId: m.id,
-      damage, targetHp: m.hp, serverTime: now, ...(cast ? { skillId: cast.skillId, castId: cast.id, position: { x: m.x, y: m.y } } : {basicAttack:ws.player.basicAttack}) });
+    if (m.hp > 0 && !this.combatProfile && skill?.slowMs) m.slowUntil = Math.max(m.slowUntil || 0, now + skill.slowMs);
+    this.emit({ type: 'combat', action: periodic?'periodic-hit':cast ? 'skill-hit' : 'hit', attackerId: ws.player.id, targetId: m.id,
+      ...result, serverTime: now, ...(periodic?{auraId,scheduledAt}:{}),...(cast ? { skillId: cast.skillId, castId: cast.id, position: { x: m.x, y: m.y } } : {basicAttack:ws.player.basicAttack}) });
+    if(m.hp>0&&!periodic&&cast&&this.combatProfile){
+      const p=this.combatProfile.mechanics;
+      if(cast.skillId==='fireball')this.applyStatus(m,'burn',ws,now,{skillId:cast.skillId,durationMs:p.burnDurationMs,
+        ticks:p.burnTicks,amount:amount*p.burnDisplayRate});
+      if(cast.skillId==='frost_blast')this.applyStatus(m,'freeze',ws,now,{skillId:cast.skillId,durationMs:p.freezeDurationMs});
+    }
     if (m.hp > 0) return;
 
     // Mark death before awarding. Further messages cannot perform a second living→dead transition.
     m.alive = false; m.respawnAt = now + COMBAT.monsterRespawnMs;
+    this.buffs?.clear(m,now,'death');this.publishStatuses(now);
     for (const id of this.contributors) {
       const recipient = this.clients.get(id);
       if (!recipient || recipient.player.hp <= 0) continue;
@@ -126,6 +172,7 @@ export class CombatRoom {
   }
 
   tick(now, dt) {
+    this.updateStatuses(now);
     if(this.runtime)this.runtime.tick(now);
     else for (const [id, { ws, cast }] of this.casts) {
       let reason = null;
@@ -143,6 +190,7 @@ export class CombatRoom {
     for (const ws of this.clients.values()) {
       if(this.gameplay)updateBasicAttack(this.gameplay,ws,now);
       if (ws.player.hp <= 0 && ws.player.deadUntil && now >= ws.player.deadUntil) {
+        this.buffs?.clear(ws.player,now,'respawn');
         ws.character.hp = ws.character.maxHp; syncPlayerStats(ws);
         ws.player.x = this.world.spawn.x; ws.player.y = this.world.spawn.y; ws.player.deadUntil = 0;
         if(this.motion)this.motion.place(ws.player);
@@ -157,6 +205,7 @@ export class CombatRoom {
     const m = this.monster;
     if (!m.alive) {
       if (now >= m.respawnAt) {
+        this.buffs?.clear(m,now,'respawn');
         Object.assign(m, this.spawn, { hp: m.maxHp, alive: true, respawnAt: 0, attackAt: 0, slowUntil: 0,
           animation: { attackAt: null, hitAt: null, deathAt: null } }); this.contributors.clear();
         if(this.motion)this.motion.place(m);
@@ -164,6 +213,7 @@ export class CombatRoom {
       }
       return;
     }
+    if(this.blocked(m,'attack',now))return;
     // This first encounter is passive until attacked. Nearby contributors then share its attention.
     const targets = [...this.clients.values()].filter(ws => ws.player.hp > 0 && this.contributors.has(ws.player.id))
       .map(ws => ({ ws, distance: Math.hypot(ws.player.x - m.x, ws.player.y - m.y) }))
@@ -183,17 +233,18 @@ export class CombatRoom {
     m.attackAt = now;
     m.animation.attackAt = now;
     const victim = target.ws;
-    const damage = Math.min(victim.character.hp, Math.max(1, COMBAT.monsterDamage - equipmentStats(victim.character).armor));
-    victim.character.hp -= damage; syncPlayerStats(victim);
+    const result=resolveDamage({base:COMBAT.monsterDamage,armor:equipmentStats(victim.character).armor},victim.character.hp);
+    const {damage}=result;victim.character.hp=result.targetHp;syncPlayerStats(victim);
     victim.player.animation ||= { attackAt: null, hitAt: null, deathAt: null };
     victim.player.animation.hitAt = now;
     if (victim.player.hp <= 0) victim.player.animation.deathAt = now;
-    if (victim.player.hp <= 0) { victim.player.deadUntil = now + COMBAT.playerRespawnMs; victim.input = { x: 0, y: 0 }; }
+    if (victim.player.hp <= 0) { victim.player.deadUntil = now + COMBAT.playerRespawnMs; victim.input = { x: 0, y: 0 };this.buffs?.clear(victim.player,now,'death');this.publishStatuses(now); }
     this.changed(victim, victim.player.hp <= 0);
-    this.emit({ type: 'combat', action: 'player-hit', attackerId: m.id, targetId: victim.player.id, damage, targetHp: victim.player.hp, serverTime: now });
+    this.emit({ type: 'combat', action: 'player-hit', attackerId: m.id, targetId: victim.player.id, ...result, serverTime: now });
   }
 
   moveMonster(monster,input,dt,now){
+    if(this.blocked(monster,'move',now))return;
     const world={...this.world,speed:this.monsterSpeed*(monster.slowUntil>now ? .5 : 1)};
     if(this.motion)this.motion.move(monster,input,dt,world);else advance(monster,input,dt,world);
   }

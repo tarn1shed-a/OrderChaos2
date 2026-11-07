@@ -148,6 +148,7 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
         ws.input = { x: msg.x, y: msg.y }; ws.inputAt = Date.now();
       } else if (msg.type === 'jump' && ws.player) {
         if(typeof msg.pressed!=='boolean')return reject(ws,'无效跳跃输入');
+        if(msg.pressed&&combatRooms.get(ws.roomId).blocked(ws.player,'jump',clock()))return notice(ws,'控制效果中无法跳跃');
         const result=setJumpPressed(ws,msg.pressed,clock(),combatRooms.get(ws.roomId).casts.has(ws.player.id));
         if(result)notice(ws,result);
       } else if(msg.type==='interact'&&ws.player){
@@ -206,6 +207,7 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
         activeCharacters.delete(ws.character.id);
       }
       if (room) {
+        combatRooms.get(ws.roomId)?.buffs?.clear(ws.player,clock(),'disconnect');
         room.delete(ws.player.id);
         if (!room.size) { rooms.delete(ws.roomId); combatRooms.delete(ws.roomId); }
       }
@@ -218,13 +220,14 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
     try {
     for (const [roomKey, room] of rooms) {
       const encounter = combatRooms.get(roomKey);
+      encounter.updateStatuses(clock());
       encounter.dynamic?.update(clock());
       for (const ws of room.values()) {
         // A lost pointer release must not latch the control forever; recovery
         // clears input only and never schedules an automatic second attack.
         if(ws.attackPressed&&clock()-ws.attackInputAt>3000)ws.attackPressed=false;
         if (ws.player.hp > 0 && (encounter.runtime||!encounter.casts.has(ws.player.id))) {
-          const input=Date.now()-ws.inputAt>350?{x:0,y:0}:ws.input;
+          const input=Date.now()-ws.inputAt>350||encounter.blocked(ws.player,'move',clock())?{x:0,y:0}:ws.input;
           encounter.runtime?.move(ws,input,clock());
           if(ws.motion)ws.motion.move(ws.player,input,.05,ws.world);else advance(ws.player,input,.05,ws.world);
         }

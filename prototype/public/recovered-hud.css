@@ -48,3 +48,10 @@
 .recovered-hud .scene-panel .scene-notice{bottom:175px;max-width:calc(100% - 285px);font-size:10px;padding:6px 10px}
 @media(max-width:740px){.recovered-hud .scene-panel .scene-notice{left:12px;bottom:180px;max-width:35%;font-size:9px;padding:6px 8px}}
 @media(max-width:430px){.recovered-hud .scene-panel .scene-notice{max-width:34%}}
+.hud-buffs{display:flex;gap:5px;min-height:30px;margin-top:4px;pointer-events:auto}
+.hud-buffs[hidden]{display:none}
+.hud-target-text .hud-buffs{justify-content:center}
+.hud-buff{position:relative;width:30px;height:30px;display:block;border:1px solid #b9d8dfaa;border-radius:5px;box-shadow:0 1px 5px #0009;overflow:hidden;background:#112430}
+.hud-buff img{width:100%;height:100%;object-fit:cover;display:block}
+.hud-buff:after{content:'';position:absolute;bottom:0;left:0;width:calc(var(--remaining)*100%);height:2px;background:#bcecff}
+.hud-buff-time{position:absolute;right:2px;bottom:1px;font:700 11px sans-serif;color:#fff;text-shadow:0 1px 3px #000,0 0 3px #000}

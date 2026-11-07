@@ -1,6 +1,6 @@
 // Only decoded art and embedded glyphs are loaded. Original SWF scripts never run.
 export async function loadOriginalUI(profile) {
-  if (profile.format !== 'oc2-original-ui-v13' || profile.gameplay?.format!=='oc2-native-gameplay-v4'||profile.controls?.format!=='oc2-original-controls-v1' || profile.fonts?.requiredTextStatus !== 'complete' ||
+  if (profile.format !== 'oc2-original-ui-v14' || profile.gameplay?.format!=='oc2-native-gameplay-v5'||profile.controls?.format!=='oc2-original-controls-v1' || profile.fonts?.requiredTextStatus !== 'complete' ||
       !['chineseText','chineseDisplay'].every(key=>profile.fonts.faces?.[key]?.conversion==='lossless-full-sfnt-to-woff') ||
       profile.skillIcons?.format !== 'oc2-skill-icons-v1'||profile.hud?.format!=='oc2-original-hud-v1'||profile.hud?.nativeControls?.format!=='oc2-original-mobile-controls-v2'||
       profile.portraits?.format!=='oc2-character-portraits-v1'||profile.inventory?.format!=='oc2-original-inventory-v1'||
@@ -24,6 +24,11 @@ export async function loadOriginalUI(profile) {
   await Promise.all([...Object.values(profile.controls.icons),...Object.values(profile.gameplay.icons)].map(async entry=>{
     const image=new Image();image.src=localURL(entry.url);await image.decode();
     if(image.naturalWidth!==entry.width||image.naturalHeight!==entry.height)throw new Error('原版操作图标尺寸不匹配');
+  }));
+  if(profile.gameplay.combat?.format!=='oc2-native-combat-v1')throw new Error('原版战斗资料版本不匹配');
+  await Promise.all(Object.values(profile.gameplay.combat.auras).map(async aura=>{
+    const image=new Image();image.src=localURL(aura.icon.url);await image.decode();
+    if(image.naturalWidth!==96||image.naturalHeight!==96)throw new Error('原版状态图标尺寸不匹配');
   }));
   for(const [name,id] of [['attack','field-attack'],['interaction','field-interaction']]){
     const image=document.querySelector(`#${id} .control-icon`),bounds=profile.controls.iconPlacements[name].boundsFraction;

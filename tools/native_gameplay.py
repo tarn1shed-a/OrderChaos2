@@ -12,6 +12,7 @@ from PIL import Image
 from skill_attachments import decode_ftable
 from bdae_animation import BDAEAnimation
 from native_cast import recover_cast
+from native_combat import recover_combat,recover_protocol
 
 LIB_SHA256 = '77f449f2100a4717578e282bb04f1f8fff25d25c7bfa461d7d39ee49d1cb8ca4'
 ROUTINES = {
@@ -93,7 +94,7 @@ def verify_native(data):
     for address, expected in CONSTANTS.items():
         if image.read(address,4) != struct.pack('<f',expected):
             raise ValueError('Native motion constant changed')
-    return {'librarySHA256':LIB_SHA256,'routines':{hex(a):{'bytes':n,'sha256':h} for a,(n,h) in ROUTINES.items()},
+    return {'librarySHA256':LIB_SHA256,'combatDescriptors':recover_protocol(image),'routines':{hex(a):{'bytes':n,'sha256':h} for a,(n,h) in ROUTINES.items()},
             'constants':{hex(a):struct.unpack('<f',struct.pack('<f',v))[0] for a,v in CONSTANTS.items()}}
 
 def recover_gameplay(extract, output, selected_items):
@@ -147,7 +148,8 @@ def recover_gameplay(extract, output, selected_items):
         entry={'id':identifier,'reqProfession':proto['reqProfession'],'editName':proto['editName'],
                'runeId':proto['rune0'],'releaseState':rune['releaseState'] if rune else None,
                'animationId':state['casterPreAnim'] if state else None,'sourceAnimation':name,
-               'clip':None,'commonCD':proto['commonCD'],'coolDownTime':proto['coolDownTime']}
+               'clip':None,'commonCD':proto['commonCD'],'coolDownTime':proto['coolDownTime'],
+               'damageType':rune['damageType'] if rune else None,'damageAttribute':rune['damageAttribute'] if rune else None}
         if name in ranges and sum(r['name']==name or r['sourceName']==name for r in source_ranges)==1:
             entry['clip']=next((k for k,v in actions.items() if v==name),'attack_'+str(identifier))
             actions[entry['clip']]=name
@@ -175,7 +177,8 @@ def recover_gameplay(extract, output, selected_items):
                       'word':second+(third<<16),'allowedProfessions':[i+1 for i,k in enumerate(fields) if r[k]],
                       'legacy':not any(r[k] for k in fields),'sourceTypeName':r['weapon_type']}
     casting,cast_actions=recover_cast(extract,animation);actions.update(cast_actions)
-    result={'format':'oc2-native-gameplay-v4','comboRows':rows,'skills':skills,'weapons':weapons,'icons':icons,'casting':casting,
+    result={'format':'oc2-native-gameplay-v5','comboRows':rows,'skills':skills,'weapons':weapons,'icons':icons,'casting':casting,
+        'combat':recover_combat(extract,output),
         'jump':{'mode':'normal-on-foot','initialVelocity':10,'initialGravity':struct.unpack('<f',struct.pack('<f',-41.6))[0],
                 'gravityByNextVelocity':[[-13.1,-6.7],[-3.5,-75],[3.5,-20]],'predictPositionBeforeVelocity':True,
                 'velocityStepCapMs':100,'stationaryAnimationAvailable':'jump_in_place' in ranges,

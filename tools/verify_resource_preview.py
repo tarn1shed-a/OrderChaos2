@@ -96,7 +96,7 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v13' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v14' and not ui['provenance']['swfScriptExecution']
     controls=ui['controls'];assert controls['format']=='oc2-original-controls-v1' and not controls['scriptExecution']
     assert m['player']['jumpAnimations']
     collision=json.loads(asset(m['collision']['url'],output).read_text())
@@ -106,7 +106,13 @@ def verify(output=OUT):
     assert all(mesh.get('sourceNodeTransform') for ref in m['scenery'] for mesh in json.loads(asset(ref['url'],output).read_text())['meshes'])
     assert controls==json.loads((output/'ui/controls.json').read_text())
     gameplay=json.loads(asset(m['gameplay']['url'],output).read_text())
-    assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v4'
+    assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v5'
+    combat=gameplay['combat'];assert combat['format']=='oc2-native-combat-v1'
+    assert combat['mechanics']['burnDurationMs']==7000 and combat['mechanics']['freezeDurationMs']==2000
+    assert len(combat['baseAttributes'])==90
+    for aura in combat['auras'].values():
+        assert hashlib.sha256(asset(aura['icon']['url'],output).read_bytes()).hexdigest()==aura['icon']['sourceSHA256']
+        with Image.open(asset(aura['icon']['url'],output)) as image:assert image.size==(96,96)
     assert gameplay['weapons']['trainingSword']['legacy']
     for icon in gameplay['icons'].values():
         assert hashlib.sha256(asset(icon['url'],output).read_bytes()).hexdigest()==icon['sourceSHA256']

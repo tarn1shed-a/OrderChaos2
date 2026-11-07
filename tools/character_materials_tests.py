@@ -42,7 +42,7 @@ def source_model(*, bad_scalar=False, bad_sampler=False):
             filename = '../outside.tga' if bad_sampler and index==0 else field+'.tga'
             struct.pack_into('<Q',raw,target+16,string('texture/'+filename))
         elif field in SCALARS: struct.pack_into('<f',raw,value,float('nan') if bad_scalar and field=='ambientIntensity' else .7)
-        else: struct.pack_into('<I',raw,value,2)
+        else: struct.pack_into('<2IQ',raw,value,2,0,string('tech0'))
     return bytes(raw)
 
 
@@ -70,6 +70,9 @@ class CharacterMaterialTests(unittest.TestCase):
             record=read_material_record(BDAE(path),'body')
             self.assertEqual(record['effectPath'],EFFECT);self.assertEqual(len(record['samplers']),7)
             self.assertAlmostEqual(record['scalars']['ambientIntensity'],.7)
+            self.assertEqual(record['sourceTechniqueName'],'tech0')
+            self.assertEqual(record['sourceTechniqueValueWord0'],2)
+            self.assertNotIn('sourceTechniqueOrdinal',record)
             for raw,pattern in [(source_model(bad_scalar=True),'scalar'),(source_model(bad_sampler=True),'texture path')]:
                 path.write_bytes(raw)
                 with self.assertRaisesRegex(ValueError,pattern): read_material_record(BDAE(path),'body')
@@ -125,6 +128,8 @@ class CharacterMaterialTests(unittest.TestCase):
                     material=copy.deepcopy(material);material['sourceModel']=source;data['materials'].append(material)
             profile=recover_character_materials(extract,data,lambda path:'/assets/textures/'+Path(path).stem+'.png')
         body=profile['materials'][0]
+        self.assertEqual(body['sourceTechniqueName'],'tech0')
+        self.assertNotIn('sourceTechniqueOrdinal',body)
         self.assertAlmostEqual(body['scalars']['ambientIntensity'],.7)
         self.assertAlmostEqual(body['scalars']['specularIntensity'],.6)
         skirt=next(material for material in profile['materials'] if material['sourceModel'].endswith('faith_leg.bdae'))

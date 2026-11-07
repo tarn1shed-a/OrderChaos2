@@ -1,6 +1,7 @@
 import {createQuestBook} from './quest-book.js';
 import {createSourceTerrain} from './terrain-materials.js';
 import {sceneDiffuseTexture} from './scene-sampling.js';
+import {createSceneMaterial} from './scene-alpha.js';
 import {createContextControl} from './context-control.js';
 import {monsterStateText} from './monster-state.js';
 import {buffText} from './buff-presentation.js';
@@ -239,6 +240,7 @@ async function loadModel(entry) {
   let materials;
   if(assets.scenery?.includes(entry)&&data.sceneSampling?.format!=='oc2-scene-sampling-v1')throw new Error('原场景采样资源缺失，请更新本地素材包');
   if(assets.scenery?.includes(entry)&&data.sourceIndexing?.format!=='oc2-primitive-index-windows-v1')throw new Error('原场景顶点索引资源缺失，请更新本地素材包');
+  if((assets.scenery?.includes(entry)||assets.dynamicModels?.includes(entry))&&data.sceneAlpha?.format!=='oc2-scene-alpha-v1')throw new Error('原场景透明裁切资源缺失，请更新本地素材包');
   if(data.characterMaterials){
     const profile=data.characterMaterials,textures=new Map();
     await Promise.all([...new Set(profile.materials.flatMap(mat=>Object.values(mat.samplers)))].map(async url=>{
@@ -252,6 +254,14 @@ async function loadModel(entry) {
   }else materials = await Promise.all(data.materials.map(async (mat,index) => {
     const cached = await texture(assets.textures[mat.diffuse]);
     const tex = data.sceneSampling ? sceneDiffuseTexture(THREE,cached,mat,index,data.sceneSampling) : cached;
+    if(data.sceneAlpha){
+      const material=createSceneMaterial(THREE,tex,mat,index,data.sceneAlpha);
+      if(material.userData.sceneAlpha.rule==='discard-less-equal'){
+        const compile=material.onBeforeCompile;
+        material.onBeforeCompile=(shader,renderer)=>{compile(shader,renderer);canvas.dataset.sceneCutoutShader='discard-less-equal:0.5';};
+      }
+      return material;
+    }
     return new THREE.MeshStandardMaterial({ map: tex, color: tex ? 0xffffff : 0xa7bda1, roughness: .93, metalness: 0, side: THREE.DoubleSide, alphaTest: .35 });
   }));
   if (entry.animated) {
@@ -277,6 +287,7 @@ async function loadModel(entry) {
   group.position.set(-center.x, -box.min.y, -center.z);
   const root = new THREE.Group(); root.add(group); root.userData.height = size.y;
   if(data.sceneSampling)root.userData.sceneSampling={format:data.sceneSampling.format,diffuseMaterials:materials.length};
+  if(data.sceneAlpha)root.userData.sceneAlpha={format:data.sceneAlpha.format,cutoutMaterials:data.sceneAlpha.materials.filter(m=>m.rule==='discard-less-equal').length};
   return root;
 }
 
@@ -401,6 +412,8 @@ async function init() {
     }
     canvas.dataset.sceneSampling='oc2-scene-sampling-v1';
     canvas.dataset.sceneDiffuseMaterials=String([...staticModels.values()].reduce((n,model)=>n+(model.userData.sceneSampling?.diffuseMaterials||0),0));
+    canvas.dataset.sceneAlpha='oc2-scene-alpha-v1';
+    canvas.dataset.sceneCutoutMaterials=String([...staticModels.values()].reduce((n,model)=>n+(model.userData.sceneAlpha?.cutoutMaterials||0),0));
     for(const item of assets.dynamicModels||[])dynamicTemplates.set(item.url,await loadModel(item));
     $('map-title').textContent = assets.map.label; $('scene-subtitle').textContent = assets.map.subtitle;
     $('asset-detail').textContent = assets.summary;

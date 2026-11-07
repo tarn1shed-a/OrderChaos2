@@ -83,13 +83,14 @@ def read_material_record(reader, name):
         elif field.endswith('/CurrentTechnique'):
             if kind != 28 or reader.u(at + 20) != 1:
                 raise ValueError('Character technique property type differs')
-            technique = reader.u(value)
+            technique = reader.named_technique(value)
     required = {*SAMPLERS, *(['skinColorMask'] if 'SKIN_COLOR' in EFFECTS[effect_path] else [])}
     if set(values) != set(SCALARS) or set(samplers) != required or technique is None:
         raise ValueError('Original character material parameters are incomplete')
     return {'effectPath': effect_path, 'effectName': effect_name,
             'scalars': values, 'samplers': samplers,
-            'sourceMaterialRecordOffset': address, 'sourceTechniqueOrdinal': technique}
+            'sourceMaterialRecordOffset': address, 'sourceTechniqueName': technique['name'],
+            'sourceTechniqueValueWord0': technique['valueWord0']}
 
 
 def recover_color_choices(raw):

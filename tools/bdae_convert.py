@@ -63,6 +63,20 @@ class BDAE:
             raise ValueError('Unreasonable section count')
         return count, self.rel(field + 4)
 
+    def named_technique(self, value):
+        """Observed type28 record: native lookup uses the name at +8.
+
+        Preserve the first word without mislabelling it a technique ordinal.
+        Other value-record branches require separate recovery.
+        """
+        self.at(value, 16)
+        if self.unpack('2I', value) != (2, 0):
+            raise ValueError('Unsupported source technique value record')
+        name = self.string(self.q(value + 8))
+        if not name:
+            raise ValueError('Empty source technique name')
+        return {'valueWord0': 2, 'name': name}
+
     def parse(self):
         texture_count, texture_table = self.section(148)
         textures = [self.string(self.q(texture_table + n * 32 + 16)) for n in range(texture_count)]

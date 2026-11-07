@@ -15,6 +15,7 @@ import { loadOriginalUI } from './original-ui.js';
 import { createRecoveredHUD } from './recovered-hud.js';
 import { renderCharacterPortrait } from './character-portraits.js';
 import { createInventoryUI } from './inventory-ui.js';
+import { createMinimap } from './minimap.js';
 import { restoreCredentials, rememberCharacter, lastCharacterName, characterSessionWarning } from './character-session.js';
 
 const $ = id => document.getElementById(id);
@@ -26,14 +27,14 @@ let renderer, scene, camera, terrainMeshes = [], terrainData, mapBounds, origin,
 let assets, modelTemplate, ready = false, world = RESOURCE_WORLD, snapshot = [], selfId, socket, connected = false;
 let wolfTemplate, monsterSnapshot = [], selectedMonsterId = null, character = null, nextAttackAt = 0, feedbackUntil = 0, saveAt = null;
 let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset = 0;
-let combatEffects, environment, hdrRenderer, hud, inventoryUI, nextSkillRequestAt = 0;
+let combatEffects, environment, hdrRenderer, hud, inventoryUI, minimap, nextSkillRequestAt = 0;
 let renderEquipmentPreview, equipmentPreviewKey;
 let playerLookProfile;
 const monsterViews = new Map();
 let target = null, keys = new Set(), avatars = new Map(), rosterSignature = '', generation = 0, retryTimer, manualExit = false;
 let azimuth = .65, elevation = .58, distance = 24, previous = performance.now(), pointer = null;
 const focus = new THREE.Vector3(), raycaster = new THREE.Raycaster(), pointerNDC = new THREE.Vector2(), textureCache = new Map();
-const message = text => { $('message').textContent = text; };
+const message = text => { $('message').textContent = text; $('camp-message').textContent = text; };
 const modelFactories = new WeakMap();
 const status = (text, online = false) => { $('status').textContent = text; $('lamp').classList.toggle('online', online); };
 const send = data => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(data)); };
@@ -64,6 +65,7 @@ function updateCharacter(data, savedAt = null) {
   $('save-status').textContent = warning || (saveAt ? `服务器已保存 · ${new Date(saveAt).toLocaleTimeString('zh-CN')}` : '恢复凭据已记住 · 进度由服务器保存');
   hud?.character(data);
   inventoryUI?.update(data);
+  $('field-inventory').disabled=false;
   const previewKey=`${equipmentAppearanceKey(data.equipment)}:${lookKey(data.look)}`;
   if (renderEquipmentPreview && previewKey!==equipmentPreviewKey) {
     equipmentPreviewKey=previewKey;
@@ -272,6 +274,7 @@ async function init() {
     mapBounds = [terrainData.bounds.min, terrainData.bounds.max];
     origin = new THREE.Vector3((mapBounds[0][0] + mapBounds[1][0]) / 2, mapBounds[0][1], (mapBounds[0][2] + mapBounds[1][2]) / 2);
     heightGrid = terrainData.grid ? { width: terrainData.grid.width, depth: terrainData.grid.height, values: terrainData.grid.heights } : gridFromPositions(terrainData.positions);
+    minimap=createMinimap({canvas:$('minimap-terrain'),markers:$('minimap-markers'),heading:$('minimap-heading'),label:$('minimap')},terrainData,assets.scenery,world);
     const renderProfile=await json(assets.rendering.url);environment=createSceneEnvironment(THREE,renderProfile);
     const spawn=localPosition(world.spawn.x,world.spawn.y);environment.update(spawn.x+origin.x,spawn.z+origin.z,scene);
     hdrRenderer=createRecoveredHDR(THREE,renderer,renderProfile,await texture(renderProfile.lut.url));
@@ -409,6 +412,7 @@ function resetConnection() {
   $('field-hud').hidden=true;$('field-attack').hidden=true;$('field-actions').hidden=true;combatEffects?.clear();
   hud?.clear();
   inventoryUI?.update(null);
+  $('field-inventory').disabled=true;$('session-open').hidden=false;
   connected = false; snapshot = []; monsterSnapshot = []; selfId = null; keys.clear(); target = null; selectedMonsterId=null; updateRoster(); syncAvatars(); syncMonsters();
   for (const id of ['name', 'room']) $(id).disabled = false;
   $('join').disabled = !ready; $('join').firstElementChild.textContent = '进入试炼'; $('invite').disabled = $('second').disabled = true; $('leave').hidden = true;
@@ -428,6 +432,7 @@ function connect(name, room, retry = false) {
       monsterCooldownMs = msg.combat?.monsterCooldownMs ?? 1000;
       selfId = msg.id; world = msg.world; connected = true; status(`营地 ${msg.room}`, true);
       rememberCharacter(msg.character,msg.resumeToken); updateCharacter(msg.character,msg.savedAt);
+      $('session-dialog').close();$('session-open').hidden=true;setCampPanel(false);
       $('join').firstElementChild.textContent = '已进入试炼'; $('invite').disabled = $('second').disabled = false;
       $('load-note').textContent = '空格 / F 攻击 · 1 火球术 · 2 冰霜爆破 · 施法时短暂停步';
       const restored = msg.restored ? '已恢复角色进度。' : '已创建角色，开始第一次试炼。';
@@ -439,14 +444,14 @@ function connect(name, room, retry = false) {
       if(before&&msg.character.gold>before.gold){const gain=`获得 ${msg.character.xp-before.xp} 经验、${msg.character.gold-before.gold} 金币和狼皮`;logEvent(gain,true);flash(gain);}
       if(before&&msg.character.level>before.level){logEvent(`升级至 Lv.${msg.character.level}，生命已恢复。`,true);flash(`升级！Lv.${msg.character.level}`);}
     }
-    else if (msg.type === 'notice') { message(msg.message); inventoryUI?.notice(msg.message); }
+    else if (msg.type === 'notice') { message(msg.message); inventoryUI?.notice(msg.message); if(connected)flash(msg.message); }
     else if (msg.type === 'combat') handleCombat(msg);
     else if (msg.type === 'error') { denied = true; message(msg.message); }
     else if (msg.type === 'pong') $('network').textContent = `${Math.max(0, Date.now() - msg.at)} ms · 角色由本地服务器保存`;
   });
   ws.addEventListener('close', () => {
     if (generation !== gen) return; resetConnection();
-    if (manualExit || denied) { status('已离开'); return; }
+    if (manualExit || denied) { status('已离开'); openSession(); return; }
     status('连接中断'); message('3 秒后尝试重连并恢复角色进度。'); retryTimer = setTimeout(() => connect(name, room, true), 3000);
   });
   ws.addEventListener('error', () => { if (generation === gen) message('连接失败，请确认本地服务仍在运行。'); });
@@ -456,7 +461,7 @@ $('join-form').addEventListener('submit', event => {
   if (!name || !/^[A-Z0-9-]{3,16}$/.test(room)) return message('请输入名字和 3–16 位营地编号。'); connect(name, room);
 });
 $('field-attack').addEventListener('click', attack);
-$('leave').addEventListener('click', () => { stop(); manualExit = true; generation++; clearTimeout(retryTimer); socket?.close(); resetConnection(); status('已离开'); message('已离开。使用相同浏览器和角色名字可恢复进度。'); });
+$('leave').addEventListener('click', () => { stop(); manualExit = true; generation++; clearTimeout(retryTimer); socket?.close(); resetConnection(); status('已离开'); message('已离开。使用相同浏览器和角色名字可恢复进度。'); openSession(); });
 $('attack').addEventListener('click',attack);
 for(const skill of Object.values(SKILLS))for(const id of [`skill-${skill.id}`,`field-${skill.id}`])$(id).addEventListener('click',()=>useSkill(skill.id));
 function inviteURL() { const url = new URL(location.href); url.search = ''; url.searchParams.set('room', $('room').value.trim().toUpperCase()); return url.href; }
@@ -464,12 +469,30 @@ $('invite').addEventListener('click', async () => { const url = inviteURL(); try
 $('second').addEventListener('click', () => window.open(inviteURL(), '_blank', 'noopener'));
 $('reset-view').addEventListener('click', () => { azimuth = .65; elevation = .58; distance = 12; });
 function stop() { keys.clear(); target = null; if (connected) send({ type: 'input', x: 0, y: 0 }); }
+function setCampPanel(open) {
+  stop();pointer=null;$('camp-panel').hidden=!open;
+  $('camp-toggle').setAttribute('aria-expanded',String(open));
+  if(open)$('camp-close').focus();else if(connected)canvas.focus({preventScroll:true});
+}
+function openSession() {
+  setCampPanel(false);stop();
+  if(!$('session-dialog').open)$('session-dialog').showModal();
+}
+$('camp-toggle').addEventListener('click',()=>setCampPanel($('camp-panel').hidden));
+$('camp-close').addEventListener('click',()=>setCampPanel(false));
+$('session-open').addEventListener('click',openSession);
+$('session-close').addEventListener('click',()=>$('session-dialog').close());
+$('field-inventory').addEventListener('click',()=>{setCampPanel(false);inventoryUI?.open();});
 window.addEventListener('blur', stop); window.addEventListener('pagehide', () => socket?.close());
 document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
 const codes = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 window.addEventListener('keydown', e => {
-  if(!connected||['INPUT','TEXTAREA'].includes(document.activeElement?.tagName))return;
-  if(e.code==='KeyB'||e.code==='KeyC'){e.preventDefault();if(!e.repeat){if(inventoryUI?.isOpen)inventoryUI.close();else inventoryUI?.open();}return;}
+  if($('session-dialog').open||['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;
+  if(e.code==='KeyH'&&!inventoryUI?.isOpen){e.preventDefault();if(!e.repeat)setCampPanel($('camp-panel').hidden);return;}
+  if(e.code==='Escape'&&!$('camp-panel').hidden){e.preventDefault();setCampPanel(false);return;}
+  if(!connected)return;
+  if(e.code==='KeyB'||e.code==='KeyC'){e.preventDefault();if(!e.repeat){if(inventoryUI?.isOpen)inventoryUI.close();else{setCampPanel(false);inventoryUI?.open();}}return;}
+  if(!$('camp-panel').hidden)return;
   if(inventoryUI?.isOpen||['BUTTON','SELECT'].includes(document.activeElement?.tagName))return;
   if(e.code==='Space'||e.code==='KeyF'){e.preventDefault();if(!e.repeat)attack();return;}
   const skill=Object.values(SKILLS).find(skill=>skill.key===e.code);
@@ -478,7 +501,7 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => keys.delete(e.code));
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-canvas.addEventListener('pointerdown', e => { canvas.focus({ preventScroll: true }); pointer = { x: e.clientX, y: e.clientY, button: e.button, moved: false }; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointerdown', e => { if(!$('camp-panel').hidden)setCampPanel(false);canvas.focus({ preventScroll: true }); pointer = { x: e.clientX, y: e.clientY, button: e.button, moved: false }; canvas.setPointerCapture(e.pointerId); });
 canvas.addEventListener('pointermove', e => {
   if (!pointer) return; const dx = e.clientX - pointer.x, dy = e.clientY - pointer.y;
   if (Math.hypot(dx, dy) > 2) pointer.moved = true;
@@ -500,7 +523,7 @@ canvas.addEventListener('pointercancel', () => { pointer = null; });
 canvas.addEventListener('wheel', e => { e.preventDefault(); distance = THREE.MathUtils.clamp(distance * Math.exp(e.deltaY * .001), 4, 160); }, { passive: false });
 setInterval(() => {
   if (!connected || document.hidden) return;
-  if(inventoryUI?.isOpen){send({type:'input',x:0,y:0});return;}
+  if(inventoryUI?.isOpen||!$('camp-panel').hidden||$('session-dialog').open){send({type:'input',x:0,y:0});return;}
   const right = Number(keys.has('KeyD')||keys.has('ArrowRight')) - Number(keys.has('KeyA')||keys.has('ArrowLeft'));
   const back = Number(keys.has('KeyS')||keys.has('ArrowDown')) - Number(keys.has('KeyW')||keys.has('ArrowUp'));
   let x = right*Math.cos(azimuth)+back*Math.sin(azimuth), y = -right*Math.sin(azimuth)+back*Math.cos(azimuth);
@@ -549,6 +572,7 @@ function draw(now) {
   }
   if(Date.now()>feedbackUntil)$('combat-feedback').classList.remove('combat-flash');
   hud?.combat({me:snapshot.find(player=>player.id===selfId),enemy:chosenMonster()||monsterSnapshot.find(monster=>!monster.alive),connected,now:Date.now()+serverOffset,attackCooldownMs:cooldownMs});
+  minimap?.draw({players:snapshot,monsters:monsterSnapshot,selfId,azimuth},now);
   combatEffects?.update(Date.now()+serverOffset);
   if(combatEffects)canvas.dataset.effects=combatEffects.state().types.join(',');
   if(combatEffects)canvas.dataset.particles=String(combatEffects.particleCount());
@@ -558,4 +582,4 @@ function draw(now) {
   canvas.dataset.renderZone=String(zone.id);canvas.dataset.hdr='source-reinhardt-bloom';
   hdrRenderer.render(scene,camera,zone); requestAnimationFrame(draw);
 }
-init();
+openSession();init();

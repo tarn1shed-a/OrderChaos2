@@ -48,26 +48,3 @@
 .recovered-hud .scene-panel .scene-notice{bottom:175px;max-width:calc(100% - 285px);font-size:10px;padding:6px 10px}
 @media(max-width:740px){.recovered-hud .scene-panel .scene-notice{left:12px;bottom:180px;max-width:35%;font-size:9px;padding:6px 8px}}
 @media(max-width:430px){.recovered-hud .scene-panel .scene-notice{max-width:34%}}
-
-.recovered-hud .field-actions.desktop-hotbar{position:absolute;left:50%;right:auto;bottom:62px;transform:translateX(-50%);width:min(720px,calc(100% - 30px));height:auto!important;aspect-ratio:auto!important;display:grid;grid-template-columns:minmax(0,1fr) 94px minmax(0,1fr);gap:10px;align-items:center;padding:9px 12px;background:linear-gradient(0deg,#0b171ef5,#1e3137ee);border:1px solid #98835c;border-radius:6px 6px 18px 18px;box-shadow:0 3px 14px #000a,inset 0 1px #d6c99d55;pointer-events:none}
-.desktop-hotbar .hotbar-bank{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;align-items:center;min-width:0}
-.recovered-hud .desktop-hotbar .hotbar-bank>button{pointer-events:auto;touch-action:manipulation}
-.recovered-hud .desktop-hotbar .hotbar-bank>*{position:relative!important;inset:auto!important;width:100%!important;height:auto!important;aspect-ratio:1;min-width:0;min-height:0;margin:0!important;padding:0;transform:none!important;border:1px solid #8a805f;border-radius:4px;background:#0a171d;box-shadow:inset 0 0 6px #000c}
-.desktop-hotbar .hotbar-core{position:relative;width:94px;height:94px;margin-top:-18px;margin-bottom:-4px}
-.recovered-hud .desktop-hotbar .hotbar-core .field-attack{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;border:0;border-radius:50%;background:none;min-height:0;margin:0;padding:0;pointer-events:auto}
-.desktop-hotbar .hotbar-core .attack-art{background:var(--oc2-experienceRing) center/100% 100% no-repeat}
-.recovered-hud .desktop-hotbar #hotbar-portrait{position:absolute;left:13%;top:13%;width:74%;height:74%;object-fit:cover;border-radius:50%}
-.desktop-hotbar .attack-label{position:absolute;left:0;right:0;bottom:11px;font-size:9px;color:#f1e0b0;text-shadow:0 1px 3px #000}
-.desktop-hotbar .attack-key{right:5px;bottom:3px;min-width:18px;line-height:20px;text-align:center;font-size:16px;background:#0b1925;border:1px solid #9d8a62;border-radius:3px}
-#hotbar-level{position:absolute;right:1px;top:-2px;min-width:22px;padding:1px 4px;color:#e5ce8c;background:#101e26;border:1px solid #ad9764;border-radius:50%;font:16px var(--oc2-number);text-align:center}
-.recovered-hud .desktop-hotbar .field-skill .skill-art{position:absolute;inset:0;width:100%;height:100%;background:var(--hud-skillSlotBackground) center/100% 100% no-repeat}
-.recovered-hud .desktop-hotbar .field-skill .skill-icon{left:6%;top:6%;width:88%;height:88%;border-radius:3px}
-.recovered-hud .desktop-hotbar .field-skill .skill-label{position:absolute;left:0;top:auto;bottom:0;width:100%;height:13px;clip-path:none;overflow:visible;color:#e4d5b7;background:#09151dcc;font-size:9px;text-align:center;white-space:nowrap;z-index:3}
-.recovered-hud .desktop-hotbar .field-skill:not(.cooling) .skill-status{visibility:hidden}
-.recovered-hud .desktop-hotbar .field-skill.cooling .skill-status{font-size:20px}
-.recovered-hud .desktop-hotbar .hud-empty-slot{opacity:.38;background:var(--hud-skillSlotBackground) center/88% 88% no-repeat,#0a171d}
-.slot-key{position:absolute;left:3px;top:1px;z-index:3;color:#f1dfab;font:13px var(--oc2-number);text-shadow:0 1px 3px #000;pointer-events:none}
-.desktop-shortcuts{position:absolute;display:block;left:50%;bottom:calc(100% + 15px);transform:translateX(-50%);width:300px;text-align:center;color:#d4d8c7;font-size:10px;text-shadow:0 1px 4px #000;white-space:nowrap}
-.recovered-hud .scene-panel .scene-notice{bottom:195px;max-width:calc(100% - 44px)}
-@media(max-width:1050px){.recovered-hud .field-actions.desktop-hotbar{grid-template-columns:minmax(0,1fr) 72px minmax(0,1fr);gap:6px;padding:7px}.desktop-hotbar .hotbar-core{width:72px;height:72px}.desktop-hotbar .hotbar-bank{gap:3px}.slot-key{font-size:11px}}
-@media(max-width:600px){.recovered-hud .field-actions.desktop-hotbar{width:calc(100% - 16px);grid-template-columns:minmax(0,1fr) 56px minmax(0,1fr);gap:4px;padding:5px}.desktop-hotbar .hotbar-core{width:56px;height:56px}.desktop-hotbar .hotbar-bank{gap:2px}.desktop-hotbar .attack-label{font-size:7px;bottom:9px}.desktop-hotbar .attack-key{font-size:12px;line-height:15px;bottom:-2px;right:-2px}.recovered-hud .desktop-hotbar .field-skill .skill-label{font-size:7px}.slot-key{font-size:9px;left:1px;top:0}.desktop-shortcuts{font-size:8px;width:250px}}

@@ -19,12 +19,14 @@ from ui_assets import Bits, read_swf, tags, rectangular_bitmap, shape_edges
 
 IDENTITY = [1, 0, 0, 1, 0, 0]
 IDENTITY_COLOR = {'multiply': [256] * 4, 'add': [0] * 4}
-SWFS = ('library', 'Gauges2', 'PlayerGauges', 'EnemyGauges', 'OperationPanel2', 'ShortCutBar2', 'ExpBar')
+SWFS = ('library', 'Gauges2', 'PlayerGauges', 'EnemyGauges', 'OperationPanel2', 'ShortCutBar2', 'ExpBar', 'Joystick')
 CONFIG = 'ui/Config/interface_common_2.ini'
 TUTORIAL = 'ui/Config/tuto_display.ini'
 # Source library Sprite -> exact source shape. The colors below are original
 # PlaceObject CXFORMWITHALPHA values, not chosen web palette replacements.
 ART = {
+    'joystickDisc': ('control', 561, None),
+    'mapFrame': ('hud_map_button', 2449, None),
     'selfHealthArc': ('hud_blood', 2399, None),
     'selfCenterBackground': ('hud_exp_black', 2382, None),
     'playerInteractionButton': ('PlayerGaugesbutton1', 2621, None),
@@ -500,6 +502,7 @@ def recover_hud_assets(extract, output):
             'sourceFlipX':matrix[0]<0,'sourceFlipY':matrix[3]<0,
             'mode':'lossless-source-atlas-crop-flipped' if matrix[0]<0 or matrix[3]<0 else 'lossless-source-atlas-crop'}
     fields = {
+        'joystick': ('Joystick',0,['bg','stick']),
         'self': ('Gauges2',0,['HP','HP.HP_instance','MP_Default','MP_Mage','MP_Warrior','MP_Slayer','MP_Monk','enterMap']),
         'player': ('PlayerGauges',114,['playerIcon','hpGreenProgressBar','hpRedProgressBar','targetNameTextField','targetLevelTextField','PlayerInteractionBtn']),
         'target': ('EnemyGauges',17,['m_enemyIcon','TargetName','hpYellow','hpRed','hpGreen']),
@@ -516,7 +519,7 @@ def recover_hud_assets(extract, output):
             'fields':{name:named_path(doc,cid,name,library) for name in names}}
     layouts['self']['sourceRole'] = 'self-gauges-with-map-center-and-class-resource-arcs'
     layouts['self']['portraitIsWebAdaptation'] = True
-    layouts['self']['omittedLocalGameplay'] = ['MP_Default','MP_Mage','MP_Warrior','MP_Slayer','MP_Monk','enterMap']
+    layouts['self']['omittedLocalGameplay'] = ['MP_Default','MP_Mage','MP_Warrior','MP_Slayer','MP_Monk']
     layouts['player']['sourceRole'] = 'selected-player-target'
     layouts['player']['portraitSlot'] = _art_bounds(layouts['player']['fields']['playerIcon']['matrixTwips'],48,48)
     operation_slots = {}
@@ -541,6 +544,32 @@ def recover_hud_assets(extract, output):
         math.ceil(max(r[0]+r[2] for r in rectangles))-x,
         math.ceil(max(r[1]+r[3] for r in rectangles))-y]
     layouts['operations']['viewportIsWebCrop'] = True
+    interaction=named_path(docs['OperationPanel2'],0,'Interactionbtn.slotBtn',library)
+    first=sprite_frames(library,interaction['leafCharacterId'])[0][0]
+    interaction_matrix=compose(interaction['matrixTwips'],first['matrixTwips'])
+    layouts['operations']['interaction']={'asset':'interactionBackground',
+        **_art_bounds(interaction_matrix,102,102)}
+    bg=sprite_frames(docs['Gauges2'],92)[0][0]
+    hp_background=compose(layouts['self']['fields']['HP']['matrixTwips'],bg['matrixTwips'])
+    map_field=layouts['self']['fields']['enterMap']
+    _,payload=library['records'][2449]
+    _,_,_,map_bounds,_=rectangle_bitmap(payload)
+    map_matrix=compose(map_field['matrixTwips'],[1,0,0,1,map_bounds[0],map_bounds[2]])
+    native_controls={'format':'oc2-original-mobile-controls-v1',
+        'referenceViewport':[1136,640],
+        'mapFrame':{'asset':'mapFrame',**_art_bounds(map_matrix,110,110)},
+        'selfHealthBackground':{'asset':'healthArcBackground',**_art_bounds(hp_background,69,134)},
+        'selfHealth':_art_bounds(layouts['self']['fields']['HP.HP_instance']['matrixTwips'],125,125),
+        'selfCenter':{'asset':'selfCenterBackground',**_art_bounds(next(item for item in sprite_frames(docs['Gauges2'],0)[0] if item.get('className')=='hud_exp_black')['matrixTwips'],125,125)},
+        'joystick':{'sourceSWF':docs['Joystick']['path'],
+            'sourceSHA256':docs['Joystick']['sourceSHA256'],
+            'sourceControlSymbol':'control','sourceBitmapPixels':[64,64],
+            'sourceStagePixels':[128,128],
+            'sourceFields':layouts['joystick']['fields'],
+            'runtimePositionAndSizeAreNotProvenBySWF':True},
+        'operations':{'sourceLayout':'operations','localSkillSlotMapping':{'fireball':1,'frost_blast':2},
+            'sourceSlotToWebSkillMappingIsAdaptation':True}}
+
     # Slot internals establish the icon/cooldown/lock semantics independently of
     # any guesses based on appearance. Keep the original transforms and filters.
     layouts['skillSlot'] = {'sourceSWF':library['path'],'sourceSpriteId':2541,
@@ -585,10 +614,10 @@ def recover_hud_assets(extract, output):
         webMapping={'ratioFillIsWebAdaptation':True,'sourceFullWidthPixels':1136,
                     'ratioOrder':'ascending','mappingIsWebAdaptation':True})
     config, tutorial = load(CONFIG), load(TUTORIAL)
-    wanted = {'Gauges','PlayerGauges','EnemyGauges','OperationPanel','ShortCutBar','ExpBar'}
+    wanted = {'Gauges','PlayerGauges','EnemyGauges','OperationPanel','ShortCutBar','ExpBar','Joystick'}
     anchors = [block for block in _ini_blocks(config) if block.get('name') in wanted]
-    expected_urls = {'Gauges2.swf','PlayerGauges.swf','EnemyGauges.swf','OperationPanel2.swf','ShortCutBar2.swf','ExpBar.swf'}
-    if {block.get('url') for block in anchors} != expected_urls or len(anchors) != 6:
+    expected_urls = {'Gauges2.swf','PlayerGauges.swf','EnemyGauges.swf','OperationPanel2.swf','ShortCutBar2.swf','ExpBar.swf','Joystick.swf'}
+    if {block.get('url') for block in anchors} != expected_urls or len(anchors) != 7:
         raise ValueError('Original common_2 HUD component configuration changed')
     tutorials = [block for block in _ini_blocks(tutorial) if block.get('tutorial_id') in
                  {'TUTORIAL_ATTACK_NORMAL','TUTORIAL_ATTACK_SKILL'}]
@@ -596,7 +625,7 @@ def recover_hud_assets(extract, output):
                       'TUTORIAL_ATTACK_SKILL':'Spellbtn.spellSlots.SpellSlot1'}
     if {row['tutorial_id']:row.get('symbol_name') for row in tutorials} != expected_paths:
         raise ValueError('Original tutorial skill-slot semantic binding changed')
-    profile = {'format':'oc2-original-hud-v1','assets':assets,'layouts':layouts,'progress':progress,
+    profile = {'nativeControls':native_controls,'format':'oc2-original-hud-v1','assets':assets,'layouts':layouts,'progress':progress,
         'anchors':{'source':CONFIG,'sections':anchors,'interpretation':'Raw source relative positions; frontend responsive placement is an adaptation.'},
         'semantics':{'attack':{'source':TUTORIAL,'bindings':tutorials},
             'health':'Gauges2.HP.HP_instance is self HP; PlayerGauges green/red are selected-player-target fields, not self layers.',

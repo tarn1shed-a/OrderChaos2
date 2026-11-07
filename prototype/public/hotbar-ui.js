@@ -2,7 +2,7 @@ import { SKILLS } from './skills.js';
 import {defaultHotbar,bindingLabel,swapHotbarSlots,rebindHotbarSlot,hotbarSkillForEvent,loadHotbar,saveHotbar} from './hotbar-settings.js';
 import {createHotbarSync} from './hotbar-sync.js';
 
-export function createHotbarUI({root,panel,toggle,closeButton,rows,status,reset,retryButton,send,onEditingChange,onChange}){
+export function createHotbarUI({root,panel,toggle,closeButton,rows,status,reset,retryButton,send,onEditingChange,onChange,fixedLayout=false}){
   const slots=[...root.querySelectorAll('.hotbar-slot')],buttons=new Map(Object.keys(SKILLS).map(id=>[id,document.getElementById('field-'+id)]));
   let settings=defaultHotbar(),characterId=null,editing=false,listening=null,picked=null,drag=null,ghost=null,suppressClickUntil=0,warning=null;
   function say(text){status.textContent=text;}
@@ -18,9 +18,9 @@ export function createHotbarUI({root,panel,toggle,closeButton,rows,status,reset,
       slot.querySelector('.slot-key').textContent=label;
       slot.classList.toggle('long-key',settings.bindings[index].shift);
       slot.classList.toggle('empty',!id);slot.classList.toggle('picked',picked===index);
-      slot.setAttribute('role',editing?'button':'group');slot.tabIndex=editing?0:-1;
+      slot.setAttribute('role',editing&&!fixedLayout?'button':'group');slot.tabIndex=editing&&!fixedLayout?0:-1;
       slot.setAttribute('aria-label','第 '+(index+1)+' 格：'+skillName(id)+'，快捷键 '+label);
-      if(editing)slot.setAttribute('aria-pressed',String(picked===index));else slot.removeAttribute('aria-pressed');
+      if(editing&&!fixedLayout)slot.setAttribute('aria-pressed',String(picked===index));else slot.removeAttribute('aria-pressed');
     }
     for(const [id,button] of buttons){
       slots[settings.slots.indexOf(id)].append(button);
@@ -71,13 +71,13 @@ export function createHotbarUI({root,panel,toggle,closeButton,rows,status,reset,
   retryButton.addEventListener('click',()=>sync.retry());
   const indexOf=element=>{const slot=element?.closest?.('.hotbar-slot');return slot&&root.contains(slot)?slots.indexOf(slot):-1;};
   root.addEventListener('click',event=>{
-    if(!editing)return;
+    if(!editing||fixedLayout)return;
     event.preventDefault();event.stopImmediatePropagation();
     if(performance.now()<suppressClickUntil)return;
     const index=indexOf(event.target);if(index>=0)select(index);
   },true);
   root.addEventListener('pointerdown',event=>{
-    if(!editing||event.button!==0)return;
+    if(!editing||fixedLayout||event.button!==0)return;
     const index=indexOf(event.target);if(index<0)return;
     event.preventDefault();event.stopPropagation();
     slots[index].focus();root.setPointerCapture(event.pointerId);
@@ -124,7 +124,7 @@ export function createHotbarUI({root,panel,toggle,closeButton,rows,status,reset,
     }
     if(event.code==='Escape'){event.preventDefault();event.stopImmediatePropagation();setEditing(false);return;}
     const index=indexOf(event.target);
-    if(index>=0){
+    if(index>=0&&!fixedLayout){
       if(['Space','Enter'].includes(event.code)){event.preventDefault();event.stopImmediatePropagation();if(!event.repeat)select(index);}
       if(['ArrowLeft','ArrowRight'].includes(event.code)){event.preventDefault();event.stopImmediatePropagation();slots[(index+(event.code==='ArrowRight'?1:slots.length-1))%slots.length].focus();}
     }

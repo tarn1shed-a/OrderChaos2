@@ -91,7 +91,7 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v7' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v8' and not ui['provenance']['swfScriptExecution']
     for entry in ui['assets'].values():
         with Image.open(asset(entry['url'], output)) as image:
             assert image.size == (entry['width'], entry['height'])
@@ -118,6 +118,9 @@ def verify(output=OUT):
         assert hashlib.sha256(path.read_bytes()).hexdigest() == icon['sourceSHA256']
         with Image.open(path) as image:assert image.size == (96,96)
     hud=ui['hud'];assert hud['format']=='oc2-original-hud-v1'
+    assert hud['nativeControls']['format']=='oc2-original-mobile-controls-v1'
+    assert set(hud['layouts']['joystick']['fields'])=={'bg','stick'}
+    assert hud['nativeControls']['joystick']['runtimePositionAndSizeAreNotProvenBySWF']
     assert hud['progress']['healthGreen']['sourceRole']=='self-health'
     assert hud['progress']['healthGreen']['frameCount']==50
     assert hud['progress']['healthGreen']['webMapping']['ratioOrder']=='descending'

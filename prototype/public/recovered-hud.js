@@ -15,8 +15,8 @@ export function createRecoveredHUD(profile) {
     $(id).querySelector('.attack-art,.skill-art').append(element);
     cooldowns[id]=mountSourceProgress(element,profile.progress[definition],profile.assets);cooldowns[id].set(0);
   }
-  // Reuse source artwork/masks while the desktop shortcut layout is our own.
-  $('field-actions').dataset.layout='desktop-two-bank';
+  // Source control placement is applied by mobile-hud after key settings mount.
+  $('field-actions').dataset.layout='original-mobile-operation-panel';
   document.body.classList.add('recovered-hud');
   let portraits;
   function setPlayerPortrait(value){

@@ -99,6 +99,17 @@ class HUDAssetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             profile = recover_hud_assets(extract,temp)
             self.assertEqual(profile['format'],'oc2-original-hud-v1')
+            controls=profile['nativeControls']
+            self.assertEqual(controls['format'],'oc2-original-mobile-controls-v1')
+            self.assertAlmostEqual(controls['mapFrame']['boundsPixels'][0],17.5)
+            self.assertAlmostEqual(controls['mapFrame']['boundsPixels'][1],25.8)
+            self.assertAlmostEqual(controls['mapFrame']['boundsPixels'][2],110)
+            self.assertAlmostEqual(controls['mapFrame']['boundsPixels'][3],110)
+            self.assertEqual(controls['joystick']['sourceControlSymbol'],'control')
+            self.assertTrue(controls['joystick']['runtimePositionAndSizeAreNotProvenBySWF'])
+            self.assertEqual(profile['layouts']['joystick']['fields']['bg']['matrixPixels'][:4],[.75,0,0,.75])
+            self.assertEqual(profile['layouts']['joystick']['fields']['stick']['leafCharacterId'],2)
+            self.assertGreater(profile['layouts']['operations']['interaction']['boundsPixels'][2],80)
             self.assertEqual(len(profile['assets']),len(ART))
             for key,asset in profile['assets'].items():
                 original = Image.open(io.BytesIO(extract(asset['sourceAtlas']))).crop(asset['sourceRect'])

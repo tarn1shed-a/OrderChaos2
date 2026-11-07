@@ -175,13 +175,13 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         if path not in allowed_loose:raise ValueError(f'Unexpected loose resource: {path}')
         return safe_output(source, path)
     # Check actual Chinese interface characters, including dynamic combat labels.
-    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','recovered-hud.js','inventory-ui.js','skill-book.js','items.js','character-equipment.js','character-look.js','character-materials.js'])
+    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','recovered-hud.js','inventory-ui.js','skill-book.js','mobile-hud.js','touch-joystick.js','items.js','character-equipment.js','character-look.js','character-materials.js'])
     ui_text += json.dumps(ui['skillUI'], ensure_ascii=False)
     required_text = ''.join(sorted({ch for ch in ui_text if '\u3400' <= ch <= '\u9fff'}))
     chinese = recover_chinese_fonts(read_loose, output, required_text)
     if chinese['requiredTextStatus'] != 'complete':raise ValueError('Original Chinese fonts do not cover the current interface')
     icons = recover_skill_icons(extract, output)
-    ui['format'] = 'oc2-original-ui-v7'
+    ui['format'] = 'oc2-original-ui-v8'
     ui['fonts']['faces'].update(chinese['faces'])
     ui['fonts']['chineseStatus'] = chinese['chineseStatus']
     ui['fonts']['requiredTextStatus'] = chinese['requiredTextStatus']

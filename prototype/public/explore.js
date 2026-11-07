@@ -17,6 +17,8 @@ import { renderCharacterPortrait } from './character-portraits.js';
 import { createSkillBook } from './skill-book.js';
 import { createInventoryUI } from './inventory-ui.js';
 import { createMinimap } from './minimap.js';
+import { createMobileHUD } from './mobile-hud.js';
+import { createTouchJoystick } from './touch-joystick.js';
 import { createHotbarUI } from './hotbar-ui.js';
 import { encodeCharacterRecovery, decodeCharacterRecovery } from './character-recovery.js';
 import { restoreCredentials, rememberCharacter, lastCharacterName, characterSessionWarning } from './character-session.js';
@@ -33,7 +35,8 @@ let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset =
 let combatEffects, environment, hdrRenderer, hud, inventoryUI, skillBook, minimap, nextSkillRequestAt = 0;
 let renderEquipmentPreview, equipmentPreviewKey;
 let playerLookProfile;
-let hotbar;
+let hotbar, mobileHUD, joystick;
+let joystickInput={x:0,y:0,active:false};
 let activeCredentials=null;
 const monsterViews = new Map();
 let target = null, keys = new Set(), avatars = new Map(), rosterSignature = '', generation = 0, retryTimer, manualExit = false;
@@ -282,15 +285,17 @@ async function init() {
     skillBook=createSkillBook(uiProfile,{stop,focusGame:()=>canvas.focus({preventScroll:true}),beforeOpen:()=>{hotbar?.close();inventoryUI?.close();setCampPanel(false);pointer=null;}});
     $('field-skills').disabled=false;
     hotbar=createHotbarUI({root:$('field-actions'),panel:$('hotbar-editor'),toggle:$('hotbar-settings'),closeButton:$('hotbar-close'),
-      rows:$('hotbar-bindings'),status:$('hotbar-status'),reset:$('hotbar-reset'),retryButton:$('hotbar-retry'),send,
+      fixedLayout:true,rows:$('hotbar-bindings'),status:$('hotbar-status'),reset:$('hotbar-reset'),retryButton:$('hotbar-retry'),send,
       onEditingChange:open=>{
         if(open){skillBook?.close();setCampPanel(false);inventoryUI?.close();stop();pointer=null;}
         else if(connected)canvas.focus({preventScroll:true});
       },
       onChange:()=>{
-        updateSkills();
+        mobileHUD?.layout();updateSkills();
         $('skill-hint').firstChild.textContent=Object.values(SKILLS).map(skill=>(hotbar?.keyForSkill(skill.id)||skill.hotkey)+'：'+skill.name).join(' · ');
       }});
+    mobileHUD=createMobileHUD(uiProfile.hud);
+    joystick=createTouchJoystick($('touch-controls'),{enabled:()=>connected&&Boolean(snapshot.find(p=>p.id===selfId)?.hp>0)&&!inputBlocked(),change:value=>{joystickInput=value;if(value.active){target=null;keys.clear();}else if(connected)send({type:'input',x:0,y:0});}});
     terrainData = await json(assets.map.url);
     mapBounds = [terrainData.bounds.min, terrainData.bounds.max];
     origin = new THREE.Vector3((mapBounds[0][0] + mapBounds[1][0]) / 2, mapBounds[0][1], (mapBounds[0][2] + mapBounds[1][2]) / 2);
@@ -433,7 +438,7 @@ function resetConnection() {
   hotbar?.disconnect();$('hotbar-settings').disabled=true;
   $('recovery-copy').disabled=true;$('recovery-show').disabled=true;$('recovery-show').textContent='显示恢复码';$('recovery-status').textContent='';$('recovery-export').value='';$('recovery-export').hidden=true;
   $('recovery-code').disabled=false;$('recovery-join').disabled=!ready;
-  $('field-hud').hidden=true;$('field-attack').hidden=true;$('field-actions').hidden=true;combatEffects?.clear();
+  $('field-hud').hidden=true;$('field-attack').hidden=true;$('field-actions').hidden=true;$('touch-controls').hidden=true;joystick?.reset();combatEffects?.clear();
   hud?.clear();
   inventoryUI?.update(null);
   $('field-inventory').disabled=true;$('session-open').hidden=false;
@@ -451,7 +456,7 @@ function connect(name, room, retry = false, importedCredentials=null) {
   ws.addEventListener('message', event => {
     if (generation !== gen) return; const msg = JSON.parse(event.data);
     if (msg.type === 'welcome') {
-      $('field-attack').hidden=false;$('field-actions').hidden=false;
+      $('field-attack').hidden=false;$('field-actions').hidden=false;$('touch-controls').hidden=false;
       attackRange = msg.combat?.attackRange ?? 32; cooldownMs = msg.combat?.cooldownMs ?? 700; nextAttackAt = 0;
       monsterCooldownMs = msg.combat?.monsterCooldownMs ?? 1000;
       selfId = msg.id; world = msg.world; connected = true; status(`营地 ${msg.room}`, true);
@@ -517,7 +522,8 @@ function inviteURL() { const url = new URL(location.href); url.search = ''; url.
 $('invite').addEventListener('click', async () => { const url = inviteURL(); try { await navigator.clipboard.writeText(url); message('已复制实验场邀请链接。'); } catch { message(`邀请地址：${url}`); } });
 $('second').addEventListener('click', () => window.open(inviteURL(), '_blank', 'noopener'));
 $('reset-view').addEventListener('click', () => { azimuth = .65; elevation = .58; distance = 12; });
-function stop() { keys.clear(); target = null; if (connected) send({ type: 'input', x: 0, y: 0 }); }
+function inputBlocked(){return skillBook?.isOpen||hotbar?.isEditing||inventoryUI?.isOpen||!$('camp-panel').hidden||$('session-dialog').open;}
+function stop() { joystick?.reset();keys.clear(); target = null; if (connected) send({ type: 'input', x: 0, y: 0 }); }
 function setCampPanel(open) {
   if(open){hotbar?.close();skillBook?.close();}
   stop();pointer=null;$('camp-panel').hidden=!open;
@@ -553,13 +559,14 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => keys.delete(e.code));
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-canvas.addEventListener('pointerdown', e => { if(skillBook?.isOpen||hotbar?.isEditing)return;if(!$('camp-panel').hidden)setCampPanel(false);canvas.focus({ preventScroll: true }); pointer = { x: e.clientX, y: e.clientY, button: e.button, moved: false }; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointerdown', e => { if(skillBook?.isOpen||hotbar?.isEditing)return;if(!$('camp-panel').hidden)setCampPanel(false);canvas.focus({ preventScroll: true }); if(pointer&&pointer.id!==e.pointerId)return;pointer = { id:e.pointerId,x: e.clientX, y: e.clientY, button: e.button, moved: false }; canvas.setPointerCapture(e.pointerId); });
 canvas.addEventListener('pointermove', e => {
-  if (!pointer) return; const dx = e.clientX - pointer.x, dy = e.clientY - pointer.y;
+  if (!pointer||pointer.id!==e.pointerId) return; const dx = e.clientX - pointer.x, dy = e.clientY - pointer.y;
   if (Math.hypot(dx, dy) > 2) pointer.moved = true;
   if (pointer.button === 2 || e.pointerType === 'touch') { azimuth -= dx * .006; elevation = THREE.MathUtils.clamp(elevation + dy * .005, .18, 1.35); pointer.x = e.clientX; pointer.y = e.clientY; }
 });
 canvas.addEventListener('pointerup', e => {
+  if(pointer?.id!==e.pointerId)return;
   if (pointer && !pointer.moved && pointer.button === 0 && connected) {
     const r = canvas.getBoundingClientRect(); pointerNDC.set((e.clientX-r.left)/r.width*2-1, 1-(e.clientY-r.top)/r.height*2); raycaster.setFromCamera(pointerNDC, camera);
     const monstersHit=raycaster.intersectObjects([...monsterViews.values()].filter(v=>v.alive).map(v=>v.root),true).find(hit=>hit.object.userData.monsterId);
@@ -571,15 +578,15 @@ canvas.addEventListener('pointerup', e => {
   }
   pointer = null;
 });
-canvas.addEventListener('pointercancel', () => { pointer = null; });
+canvas.addEventListener('pointercancel', event => { if(pointer?.id===event.pointerId)pointer = null; });
 canvas.addEventListener('wheel', e => { e.preventDefault(); distance = THREE.MathUtils.clamp(distance * Math.exp(e.deltaY * .001), 4, 160); }, { passive: false });
 setInterval(() => {
   if (!connected || document.hidden) return;
-  if(skillBook?.isOpen||hotbar?.isEditing||inventoryUI?.isOpen||!$('camp-panel').hidden||$('session-dialog').open){send({type:'input',x:0,y:0});return;}
-  const right = Number(keys.has('KeyD')||keys.has('ArrowRight')) - Number(keys.has('KeyA')||keys.has('ArrowLeft'));
-  const back = Number(keys.has('KeyS')||keys.has('ArrowDown')) - Number(keys.has('KeyW')||keys.has('ArrowUp'));
-  let x = right*Math.cos(azimuth)+back*Math.sin(azimuth), y = -right*Math.sin(azimuth)+back*Math.cos(azimuth);
   const me = snapshot.find(p => p.id === selfId);
+  if(inputBlocked()||!me||me.hp<=0){joystick?.reset();send({type:'input',x:0,y:0});return;}
+  const right = joystickInput.active?joystickInput.x:Number(keys.has('KeyD')||keys.has('ArrowRight')) - Number(keys.has('KeyA')||keys.has('ArrowLeft'));
+  const back = joystickInput.active?joystickInput.y:Number(keys.has('KeyS')||keys.has('ArrowDown')) - Number(keys.has('KeyW')||keys.has('ArrowUp'));
+  let x = right*Math.cos(azimuth)+back*Math.sin(azimuth), y = -right*Math.sin(azimuth)+back*Math.cos(azimuth);
   if (target && me) { const dx=target.x-me.x, dy=target.y-me.y, d=Math.hypot(dx,dy); if(d<2)target=null;else{x=dx/d;y=dy/d;} }
   const len = Math.hypot(x,y); if(len>1){x/=len;y/=len;} send({type:'input',x,y});
 }, 50);

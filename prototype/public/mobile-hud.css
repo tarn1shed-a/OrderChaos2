@@ -1,0 +1,66 @@
+/* Source mobile component geometry replaces the desktop glass dock. */
+.original-mobile{overscroll-behavior:none}
+.original-mobile .game-toolbar{right:10px;top:10px;gap:5px;transform:scale(var(--native-hud-scale,1));transform-origin:top right}
+.original-mobile .game-toolbar .connection{display:none}
+.original-mobile .game-toolbar .glass-tool{min-width:70px;height:40px;min-height:40px;padding:0 11px;font:16px var(--oc2-cjk-text),sans-serif;color:#e3d4b0;border:0;border-radius:0;background:var(--oc2-buttonGray) center/100% 100% no-repeat;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+.original-mobile .game-toolbar kbd{display:none}
+.desktop-game.original-mobile .scene-title,.desktop-game.original-mobile .site-footer,.desktop-game.original-mobile .scene-bottom{display:none}
+.original-mobile .scene-panel #scene{touch-action:none;user-select:none;-webkit-user-select:none}
+.desktop-game.recovered-hud.original-mobile .field-hud{top:5px;left:0;width:360px;height:165px;display:block;transform:scale(var(--native-hud-scale,1));transform-origin:top left;pointer-events:none}
+.original-mobile .hud-portrait-cluster{position:absolute;inset:0;width:150px;height:150px;background:none}
+.original-mobile #field-portrait{display:none}
+.original-mobile .native-gauge-center,.original-mobile .native-health-background,.original-mobile .native-map-frame{position:absolute;display:block;background-position:center;background-size:100% 100%;background-repeat:no-repeat;pointer-events:none}
+.original-mobile .native-gauge-center{z-index:0}.original-mobile .native-health-background{z-index:2}.original-mobile .native-map-frame{z-index:4}
+.original-mobile #field-health-mask{position:absolute;inset:auto;z-index:3}
+.original-mobile .hotbar-core{position:absolute;z-index:1}
+.original-mobile .hotbar-minimap{inset:4px;border:0;border-radius:50%;box-shadow:none;background:#192b2b}
+.original-mobile .minimap-north,.original-mobile .minimap-scale{display:none}
+.original-mobile .hud-portrait-cluster .level-medallion{left:0;top:0;right:auto;bottom:auto;width:28px;height:27px;font:22px var(--oc2-number);color:#e8dcba;background:none;border:0;text-shadow:1px 1px 2px #000}
+.original-mobile .hud-player-text{position:absolute;left:145px;top:25px;width:180px}
+.original-mobile .hud-player-text #field-name,.original-mobile .hud-player-text #field-stats{display:none}
+.original-mobile .hud-player-text .hud-state{font:13px var(--oc2-cjk-text),sans-serif;color:#dfd6b8}
+.desktop-game.original-mobile .target-hud{left:50%;right:auto;top:12px;width:220px;height:53px;padding:0;transform:translateX(-50%) scale(var(--native-hud-scale,1));transform-origin:top center;background:none;border:0;box-shadow:none;display:block}
+.original-mobile .hud-target-portrait{display:none}
+.original-mobile .hud-target-text{width:100%;text-align:center}
+.original-mobile .hud-target-text strong{font-size:17px;font-family:var(--oc2-cjk-display),serif;color:#f2daa8}
+.original-mobile #hud-target-hp{height:8px;margin:4px 0;background:#172126;border:1px solid #888c77}
+.original-mobile #hud-target-health{font-size:15px}.original-mobile #hud-target-state{font-size:11px}
+.desktop-game.recovered-hud.original-mobile .field-actions.desktop-hotbar{position:absolute;left:auto;right:10px;bottom:18px;display:block;gap:0;aspect-ratio:auto;padding:0;transform:scale(var(--native-hud-scale,1));transform-origin:bottom right;background:none;border:0;border-radius:0;box-shadow:none;pointer-events:none}
+.original-mobile .desktop-shortcuts{display:none}
+.original-mobile .field-actions .hud-skill-track{position:absolute;inset:auto;opacity:1;background-position:center;background-size:100% 100%;pointer-events:none}
+.desktop-game.recovered-hud.original-mobile .desktop-hotbar .hotbar-slot{position:absolute;inset:auto;display:block;min-width:0;min-height:0;aspect-ratio:auto;padding:0;margin:0;border:0;border-radius:0;background:var(--hud-skillSlotBackground) center/100% 100% no-repeat;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;opacity:1;pointer-events:none;touch-action:manipulation}
+.desktop-game.recovered-hud.original-mobile .desktop-hotbar .hotbar-slot.empty{opacity:.45}
+.desktop-game.recovered-hud.original-mobile .desktop-hotbar .hotbar-slot>.field-skill{position:absolute;inset:0;width:100%;height:100%;min-height:0;border:0;background:none;box-shadow:none;padding:0;pointer-events:auto;touch-action:manipulation}
+.desktop-game.recovered-hud.original-mobile .desktop-hotbar .field-skill .skill-art{position:absolute;inset:0;width:100%;height:100%;border-radius:0;background:var(--hud-skillSlotBackground) center/100% 100% no-repeat;overflow:visible}
+.desktop-game.recovered-hud.original-mobile .desktop-hotbar .field-skill .skill-icon{left:7%;top:7%;width:86%;height:86%;border-radius:50%}
+.desktop-game.recovered-hud.original-mobile .desktop-hotbar .field-skill .skill-art::after{display:block;inset:-10%;background:var(--hud-skillSelectedFrame) center/100% 100% no-repeat;opacity:0}
+.desktop-game.recovered-hud.original-mobile .desktop-hotbar .field-skill.casting .skill-art::after{opacity:1}
+.desktop-game.recovered-hud.original-mobile .desktop-hotbar .field-skill .skill-label,.original-mobile .slot-key{display:none}
+.desktop-game.recovered-hud.original-mobile .desktop-hotbar .field-skill:not(.cooling) .skill-status{visibility:hidden}
+.desktop-game.recovered-hud.original-mobile .desktop-hotbar .field-skill.cooling .skill-status{position:absolute;inset:0;display:grid;place-items:center;border:0;background:none;border-radius:0;font:25px var(--oc2-number);color:#f8edce}
+.desktop-game.recovered-hud.original-mobile .desktop-hotbar .hud-cooldown{inset:7%;border-radius:50%;overflow:hidden}
+.original-mobile #field-actions #field-attack{position:absolute;inset:auto;padding:0;min-height:0;min-width:0;margin:0;border:0;border-radius:0;background:none;box-shadow:none;pointer-events:auto;touch-action:manipulation}
+.original-mobile #field-attack .attack-art{position:absolute;inset:0;display:grid;place-items:center;background:var(--hud-attackBackground) center/100% 100% no-repeat}
+.original-mobile #field-attack .attack-symbol{width:58%;height:58%;z-index:1;color:#e8e4ce;filter:drop-shadow(0 1px 2px #000)}
+.original-mobile #field-attack .attack-label,.original-mobile #field-attack .attack-key{display:none}
+.original-mobile #field-attack .hud-cooldown{inset:0}
+.original-mobile #field-attack:disabled{opacity:.75}
+.original-mobile #field-interaction{position:absolute;inset:auto;border:0;border-radius:0;margin:0;padding:0;background:var(--hud-interactionBackground) center/100% 100% no-repeat;opacity:.5;pointer-events:none}
+.original-mobile #field-interaction span{display:none}
+.original-mobile #touch-controls.native-joystick{display:block;position:absolute;z-index:5;left:40px;right:auto;bottom:54px;width:128px;height:128px;transform:scale(var(--native-hud-scale,1));transform-origin:bottom left;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;border:0;padding:0;cursor:grab}
+.original-mobile .joystick-base,.original-mobile .joystick-knob{position:absolute;display:block;background:var(--hud-joystickDisc) center/100% 100% no-repeat;pointer-events:none}
+.original-mobile .joystick-base{inset:0;opacity:.32}
+.original-mobile .joystick-knob{left:40px;top:40px;width:48px;height:48px;opacity:.65}
+.original-mobile .native-joystick.active .joystick-base{opacity:.55}.original-mobile .native-joystick.active .joystick-knob{opacity:1}
+.desktop-game.recovered-hud.original-mobile .field-experience{left:0;right:0;bottom:0;height:8px;transform:none}
+.original-mobile #field-xp-text,.original-mobile #field-xp-glow{display:none}
+.original-mobile .hud-xp-track{height:8px;border:0;opacity:1;background:#10232b}
+.original-mobile #camp-panel,.original-mobile .hotbar-editor{border-radius:5px;background-image:linear-gradient(#102635eb,#122a39eb),var(--inventory-panelTexture);backdrop-filter:none;-webkit-backdrop-filter:none;border-color:#95835d}
+.original-mobile .hotbar-editor{top:70px;max-height:calc(100dvh - 100px)}
+.original-mobile .binding-key,.original-mobile .hotbar-reset{border-radius:3px}
+.original-mobile .field-actions[hidden],.original-mobile #touch-controls[hidden],.original-mobile .hotbar-slot[hidden]{display:none!important}
+@media(pointer:coarse){.original-mobile .game-toolbar .glass-tool{min-width:74px}.original-mobile .hotbar-editor{max-height:calc(100dvh - 95px)}}
+
+@media(max-width:600px) and (orientation:portrait){.original-mobile .game-toolbar{top:105px}}
+.original-mobile #scene:focus-visible{outline:none}
+.desktop-game.recovered-hud.original-mobile .field-experience,.original-mobile .hud-xp-track{height:calc(8px * var(--native-hud-scale,1))}

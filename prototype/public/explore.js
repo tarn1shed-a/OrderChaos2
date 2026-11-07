@@ -1,3 +1,4 @@
+import {monsterStateText} from './monster-state.js';
 import {buffText} from './buff-presentation.js';
 import * as THREE from '/vendor/three.module.js';
 import { RESOURCE_WORLD } from './world.js';
@@ -143,7 +144,7 @@ function useSkill(id) {
   if(skillBook?.isOpen||hotbar?.isEditing)return;
   const skill=skillById(id), me=snapshot.find(p=>p.id===selfId), now=Date.now()+serverOffset;
   if(!skill||!connected||!me||me.hp<=0||me.controls?.skill||castActive(me.cast)||Date.now()<nextSkillRequestAt||now<(me.skillReadyAt?.[id]||0)||now<(me.globalReadyAt||0))return;
-  const enemy=chosenMonster();if(!enemy)return;
+  const enemy=chosenMonster();if(!enemy||enemy.ai?.state==='returning')return;
   target=null;nextSkillRequestAt=Date.now()+200;
   send({type:'skill',skillId:id,targetId:enemy.id});canvas.focus({preventScroll:true});
 }
@@ -158,7 +159,7 @@ function updateSkills() {
     const hotkey=hotbar?.keyForSkill(skill.id)||skill.hotkey;
     const text=`${skill.name}${remaining>0?` · ${(remaining/1000).toFixed(1)}s`: ` · ${hotkey}`}`;
     for(const id of [`skill-${skill.id}`,`field-${skill.id}`]) {
-      const button=$(id);button.disabled=Boolean(hotbar?.isEditing)||!connected||!chosenMonster()||!me||me.hp<=0||Boolean(casting)||Boolean(me?.controls?.skill)||remaining>0;
+      const button=$(id);button.disabled=Boolean(hotbar?.isEditing)||!connected||!chosenMonster()||!me||me.hp<=0||Boolean(casting)||Boolean(me?.controls?.skill)||chosenMonster()?.ai?.state==='returning'||remaining>0;
       // Preserve the original icon and frame while updating the server cooldown.
       const label=button.querySelector('.skill-label'),state=button.querySelector('.skill-status');
       if(label&&state){
@@ -478,10 +479,10 @@ function syncMonsters(serverTime = Date.now()) {
     }
     const view=monsterViews.get(m.id);view.target.copy(entityPosition(m));view.alive=m.alive;view.root.visible=true;
     view.motion=snapshotMotion(view.lastState,m,(serverTime-view.lastStateAt)/1000,(mapBounds[1][0]-mapBounds[0][0])/world.width);
-    view.label.dataset.buffs=(m.buffs||[]).map(b=>b.kind).join(',');view.label.dataset.hp=String(m.hp);
+    view.label.dataset.buffs=(m.buffs||[]).map(b=>b.kind).join(',');view.label.dataset.hp=String(m.hp);view.label.dataset.aiState=m.ai?.state||'';view.label.dataset.aiTarget=m.ai?.targetId||'';view.label.dataset.routePoints=String(m.ai?.routePoints||0);view.label.dataset.worldY=String(m.worldY??'');
     view.lastState={x:m.x,y:m.y};view.lastStateAt=serverTime;
     syncCharacterCombat(view.body,m,serverTime,view.attackSeconds);
-    view.fill.style.width=`${Math.max(0,m.hp/m.maxHp*100)}%`;view.health.textContent=m.alive?`${m.hp} / ${m.maxHp}${buffText(m,serverTime)?' · '+buffText(m,serverTime):m.slowUntil>serverTime?' · 减速':''}`:'已击败 · 等待重生';
+    view.fill.style.width=`${Math.max(0,m.hp/m.maxHp*100)}%`;view.health.textContent=m.alive?`${m.hp} / ${m.maxHp}${buffText(m,serverTime)?' · '+buffText(m,serverTime):m.ai?' · '+monsterStateText(m):m.slowUntil>serverTime?' · 减速':''}`:'已击败 · 等待重生';
   }
   updateTarget();
 }

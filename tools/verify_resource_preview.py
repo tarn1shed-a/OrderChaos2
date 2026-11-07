@@ -96,7 +96,7 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v14' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v15' and not ui['provenance']['swfScriptExecution']
     controls=ui['controls'];assert controls['format']=='oc2-original-controls-v1' and not controls['scriptExecution']
     assert m['player']['jumpAnimations']
     collision=json.loads(asset(m['collision']['url'],output).read_text())
@@ -106,7 +106,13 @@ def verify(output=OUT):
     assert all(mesh.get('sourceNodeTransform') for ref in m['scenery'] for mesh in json.loads(asset(ref['url'],output).read_text())['meshes'])
     assert controls==json.loads((output/'ui/controls.json').read_text())
     gameplay=json.loads(asset(m['gameplay']['url'],output).read_text())
-    assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v5'
+    assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v6'
+    navigation=json.loads(asset(m['navigation']['url'],output).read_text())
+    assert navigation['format']=='oc2-source-navigation-v1' and len(navigation['tiles'])==9 and len(navigation['nodes'])==381
+    assert gameplay['npc']['navigation']==m['navigation'] and gameplay['npc']['nonzeroAIPlans']==0
+    assert gameplay['npc']['previewOriginalWolfSpawns']==[]
+    assert all(t['verification']['bytesConsumed']==t['verification']['fileSize'] for t in navigation['tiles'])
+    assert all(0<=e['to']<len(navigation['nodes']) for n in navigation['nodes'] for e in n['edges'])
     combat=gameplay['combat'];assert combat['format']=='oc2-native-combat-v1'
     assert combat['mechanics']['burnDurationMs']==7000 and combat['mechanics']['freezeDurationMs']==2000
     assert len(combat['baseAttributes'])==90
@@ -222,7 +228,7 @@ def verify(output=OUT):
             with Image.open(asset(url,output)) as image:image.verify()
     catalog = json.loads(asset('/assets/library/catalog.json', output).read_text())
     assert catalog['format'] == 'oc2-art-catalog-v1'
-    assert catalog['sourceFormats'] == {'web':m['format'], **{key:m[key]['format'] for key in ('effects','rendering','ui','gameplay','collision')}}
+    assert catalog['sourceFormats'] == {'web':m['format'], **{key:m[key]['format'] for key in ('effects','rendering','ui','gameplay','collision','navigation')}}
     assert catalog['fileCount'] == len(catalog['entries'])
     for entry in catalog['entries']:
         path = asset('/assets/'+entry['path'], output)

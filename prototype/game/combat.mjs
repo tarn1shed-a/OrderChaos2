@@ -6,6 +6,7 @@ import {SpellRuntime} from './spell-runtime.mjs';
 import {DynamicScene} from './dynamic-scene.mjs';
 import {BuffRuntime} from './buffs.mjs';
 import {resolveDamage} from './damage.mjs';
+import {MonsterAI} from './monster-ai.mjs';
 
 export const COMBAT = Object.freeze({ playerDamage: 20, playerCooldownMs: 700, monsterHp: 60, monsterDamage: 6,
   monsterCooldownMs: 1000, monsterRespawnMs: 8000, playerRespawnMs: 4000,
@@ -18,7 +19,7 @@ export function syncPlayerStats(ws) {
 }
 
 export class CombatRoom {
-  constructor(key, world, scene, clients, { changed, emit, notice, gameplay=null, motion=null, casting=true,lab=false, random=Math.random }) {
+  constructor(key, world, scene, clients, { changed, emit, notice, gameplay=null, motion=null, navigation=null, ai=true,casting=true,lab=false, random=Math.random }) {
     this.gameplay=scene==='resources'?gameplay:null;this.random=random;
     this.motion=scene==='resources'?(motion?.fork?.()||motion):null;
     this.world = world; this.scene = scene; this.clients = clients; this.changed = changed; this.emit = emit; this.notice = notice;
@@ -47,13 +48,15 @@ export class CombatRoom {
         if(this.clients.get(r.ws.player.id)!==r.ws||r.ws.player.hp<=0)return '施法已中断';
         if(this.blocked(r.ws.player,'skill',now))return '控制效果中断施法';
         if(!r.hit&&!this.monster.alive)return '目标已倒地';
+        if(!r.hit&&this.brain?.returning)return '目标已脱战';
         if(!r.hit&&(r.channel||now>=r.cast.impactAt)&&Math.hypot(r.ws.player.x-this.monster.x,r.ws.player.y-this.monster.y)>r.skill.range)return '目标离开技能范围';
         return null;
       },hit:(r,now)=>this.damageMonster(r.ws,r.skill.damage,now,r.cast)});
     if(lab){if(!this.motion)throw new Error('碰撞验证场需要本地资源');this.dynamic=new DynamicScene(this.motion,Date.now());}
+    if(ai&&scene==='resources'&&this.motion&&navigation)this.brain=new MonsterAI(this,navigation);
   }
 
-  snapshot() { return [{ ...this.monster, buffs:structuredClone(this.monster.buffs||[]), animation: { ...this.monster.animation } }]; }
+  snapshot() { return [{ ...this.monster, ...(this.monster.ai?{ai:{...this.monster.ai}}:{}),buffs:structuredClone(this.monster.buffs||[]), animation: { ...this.monster.animation } }]; }
 
   blocked(target,action,now){return this.buffs?.blocked(target,action,now)||false;}
   applyStatus(target,kind,source,now,options){
@@ -91,6 +94,7 @@ export class CombatRoom {
     if(this.blocked(ws.player,'attack',now))return this.notice(ws,'控制效果中无法攻击');
     if (this.casts.has(ws.player.id)) return this.notice(ws, '正在施法，稍后再攻击');
     if (!m.alive) return this.notice(ws, '野狼已被击败，稍后会重新出现');
+    if(this.brain?.returning)return this.notice(ws,'目标正在脱战返回');
     if (Math.hypot(ws.player.x - m.x, ws.player.y - m.y) > this.range) return this.notice(ws, '距离太远，先靠近野狼');
     if (now - ws.player.attackAt < COMBAT.playerCooldownMs) return this.notice(ws, '攻击尚在冷却中');
     const result=chooseBasicAttack(this.gameplay,ws.character,ws.basicCombo,now,this.random);
@@ -112,6 +116,7 @@ export class CombatRoom {
     if (ws.player.hp <= 0) return this.notice(ws, '倒地后无法施法');
     if(this.blocked(ws.player,'skill',now))return this.notice(ws,'控制效果中无法施法');
     if (!m.alive) return this.notice(ws, '目标已倒地，无法施法');
+    if(this.brain?.returning)return this.notice(ws,'目标正在脱战返回');
     if (this.casts.has(ws.player.id)) return this.notice(ws, '正在施法，请稍候');
     if (now < (ws.player.skillReadyAt?.[skill.id] ?? 0)) return this.notice(ws, `${skill.name}还在冷却中`);
     if (native?now<(ws.player.globalReadyAt||0):now-ws.player.attackAt<COMBAT.playerCooldownMs) return this.notice(ws, '攻击尚在冷却中');
@@ -132,12 +137,13 @@ export class CombatRoom {
 
   damageMonster(ws, amount, now, cast = null, {periodic=false,auraId=null,scheduledAt=null}={}) {
     const m = this.monster;
-    if(!m.alive||m.hp<=0)return;
+    if(!m.alive||m.hp<=0||this.brain?.returning)return;
     this.contributors.add(ws.player.id);
     const source=cast?this.combatProfile?.spells[cast.skillId]:ws.player.basicAttack;
     const bonus=!periodic&&cast?.skillId==='arcane_missile'&&this.buffs?.has(m,'burn',now)?this.combatProfile.mechanics.arcaneBurnBonus:0;
     const result=resolveDamage({base:amount,bonus,damageType:source?.damageType??null,damageAttribute:source?.damageAttribute??null},m.hp);
     const {damage}=result;m.hp=result.targetHp;
+    this.brain?.hit(ws,damage);
     m.animation.hitAt = now;
     if (m.hp <= 0) m.animation.deathAt = now;
     const skill = cast && skillById(cast.skillId);
@@ -155,6 +161,7 @@ export class CombatRoom {
     // Mark death before awarding. Further messages cannot perform a second living→dead transition.
     m.alive = false; m.respawnAt = now + COMBAT.monsterRespawnMs;
     this.buffs?.clear(m,now,'death');this.publishStatuses(now);
+    this.brain?.tick(now,0);
     for (const id of this.contributors) {
       const recipient = this.clients.get(id);
       if (!recipient || recipient.player.hp <= 0) continue;
@@ -209,16 +216,20 @@ export class CombatRoom {
         Object.assign(m, this.spawn, { hp: m.maxHp, alive: true, respawnAt: 0, attackAt: 0, slowUntil: 0,
           animation: { attackAt: null, hitAt: null, deathAt: null } }); this.contributors.clear();
         if(this.motion)this.motion.place(m);
+        this.brain?.reset(now);
         this.emit({ type: 'combat', action: 'respawn', attackerId: null, targetId: m.id, targetHp: m.hp, serverTime: now });
       }
       return;
     }
+    let target;
+    if(this.brain){target=this.brain.tick(now,dt);if(!target||this.blocked(m,'attack',now))return;}
+    else {
     if(this.blocked(m,'attack',now))return;
     // This first encounter is passive until attacked. Nearby contributors then share its attention.
     const targets = [...this.clients.values()].filter(ws => ws.player.hp > 0 && this.contributors.has(ws.player.id))
       .map(ws => ({ ws, distance: Math.hypot(ws.player.x - m.x, ws.player.y - m.y) }))
       .sort((a, b) => a.distance - b.distance);
-    const target = targets[0];
+    target = targets[0];
     const leash = this.scene === 'resources' ? 220 : 360;
     if (!target || target.distance > leash) {
       const dx = this.spawn.x - m.x, dy = this.spawn.y - m.y, d = Math.hypot(dx, dy);
@@ -228,6 +239,7 @@ export class CombatRoom {
     if (target.distance > this.monsterRange) {
       this.moveMonster(m, { x: (target.ws.player.x - m.x) / target.distance, y: (target.ws.player.y - m.y) / target.distance }, dt,now);
       return;
+    }
     }
     if (now - m.attackAt < COMBAT.monsterCooldownMs) return;
     m.attackAt = now;

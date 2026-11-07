@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import WebSocket from 'ws';
 import { createGameServer } from '../server.mjs';
 import {existsSync} from 'node:fs';
-import {createCollision} from '../game/collision.mjs';
+import {createCollision,loadCollision} from '../game/collision.mjs';
+import {loadNavigation} from '../game/navigation.mjs';
 
 // Every test has a fresh save directory; no test reads or modifies runtime/.
 async function fixture(t,options={}) {
@@ -18,7 +19,7 @@ async function fixture(t,options={}) {
     saveFile,
     advance(ms) { now += ms; },
     async start() {
-      game = createGameServer({ saveFile, motion:null,casting:false,clock: () => now,...options });
+      game = createGameServer({ saveFile, motion:null,ai:false,casting:false,clock: () => now,...options });
       f.game=game;
       await new Promise(resolve => game.server.listen(0, '127.0.0.1', resolve));
       f.url = `ws://127.0.0.1:${game.server.address().port}/ws`;
@@ -493,4 +494,28 @@ test('native freeze stops movement at both peers until expiry; server-owned over
  const creds={characterId:a.id,resumeToken:a.welcome.resumeToken};await a.close();
  const resumed=await enter(f,'冻结甲',{scene:'resources',...creds});assert.deepEqual(player(await stateAfter(resumed,resumed.mark()),a.id).buffs,[]);
  publicStateHasNoCredentials(b,[creds.resumeToken]);
+});
+
+test('source-nav chase is shared by peers and late joins, then home-leash return rejects stale attacks and resets without rewards',
+ {skip:!existsSync(new URL('../../game-data/converted/maps/navigation.json',import.meta.url))},async t=>{
+ const f=await fixture(t,{casting:true,motion:loadCollision(),navigation:loadNavigation(),ai:true}),a=await enter(f,'导航甲',{scene:'resources'}),b=await enter(f,'导航乙',{scene:'resources'});
+ await stateAfter(a,a.mark(),s=>s.players.length===2);
+ const encounter=[...f.game.combatRooms.values()][0],ws=[...encounter.clients.values()].find(ws=>ws.player.id===a.id);
+ assert(encounter.brain);encounter.monsterSpeed=140; // Fast test clock; production remains 14.
+ Object.assign(ws.player,{x:850,y:450});encounter.motion.place(ws.player);
+ const before=encounter.monster.hp;encounter.damageMonster(ws,1,Date.now());
+ const chasing=await stateAfter(a,a.mark(),s=>wolf(s).ai?.state==='chasing');
+ const peer=await stateAfter(b,b.mark(),s=>s.tick===chasing.tick);assert.deepEqual(wolf(peer),wolf(chasing));
+ assert.equal(wolf(chasing).ai.targetId,a.id);assert.equal(wolf(chasing).ai.moveAction,2);assert(wolf(chasing).ai.routePoints>1);
+ const late=await enter(f,'导航迟到',{scene:'resources'}),lateState=await stateAfter(late,late.mark(),s=>wolf(s).ai?.targetId===a.id);
+ assert.equal(wolf(lateState).hp,before-1);assert.equal(wolf(lateState).ai.targetId,a.id);
+ Object.assign(ws.player,{x:encounter.spawn.x+221,y:encounter.spawn.y});encounter.motion.place(ws.player);
+ const returning=await stateAfter(a,a.mark(),s=>wolf(s).ai?.state==='returning');assert.equal(wolf(returning).ai.moveAction,3);
+ const hp=wolf(returning).hp,mark=a.mark();a.send({type:'skill',skillId:'fireball',targetId:wolf(returning).id,ai:{state:'dead'},damage:999});
+ await a.wait(m=>m.type==='notice'&&m.message.includes('脱战'),{after:mark});
+ const reset=await stateAfter(a,a.mark(),s=>wolf(s).ai?.state==='idle');assert.equal(wolf(reset).hp,60);
+ assert.equal(a.messages.filter(m=>m.action==='kill').length,0);assert.equal(ws.character.gold,0);assert.equal(hp,59);
+ assert.equal(encounter.contributors.size,0);assert.equal(encounter.brain.threat.size,0);
+ const resetPeer=await stateAfter(b,b.mark(),s=>wolf(s).ai?.state==='idle');assert.equal(wolf(resetPeer).hp,60);
+ publicStateHasNoCredentials(late,[a.welcome.resumeToken,b.welcome.resumeToken]);
 });

@@ -188,12 +188,13 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         return safe_output(source, path)
     # Check actual Chinese interface characters, including dynamic combat labels.
     ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','professions.js','recovered-hud.js','inventory-ui.js','skill-book.js','mobile-hud.js','touch-joystick.js','items.js','character-equipment.js','character-look.js','character-materials.js'])
+    ui_text += (ROOT/'prototype/public/monster-state.js').read_text()+(ROOT/'prototype/public/buff-presentation.js').read_text()
     ui_text += json.dumps(ui['skillUI'], ensure_ascii=False)
     required_text = ''.join(sorted({ch for ch in ui_text if '\u3400' <= ch <= '\u9fff'}))
     chinese = recover_chinese_fonts(read_loose, output, required_text)
     if chinese['requiredTextStatus'] != 'complete':raise ValueError('Original Chinese fonts do not cover the current interface')
     icons = recover_skill_icons(extract, output)
-    ui['format'] = 'oc2-original-ui-v14'
+    ui['format'] = 'oc2-original-ui-v15'
     ui['fonts']['faces'].update(chinese['faces'])
     ui['fonts']['chineseStatus'] = chinese['chineseStatus']
     ui['fonts']['requiredTextStatus'] = chinese['requiredTextStatus']
@@ -223,6 +224,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
                 'rendering':{'url':'/assets/rendering/tutorial.json','format':'oc2-scene-render-v1'},
                 'ui':{'url':'/assets/ui/profile.json','format':ui['format']},
                 'gameplay':{'url':'/assets/gameplay/native.json','format':gameplay['format']},
+                'navigation':gameplay['npc']['navigation'],
                 'collision':{'url':'/assets/maps/collision.json','format':collision['format']},
                 'dynamicModels':[dynamic_door],
                 'summary':f'真实新手地图 3×3 地块；可换装玩家精灵、狼与熊；接入 {sum(len(s["instances"]) for s in scenery)} 个原作场景摆放。已恢复场景节点与静态PHY碰撞；地表混合材质及完整物理引擎尚未恢复。',

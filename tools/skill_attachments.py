@@ -41,8 +41,8 @@ def decode_ftable(data,id_column='id'):
     except UnicodeDecodeError as error: raise ValueError('Invalid FTABLE schema encoding') from error
     if len(names)!=columns or len(set(names))!=columns: raise ValueError('FTABLE schema column mismatch')
     types=data[types_at:rows_at]
-    if types[-1]!=0 or any(kind not in b'uisf' for kind in types[:-1]): raise ValueError('Unsupported FTABLE physical type')
-    widths={ord('u'):4,ord('i'):4,ord('f'):4,ord('s'):6}
+    if types[-1]!=0 or any(kind not in b'uikchsf' for kind in types[:-1]): raise ValueError('Unsupported FTABLE physical type')
+    widths={ord('u'):4,ord('i'):4,ord('k'):4,ord('c'):1,ord('h'):2,ord('f'):4,ord('s'):6}
     if sum(widths[k] for k in types[:-1])!=stride: raise ValueError('FTABLE row stride mismatch')
     ids=struct.unpack_from('<'+'I'*count,data,ids_at)
     if len(set(ids))!=count: raise ValueError('Duplicate FTABLE row ID')
@@ -61,7 +61,8 @@ def decode_ftable(data,id_column='id'):
                     try: value=raw.decode('utf-8')
                     except UnicodeDecodeError as error: raise ValueError('Invalid FTABLE string encoding') from error
             else:
-                value,=struct.unpack_from('<'+chr(kind).replace('u','I'),data,at);at+=4
+                code={ord('u'):'I',ord('k'):'I',ord('c'):'B',ord('h'):'H',ord('i'):'i',ord('f'):'f'}[kind]
+                value,=struct.unpack_from('<'+code,data,at);at+=widths[kind]
                 if kind==ord('f') and not math.isfinite(value): raise ValueError('Non-finite FTABLE value')
             row[name]=value
         if row.get(id_column)!=identifier: raise ValueError('FTABLE ID index differs from row')

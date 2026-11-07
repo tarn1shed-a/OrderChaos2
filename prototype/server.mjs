@@ -13,13 +13,14 @@ import { validHotbar, cloneHotbar } from './public/hotbar-settings.js';
 import { setJumpPressed, updateJump } from './game/jump.mjs';
 import {loadGameplay,prepareBasicAttack} from './game/basic-attack.mjs';
 import {loadCollision} from './game/collision.mjs';
+import {loadNavigation} from './game/navigation.mjs';
 
 const PUBLIC = fileURLToPath(new URL('./public/', import.meta.url));
 const CONVERTED = fileURLToPath(new URL('../game-data/converted/', import.meta.url));
 const THREE_BUILD = fileURLToPath(new URL('./node_modules/three/build/', import.meta.url));
 const COLORS = ['#80e5d1', '#ffc47c', '#b7a2f7', '#f39da9', '#90bdec', '#d4e993', '#ffdfaa', '#b4e4ed'];
 
-export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGameplay(), motion=loadCollision(), casting=true, allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean) } = {}) {
+export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGameplay(), motion=loadCollision(), navigation=loadNavigation(),ai=true,casting=true, allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean) } = {}) {
   if (saveFile && [PUBLIC, CONVERTED].some(root => resolve(saveFile).startsWith(root.endsWith(sep) ? root : root + sep))) throw new Error('角色存档必须放在静态资源目录之外');
   const store = new CharacterStore(saveFile);
   const rooms = new Map();
@@ -116,7 +117,7 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
         }
         if (activeCharacters.has(identity.record.id)) return reject(ws, '这个角色已在另一个窗口在线，请先退出原窗口');
         ws.character = identity.record; ws.scene = scene;ws.lab=lab;
-        if (!combatRooms.has(roomKey)) combatRooms.set(roomKey, new CombatRoom(roomKey, world, scene, room, { changed, emit: data => emit(room, data), notice,gameplay,motion,casting,lab }));
+        if (!combatRooms.has(roomKey)) combatRooms.set(roomKey, new CombatRoom(roomKey, world, scene, room, { changed, emit: data => emit(room, data), notice,gameplay,motion,navigation,ai,casting,lab }));
         ws.motion=combatRooms.get(roomKey).motion;ws.gameplay=gameplay;
         const position = ws.character.positions[scene];
         const restorePosition = !lab&&position && walkable(position.x, position.y, world) && ws.character.hp > 0;

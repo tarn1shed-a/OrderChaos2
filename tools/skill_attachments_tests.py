@@ -15,7 +15,7 @@ def table(columns,types,rows):
     schema=('CREATE TABLE `test` (\n'+',\n'.join('  `'+name+'` int' for name in columns)+'\n)\0').encode()
     schema+=b'\0'*(-len(schema)%4)
     ids_at=44+len(schema);types_at=ids_at+len(rows)*4;rows_at=types_at+len(types)+1
-    stride=sum(6 if kind=='s' else 4 for kind in types);strings_at=rows_at+stride*len(rows)
+    stride=sum({'s':6,'c':1,'h':2}.get(kind,4) for kind in types);strings_at=rows_at+stride*len(rows)
     header=struct.pack('<8s9I',b'FTABLE\0\0',0x100000,len(rows),len(columns),ids_at,types_at,rows_at,stride,strings_at,0)
     records=bytearray();strings=bytearray()
     for row in rows:
@@ -23,7 +23,7 @@ def table(columns,types,rows):
             value=row[name]
             if kind=='s':
                 raw=value.encode();records.extend(struct.pack('<IH',strings_at+len(strings),len(raw)));strings.extend(raw+b'\0')
-            else: records.extend(struct.pack('<'+kind.replace('u','I'),value))
+            else: records.extend(struct.pack('<'+{'u':'I','k':'I','c':'B','h':'H'}.get(kind,kind),value))
     return bytearray(header+schema+struct.pack('<'+'I'*len(rows),*[r[columns[0]] for r in rows])+types.encode()+b'\0'+records+strings)
 
 

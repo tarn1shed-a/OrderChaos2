@@ -59,7 +59,7 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
 
 技能及换装版本需要匹配的 `converted/models/elf-female.json`、`wolf.json`、`effects/combat.json`、角色/装备贴图与 `manifest.json`，请整体复制本次构建的 `converted/`。旧 `forest-elf.json` 只保留为研究参考，不能代替新玩家基体。只有旧资源时页面会明确要求重建；开发机执行 `.venv/bin/python tools/build_resource_preview.py` 后把产物单独传给正式服。本轮代码会将旧角色存档安全升级到v6，原装备、外观、奖励和技能栏保留，仅v4及更早角色补上法师职业（2）、法杖和大剑各一件，v5已有职业与装备不变；更新后刷新页面。待结算施法、技能冷却和怪物减速仍为会话/房间状态。
 
-当前要求 `oc2-combat-effects-v4` 与 `oc2-original-ui-v14` 与 `oc2-native-gameplay-v5`（`converted/gameplay/native.json`）及 `oc2-scene-collision-v2`（`converted/maps/collision.json`），玩家模型内含 `oc2-equipment-appearance-v1`、`oc2-character-hair-v1` 与 `oc2-character-materials-v1`。整包包括原LUT、各界面清单与图标（含手机摇杆/小地图边框、技能面板及法师资料）、108张场景/特效/角色贴图、4个WOFF，请完整同步 `converted/`。原材质库、源表和松散TTF只由开发机转换时读取；运行机器只需转换产物，无须BDAE、SWF、APK或反汇编。角色头像和装备全身预览随穿脱渲染并缓存，无需另传截图。未覆盖的稀有字仍回退系统字体。
+当前要求 `oc2-combat-effects-v4` 与 `oc2-original-ui-v15` 与 `oc2-native-gameplay-v6`（`converted/gameplay/native.json`）及 `oc2-scene-collision-v2`（`converted/maps/collision.json`）与 `oc2-source-navigation-v1`（`converted/maps/navigation.json`），玩家模型内含 `oc2-equipment-appearance-v1`、`oc2-character-hair-v1` 与 `oc2-character-materials-v1`。整包包括原LUT、各界面清单与图标（含手机摇杆/小地图边框、技能面板及法师资料）、108张场景/特效/角色贴图、4个WOFF，请完整同步 `converted/`。原材质库、源表和松散TTF只由开发机转换时读取；运行机器只需转换产物，无须BDAE、SWF、APK或反汇编。角色头像和装备全身预览随穿脱渲染并缓存，无需另传截图。未覆盖的稀有字仍回退系统字体。
 
 角色存档当前为 **version 6**，v5职业/物品结构保留；v6在首个空技能槽加入奥术飞弹，不改变任何旧绑定。v4及更早版本仍补上职业与两件练习武器。读取v1/v2/v3/v4/v5时先验证全文件；首次落盘前，在同一个runtime目录保留精确原字节的characters.json.vN-backup-….json，再原子写入v6。仅v4及更早角色迁入法师原型（2）并补发一次新增法杖/大剑；旧奖励、生命、装备、外观、位置、凭据哈希与已有技能栏不变。尚无服务器技能栏的旧版本继续执行原一次性导入。坏存档拒绝启动并保留原文件，不使用旧版程序打开v6。回退需停服，同时恢复旧代码与对应旧版本备份。
 

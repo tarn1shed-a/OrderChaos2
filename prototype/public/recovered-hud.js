@@ -2,6 +2,7 @@ import {mountSourceProgress} from './hud-progress.js';
 import {SKILLS,skillById} from './skills.js';
 import {castActive,castStageName} from './cast-pose.js';
 import {buffText,updateBuffIcons} from './buff-presentation.js';
+import {monsterStateText} from './monster-state.js';
 
 const $=id=>document.getElementById(id);
 const text=(id,value)=>{if($(id).textContent!==String(value))$(id).textContent=String(value);};
@@ -43,7 +44,7 @@ export function createRecoveredHUD(profile) {
     updateBuffIcons($('player-buffs'),me,now);updateBuffIcons($('target-buffs'),enemy,now);
     const attackAt=Math.max(me?.animation?.attackAt||0,me?.cast?.startedAt||0),attackRemaining=Math.max(0,attackAt+attackCooldownMs-now);
     cooldowns['field-attack'].set(attackRemaining/attackCooldownMs);
-    $('field-attack').disabled=!connected||!enemy?.alive||!me||dead||casting||me.controls?.attack||attackRemaining>0;
+    $('field-attack').disabled=!connected||!enemy?.alive||enemy?.ai?.state==='returning'||!me||dead||casting||me.controls?.attack||attackRemaining>0;
     $('attack').disabled=$('field-attack').disabled;
     for(const skill of Object.values(SKILLS)){
       const remaining=Math.max(0,Math.max(me?.skillReadyAt?.[skill.id]||0,me?.globalReadyAt||0)-now);
@@ -56,7 +57,7 @@ export function createRecoveredHUD(profile) {
       text('hud-target-health',`${enemy.hp} / ${enemy.maxHp}`);
       const respawn=Math.max(0,Math.ceil(((enemy.respawnAt||0)-now)/1000));
       const slow=Math.max(0,((enemy.slowUntil||0)-now)/1000);
-      text('hud-target-state',!enemy.alive?`已击败${respawn?` · ${respawn} 秒后重生`:''}`:buffText(enemy,now)|| (slow>0?`冰霜减速 · ${slow.toFixed(1)}s`:'战斗目标'));
+      text('hud-target-state',!enemy.alive?`已击败${respawn?` · ${respawn} 秒后重生`:''}`:buffText(enemy,now)|| (slow>0?`冰霜减速 · ${slow.toFixed(1)}s`:monsterStateText(enemy)));
       $('target-hud').classList.toggle('dead',!enemy.alive);
     }
   }

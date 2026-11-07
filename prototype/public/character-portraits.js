@@ -12,7 +12,9 @@ export function createPortraitScene(THREE, createModel, { headNode, frameHeight 
     object.castShadow=object.receiveShadow=false;
   });
   body.updateMatrixWorld(true);
-  const at=fullBody ? new THREE.Box3().setFromObject(body).getCenter(new THREE.Vector3()) : characterAttachment(body,headNode,new THREE.Vector3());
+  const visibleBounds = new THREE.Box3();
+  if (fullBody) body.traverseVisible(object => { if(object.isMesh) visibleBounds.union(new THREE.Box3().setFromObject(object, true)); });
+  const at=fullBody ? visibleBounds.getCenter(new THREE.Vector3()) : characterAttachment(body,headNode,new THREE.Vector3());
   if(!at){for(const material of materials)material.dispose();disposeCharacterAnimation(body);throw new Error(`原模型头像缺少头部节点 ${headNode}`);}
   const span=body.userData.height*frameHeight;
   if(!Number.isFinite(span)||span<=0){for(const material of materials)material.dispose();disposeCharacterAnimation(body);throw new Error('原模型头像尺寸无效');}

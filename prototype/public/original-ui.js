@@ -1,10 +1,10 @@
 // Only decoded art and embedded glyphs are loaded. Original SWF scripts never run.
 export async function loadOriginalUI(profile) {
-  if (profile.format !== 'oc2-original-ui-v4' || profile.fonts?.requiredTextStatus !== 'complete' ||
+  if (profile.format !== 'oc2-original-ui-v5' || profile.fonts?.requiredTextStatus !== 'complete' ||
       !['chineseText','chineseDisplay'].every(key=>profile.fonts.faces?.[key]?.conversion==='lossless-full-sfnt-to-woff') ||
       profile.skillIcons?.format !== 'oc2-skill-icons-v1'||profile.hud?.format!=='oc2-original-hud-v1'||
       profile.portraits?.format!=='oc2-character-portraits-v1'||profile.inventory?.format!=='oc2-original-inventory-v1'||
-      profile.itemIcons?.format!=='oc2-item-icons-v1') throw new Error('原版背包与装备资源需要更新，请重新构建本地资源');
+      profile.itemIcons?.format!=='oc2-item-icons-v1') throw new Error('原版装备外观资源需要更新，请重新构建本地资源');
   const imageKeys = ['buttonGreen','buttonGray','skillOrb','skillFrame','healthRing','experienceRing','healthFill','manaFill','panelBlue'];
   const localURL = url => {
     if (typeof url !== 'string' || !/^\/assets\/ui\/[A-Za-z0-9_-]+\.(png|woff)$/.test(url)) throw new Error('原版界面资源路径无效');

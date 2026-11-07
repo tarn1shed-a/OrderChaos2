@@ -91,7 +91,7 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v4' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v5' and not ui['provenance']['swfScriptExecution']
     for entry in ui['assets'].values():
         with Image.open(asset(entry['url'], output)) as image:
             assert image.size == (entry['width'], entry['height'])
@@ -128,6 +128,8 @@ def verify(output=OUT):
         assert len(progress['frames'])==progress['frameCount']
         assert [frame['frame'] for frame in progress['frames']]==list(range(1,progress['frameCount']+1))
     portraits=ui['portraits'];assert portraits['format']=='oc2-character-portraits-v1'
+    assert portraits['models']['player']['modelPath']==m['player']['model']
+    assert portraits['models']['player']['webPlayerSelection']=='modular-elf-female-body'
     for key in ('player','targetWolf'):
         entry=portraits['models'][key];model=json.loads(asset(entry['modelURL'],output).read_text())
         assert entry['mode']=='source-model-web-framing'
@@ -146,6 +148,19 @@ def verify(output=OUT):
         image_path=asset(entry['url'],output)
         assert hashlib.sha256(image_path.read_bytes()).hexdigest()==entry['sourceSHA256']
         with Image.open(image_path) as image:assert image.size==(96,96)
+    player=json.loads(asset(m['player']['url'],output).read_text())
+    appearance=player['appearance'];assert appearance['format']==m['player']['appearanceFormat']=='oc2-equipment-appearance-v1'
+    assert set(appearance['items'])=={'trainingSword','linenArmor','travelerBoots'}
+    covered=set(appearance['baseMeshIndices'])
+    for key,entry in appearance['items'].items():
+        assert entry['meshIndices'] and set(entry['hideBaseMeshIndices'])<=set(appearance['baseMeshIndices'])
+        assert not set(entry['meshIndices'])&covered
+        covered.update(entry['meshIndices'])
+    assert covered==set(range(len(player['meshes'])))
+    for mesh in player['meshes']:
+        if 'attachment' in mesh:
+            assert 0<=mesh['attachment']['node']<len(player['rig']['nodes'])
+            assert len(mesh['attachment']['matrix'])==16 and all(math.isfinite(v) for v in mesh['attachment']['matrix'])
     catalog = json.loads(asset('/assets/library/catalog.json', output).read_text())
     assert catalog['format'] == 'oc2-art-catalog-v1'
     assert catalog['sourceFormats'] == {'web':m['format'], **{key:m[key]['format'] for key in ('effects','rendering','ui')}}
@@ -163,6 +178,7 @@ def verify(output=OUT):
                      'skillIcons':len(icons['icons']), 'fontCharacters':glyphs,
                      'hudAssets':len(hud['assets']),'modelPortraits':len(portraits['models']),
                      'inventoryAssets':len(inventory['assets']),'itemIcons':len(item_icons['icons']),
+                     'equipmentAppearances':len(appearance['items']),
                      'artFiles':catalog['fileCount'], 'warnings':m['warnings']}
 
 def main():

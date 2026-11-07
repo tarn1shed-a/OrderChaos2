@@ -19,6 +19,7 @@ from hud_assets import recover_hud_assets
 from character_portraits import recover_character_portraits
 from inventory_assets import recover_inventory_assets
 from item_icons import recover_item_icons
+from equipment_appearance import convert_equipment_character, BASE_MODEL
 from terrain_convert import convert as terrain_convert
 from texture_decode import convert as texture_convert
 
@@ -30,7 +31,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     source, extracted, output = Path(source), Path(extracted), Path(output)
     # Select archive namespaces explicitly while the complete native mounting
     # priority is still under investigation. Never guess between conflicting packs.
-    packs = {'res.bin','res_a.bin','res_npc.bin','res_scene.bin','res_scene_generator_temple_000.bin','res_t.bin','res_t_upd15.bin','tables.bin','ui.bin','ui_icon_1.bin','conf.bin',
+    packs = {'res.bin','res_a.bin','res_npc.bin','res_item.bin','res_scene.bin','res_scene_generator_temple_000.bin','res_t.bin','res_t_upd15.bin','tables.bin','ui.bin','ui_icon_1.bin','conf.bin',
              'tutorial.bin','tutorial_layer.bin','tutorial_lmap_1.bin',
              'selection.bin','selection_layer.bin','selection_lmap_1.bin',
              'dawnwatch.bin','dawnwatch_layer.bin','dawnwatch_lmap_1.bin'}
@@ -81,8 +82,10 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         except Exception as e:
             warnings.append({'texture':path,'error':str(e)})
             return None
-    def model(path, key, animated=False, profile='player'):
-        if animated:
+    def model(path, key, animated=False, profile='player', equipment=False):
+        if equipment:
+            result = convert_equipment_character(extract)
+        elif animated:
             animation_path = ('model/npc/creature/beast/wolf/anim/animations.bdae' if profile == 'wolf'
                               else 'model/npc/character/elf/female/anim/animations.bdae')
             animation_model = path if profile == 'wolf' else 'model/npc/character/elf/female/oc2_elf_f_body_01.bdae'
@@ -104,13 +107,15 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
             record['combatAnimations'] = True
             record['attachmentPoints']=['Dummy_R_Hand','Dummy_L_Hand','Dummy_Chest'] if profile=='player' else ['Dummy_Chest']
             if profile == 'player': record['skillAnimations'] = True
+        if equipment: record['appearanceFormat'] = result['appearance']['format']
         models[key] = record
         return record
-    player_path='model/npc/creature/humanoid/forest_elf/forest_elf.bdae'
+    player_path=BASE_MODEL
     wolf_path='model/npc/creature/beast/wolf/wolf.bdae'
     attachments=recover_skill_attachments(lambda path:extract(path).read_bytes(),
         read_nodes(BDAE(extract(REFERENCE_MODEL))),read_nodes(BDAE(extract(player_path))),read_nodes(BDAE(extract(wolf_path))))
-    player = model(player_path,'forest-elf', animated=True)
+    model('model/npc/creature/humanoid/forest_elf/forest_elf.bdae','forest-elf',animated=True)
+    player = model(player_path,'elf-female', animated=True, equipment=True)
     exhibits = []
     for name in ['wolf','bear']:
         # Paths come from the observed archive index; reject ambiguity rather than guess.
@@ -141,7 +146,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     effect_output = output/'effects/combat.json'
     effect_output.parent.mkdir(parents=True, exist_ok=True)
     effect_output.write_text(json.dumps({'format':'oc2-combat-effects-v3','effects':effects,'attachments':attachments,
-        'adaptation':'Recovered particle parameters, materials and source skill slots. Forest elf hand/chest dummies are adapted from the same animated reference model. Deterministic random seeds and overall skill flight path remain web adaptations.'}, ensure_ascii=False, indent=2))
+        'adaptation':'Recovered particle parameters, materials and source skill slots. The modular elf female uses its native hand/chest dummies. Deterministic random seeds and overall skill flight path remain web adaptations.'}, ensure_ascii=False, indent=2))
     rendering=build_scene_profile(extract)
     rendering['format']='oc2-scene-render-v1'
     rendering['defaultZoneId']=min(rendering['zones'],key=lambda zone:zone['priority'])['id']
@@ -155,12 +160,12 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         if path not in allowed_loose:raise ValueError(f'Unexpected loose resource: {path}')
         return safe_output(source, path)
     # Check actual Chinese interface characters, including dynamic combat labels.
-    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','recovered-hud.js','inventory-ui.js','items.js'])
+    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','recovered-hud.js','inventory-ui.js','items.js','character-equipment.js'])
     required_text = ''.join(sorted({ch for ch in ui_text if '\u3400' <= ch <= '\u9fff'}))
     chinese = recover_chinese_fonts(read_loose, output, required_text)
     if chinese['requiredTextStatus'] != 'complete':raise ValueError('Original Chinese fonts do not cover the current interface')
     icons = recover_skill_icons(extract, output)
-    ui['format'] = 'oc2-original-ui-v4'
+    ui['format'] = 'oc2-original-ui-v5'
     ui['fonts']['faces'].update(chinese['faces'])
     ui['fonts']['chineseStatus'] = chinese['chineseStatus']
     ui['fonts']['requiredTextStatus'] = chinese['requiredTextStatus']
@@ -168,7 +173,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     ui['fonts']['status'] = 'original-full-cjk-and-embedded-latin-subsets'
     ui['skillIcons'] = icons
     ui['hud'] = recover_hud_assets(extract, output)
-    ui['portraits'] = recover_character_portraits(extract, output)
+    ui['portraits'] = recover_character_portraits(extract, output, player_model=player_path)
     ui['inventory'] = recover_inventory_assets(extract, output)
     ui['itemIcons'] = recover_item_icons(extract, output)
     ui['provenance']['limitations'] = [
@@ -182,7 +187,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
                 'effects': {'url':'/assets/effects/combat.json','format':'oc2-combat-effects-v3'},
                 'rendering':{'url':'/assets/rendering/tutorial.json','format':'oc2-scene-render-v1'},
                 'ui':{'url':'/assets/ui/profile.json','format':ui['format']},
-                'summary':f'真实新手地图 3×3 地块；穿衣精灵、狼与熊；接入 {sum(len(s["instances"]) for s in scenery)} 个原作场景摆放。地表混合材质和多节点变换尚未完整恢复。',
+                'summary':f'真实新手地图 3×3 地块；可换装玩家精灵、狼与熊；接入 {sum(len(s["instances"]) for s in scenery)} 个原作场景摆放。地表混合材质和多节点变换尚未完整恢复。',
                 'warnings':warnings}
     archive_names = {entry['pack'] for entry in entries}
     paired = {name for name in archive_names if (source/Path(name).with_name(Path(name).stem+'_i.bin')).is_file()}

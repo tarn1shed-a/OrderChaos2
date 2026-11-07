@@ -2,7 +2,8 @@ import * as THREE from '/vendor/three.module.js';
 import { RESOURCE_WORLD } from './world.js';
 import { sampleHeight } from './heightfield.js';
 import { webSocketEndpoint } from './network.js';
-import { createCharacterFactory, updateCharacterAnimation, disposeCharacterAnimation, snapshotMotion, syncCharacterCombat, characterAnimationState } from './character-animation.js';
+import { createCharacterFactory, updateCharacterAnimation, disposeCharacterAnimation, snapshotMotion, syncCharacterCombat, characterAnimationState, setCharacterEquipment, characterEquipmentState } from './character-animation.js';
+import { equipmentAppearanceKey } from './character-equipment.js';
 import { applyCombatAnimations } from './combat-animation.js';
 import { SKILLS, skillById } from './skills.js';
 import { createCombatEffects } from './combat-effects.js';
@@ -24,6 +25,7 @@ let assets, modelTemplate, ready = false, world = RESOURCE_WORLD, snapshot = [],
 let wolfTemplate, monsterSnapshot = [], selectedMonsterId = null, character = null, nextAttackAt = 0, feedbackUntil = 0, saveAt = null;
 let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset = 0;
 let combatEffects, environment, hdrRenderer, hud, inventoryUI, nextSkillRequestAt = 0;
+let renderEquipmentPreview, equipmentPreviewKey;
 const monsterViews = new Map();
 let target = null, keys = new Set(), avatars = new Map(), rosterSignature = '', generation = 0, retryTimer, manualExit = false;
 let azimuth = .65, elevation = .58, distance = 24, previous = performance.now(), pointer = null;
@@ -59,6 +61,11 @@ function updateCharacter(data, savedAt = null) {
   $('save-status').textContent = warning || (saveAt ? `服务器已保存 · ${new Date(saveAt).toLocaleTimeString('zh-CN')}` : '恢复凭据已记住 · 进度由服务器保存');
   hud?.character(data);
   inventoryUI?.update(data);
+  if (renderEquipmentPreview && equipmentAppearanceKey(data.equipment)!==equipmentPreviewKey) {
+    equipmentPreviewKey=equipmentAppearanceKey(data.equipment);
+    const preview=renderEquipmentPreview(data.equipment);inventoryUI.setModel(preview.model.url);hud.setPlayerPortrait(preview.portrait);
+    rosterSignature='';
+  }
   updateTarget();
 }
 function nearestMonster() {
@@ -125,11 +132,18 @@ function updateSkills() {
     }
   }
 }
+const fighterMaterials=new WeakMap();
 function prepareFighter(body) {
+  const materials=new Map(),clone=material=>{if(!materials.has(material))materials.set(material,material.clone());return materials.get(material);};
   body.traverse(obj => {
     if (!obj.isMesh) return;
-    obj.material=Array.isArray(obj.material)?obj.material.map(m=>m.clone()):obj.material.clone();
+    obj.material=Array.isArray(obj.material)?obj.material.map(clone):clone(obj.material);
   });
+  fighterMaterials.set(body,[...materials.values()]);
+}
+function disposeFighter(body) {
+  for(const material of fighterMaterials.get(body)||[])material.dispose();
+  fighterMaterials.delete(body);disposeCharacterAnimation(body);
 }
 function animateFighter(view, now) {
   view.body.traverse(obj=>{
@@ -172,6 +186,7 @@ async function texture(url) {
 
 async function loadModel(entry) {
   const data = await json(entry.url), group = new THREE.Group();
+  if (entry===assets.player && data.appearance?.format!=='oc2-equipment-appearance-v1') throw new Error('原装备模型资源缺失，请重新构建本地资源');
   const materials = await Promise.all(data.materials.map(async mat => {
     const tex = await texture(assets.textures[mat.diffuse]);
     return new THREE.MeshStandardMaterial({ map: tex, color: tex ? 0xffffff : 0xa7bda1, roughness: .93, metalness: 0, side: THREE.DoubleSide, alphaTest: .35 });
@@ -262,7 +277,17 @@ async function init() {
       player:renderCharacterPortrait(THREE,renderer,modelFactories.get(modelTemplate),{headNode:portraits.player.headNode,...portraits.player.webFraming}),
       targetWolf:renderCharacterPortrait(THREE,renderer,modelFactories.get(wolfTemplate),{headNode:portraits.targetWolf.headNode,...portraits.targetWolf.webFraming}),
     });
-    inventoryUI.setModel(renderCharacterPortrait(THREE,renderer,modelFactories.get(modelTemplate),{fullBody:true,frameHeight:1.18,direction:[.22,.02,1]}).url);
+    const equipmentPreviews=new Map(),createPlayer=modelFactories.get(modelTemplate);
+    renderEquipmentPreview=equipment=>{
+      const key=equipmentAppearanceKey(equipment);
+      const create=()=>{const body=createPlayer();setCharacterEquipment(body,equipment);return body;};
+      if(!equipmentPreviews.has(key))equipmentPreviews.set(key,{
+        model:renderCharacterPortrait(THREE,renderer,create,{fullBody:true,frameHeight:1.18,direction:[.22,.02,1]}),
+        portrait:renderCharacterPortrait(THREE,renderer,create,{headNode:portraits.player.headNode,...portraits.player.webFraming}),
+      });
+      return equipmentPreviews.get(key);
+    };
+    inventoryUI.setModel(renderEquipmentPreview({}).model.url);
     const effectData=await json(assets.effects.url),effectTextures=new Map();
     const effectURLs=[...new Set(Object.values(effectData.effects).flatMap(effect=>Object.values(effect.textureURLs)))];
     await Promise.all(effectURLs.map(async url=>effectTextures.set(url,await texture(url))));
@@ -293,19 +318,20 @@ async function init() {
 
 function updateRoster() {
   $('count').textContent = `${snapshot.length} / 8`;
-  const sig = JSON.stringify(snapshot.map(p => [p.id, p.name, p.hp, p.level])); if (sig === rosterSignature) return; rosterSignature = sig;
+  const sig = JSON.stringify(snapshot.map(p => [p.id, p.name, p.hp, p.level, equipmentAppearanceKey(p.equipment)])); if (sig === rosterSignature) return; rosterSignature = sig;
   $('players').replaceChildren();
   if (!snapshot.length) { const li = document.createElement('li'); li.className = 'empty'; li.textContent = '等待冒险者进入。'; $('players').append(li); }
   for (const p of snapshot) {
     const li = document.createElement('li'), icon = document.createElement('span'), text = document.createElement('span'), tag = document.createElement('small');
     icon.className = 'avatar';icon.style.borderColor=p.color;
-    if(hud?.playerPortrait){const image=document.createElement('img');image.src=hud.playerPortrait;image.alt='';icon.append(image);}else icon.textContent='◇';
+    const portrait=renderEquipmentPreview?.(p.equipment)?.portrait.url||hud?.playerPortrait;
+    if(portrait){const image=document.createElement('img');image.src=portrait;image.alt='';icon.append(image);}else icon.textContent='◇';
     text.textContent = p.name; tag.textContent = `Lv.${p.level || 1} · ${p.hp ?? 100} HP${p.id === selfId ? ' · 你' : ''}`; li.append(icon, text, tag); $('players').append(li);
   }
 }
 function syncAvatars(serverTime = Date.now()) {
   const ids = new Set(snapshot.map(p => p.id));
-  for (const [id, a] of avatars) if (!ids.has(id)) { disposeCharacterAnimation(a.body); scene.remove(a.root); a.label.remove(); avatars.delete(id); }
+  for (const [id, a] of avatars) if (!ids.has(id)) { disposeFighter(a.body); scene.remove(a.root); a.label.remove(); avatars.delete(id); }
   for (const p of snapshot) {
     if (!avatars.has(p.id)) {
       const root = new THREE.Group(), body = modelFactories.has(modelTemplate) ? modelFactories.get(modelTemplate)() : modelTemplate.clone(true);
@@ -319,6 +345,8 @@ function syncAvatars(serverTime = Date.now()) {
         lastState: null, lastStateAt: serverTime, motion: { moving: false, speed: 0 }, attackSeconds: cooldownMs / 1000 });
     }
     const a = avatars.get(p.id); a.target.copy(localPosition(p.x, p.y));
+    setCharacterEquipment(a.body,p.equipment);
+    a.label.dataset.equipment=characterEquipmentState(a.body)?.key||'';
     a.motion = snapshotMotion(a.lastState, p, (serverTime - a.lastStateAt) / 1000, (mapBounds[1][0] - mapBounds[0][0]) / world.width);
     a.lastState = { x: p.x, y: p.y }; a.lastStateAt = serverTime;
     syncCharacterCombat(a.body, p, serverTime, a.attackSeconds);
@@ -332,7 +360,7 @@ function syncAvatars(serverTime = Date.now()) {
 
 function syncMonsters(serverTime = Date.now()) {
   const ids = new Set(monsterSnapshot.map(m => m.id));
-  for (const [id, view] of monsterViews) if (!ids.has(id)) { disposeCharacterAnimation(view.body); scene.remove(view.root); view.label.remove(); monsterViews.delete(id); }
+  for (const [id, view] of monsterViews) if (!ids.has(id)) { disposeFighter(view.body); scene.remove(view.root); view.label.remove(); monsterViews.delete(id); }
   for (const m of monsterSnapshot) {
     if (!monsterViews.has(m.id)) {
       const root = new THREE.Group(), body = modelFactories.get(wolfTemplate)(); root.add(body);

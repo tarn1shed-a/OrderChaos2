@@ -1,5 +1,6 @@
 // Recovered source skeletons/clips; each character owns its bones and mixer.
 import { skillById } from './skills.js';
+import { validateEquipmentAppearance, applyEquipmentMeshes, equipmentAppearanceKey } from './character-equipment.js';
 const controllers = new WeakMap();
 
 export function snapshotMotion(previous, current, seconds, worldUnitsPerLogicalUnit) {
@@ -13,6 +14,7 @@ export function snapshotMotion(previous, current, seconds, worldUnitsPerLogicalU
 export function createCharacterFactory(THREE, data, materials) {
   if (data.format !== 'bdae946-character-v1' || !data.rig?.nodes?.length || !data.clips?.length) throw new Error('角色骨架或动画缺失，请重新构建本地资源');
   const skinByMesh = new Map(data.rig.skins.map(skin => [skin.mesh, skin]));
+  const appearance = validateEquipmentAppearance(data);
   const geometries = data.meshes.map((mesh, index) => {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(mesh.positions, 3));
@@ -48,7 +50,7 @@ export function createCharacterFactory(THREE, data, materials) {
     for (const [index, node] of data.rig.nodes.entries()) {
       if (node.parent < 0) group.add(nodes[index]); else nodes[node.parent].add(nodes[index]);
     }
-    const skeletons = [];
+    const skeletons = [], meshObjects = [];
     for (const [index, mesh] of data.meshes.entries()) {
       const skin = skinByMesh.get(index);
       const material = mesh.groups?.length ? materials : materials[mesh.material ?? 0];
@@ -60,11 +62,21 @@ export function createCharacterFactory(THREE, data, materials) {
         object.bind(skeleton, new THREE.Matrix4()); skeletons.push(skeleton);
         object.frustumCulled = false;
       }
-      object.castShadow = true; object.receiveShadow = true; group.add(object);
+      object.name = mesh.name || `mesh_${index}`;
+      object.userData.sourceMeshIndex = index;
+      if (mesh.attachment) {
+        object.matrix.fromArray(mesh.attachment.matrix); object.matrix.decompose(object.position, object.quaternion, object.scale);
+        nodes[mesh.attachment.node].add(object);
+      } else group.add(object);
+      object.castShadow = true; object.receiveShadow = true; meshObjects.push(object);
     }
+    const equipmentState = appearance ? applyEquipmentMeshes(meshObjects, appearance, {}) : null;
     group.updateMatrixWorld(true);
     for (const skeleton of skeletons) skeleton.update();
-    const box = new THREE.Box3().setFromObject(group, true), center = box.getCenter(new THREE.Vector3());
+    const box = new THREE.Box3();
+    if (appearance) for (const index of appearance.baseMeshIndices) box.union(new THREE.Box3().setFromObject(meshObjects[index], true));
+    else box.setFromObject(group, true);
+    const center = box.getCenter(new THREE.Vector3());
     group.position.set(-center.x, -box.min.y, -center.z);
     root.userData.height = box.max.y - box.min.y;
     const mixer = new THREE.AnimationMixer(root);
@@ -79,13 +91,25 @@ export function createCharacterFactory(THREE, data, materials) {
     }
     const namedNodes = new Map();
     data.rig.nodes.forEach((node,index) => { for (const name of [node.name,...(node.aliases || [])]) if (name) namedNodes.set(name,nodes[index]); });
-    controllers.set(root, { mixer, idle, walk, nodes, namedNodes, skeletons, shots, weight: 0, moving: false,
+    controllers.set(root, { mixer, idle, walk, nodes, namedNodes, skeletons, meshObjects, appearance, equipmentState, shots, weight: 0, moving: false,
       now: 0, phase: 'idle', dead: false, lifeSince: -Infinity, lastSnapshotAt: -Infinity,
       attackAt: -Infinity, hitAt: -Infinity, deathAt: null, attackSeconds: .7, attackWeight: 0, hurtWeight: 0,
       cast: null, lastCastAt: -Infinity, skillWeight: 0 });
     mixer.update(0); root.updateMatrixWorld(true);
     return root;
   };
+}
+
+export function setCharacterEquipment(root, equipment) {
+  const c = controllers.get(root);
+  if (!c?.appearance || c.equipmentState.key === equipmentAppearanceKey(equipment)) return false;
+  c.equipmentState = applyEquipmentMeshes(c.meshObjects, c.appearance, equipment);
+  return true;
+}
+
+export function characterEquipmentState(root) {
+  const state = controllers.get(root)?.equipmentState;
+  return state ? { key: state.key, items: [...state.items], visibleMeshIndices: [...state.visibleMeshIndices] } : null;
 }
 
 export function characterAttachment(root, name, target) {

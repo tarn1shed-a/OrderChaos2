@@ -19,6 +19,7 @@ GAUGE_SWF = 'ui/Flash/PlayerGauges.swf'
 MODEL_TABLE = 'tables/creaturemodeldata.tbl'
 DISPLAY_TABLE = 'tables/creaturedisplayinfo.tbl'
 PLAYER_MODEL = 'model/npc/creature/humanoid/forest_elf/forest_elf.bdae'
+MODULAR_PLAYER_MODEL = 'model/npc/character/elf/female/oc2_elf_f_body_01.bdae'
 WOLF_MODEL = 'model/npc/creature/beast/wolf/wolf.bdae'
 
 
@@ -173,12 +174,13 @@ def _head(nodes,alias):
             'sourceHeadRest':{key:node[key] for key in ('position','quaternion','scale')}}
 
 
-def recover_character_portraits(extract,output):
+def recover_character_portraits(extract,output, *, player_model=PLAYER_MODEL):
     """Write ui/portraits.json; extract(path) returns checked bytes or a Path.
 
     No static portrait is invented. The selected-player Model3D component and
     enemy status icon are kept distinct from this web game's model thumbnails.
     """
+    if player_model not in (PLAYER_MODEL, MODULAR_PLAYER_MODEL):raise ValueError('Unverified web player portrait model')
     loaded={}
     def load(path):
         if path not in loaded:loaded[path]=_bytes(extract(path))
@@ -206,7 +208,7 @@ def recover_character_portraits(extract,output):
     if not displays or any(row['Icon'] for row in displays):raise ValueError('Forest-elf source static icon mapping differs')
     models={}
     for key,path,url,alias,slot,role in (
-        ('player',PLAYER_MODEL,'/assets/models/forest-elf.json','Bip01_Head','playerIcon',
+        ('player',player_model,'/assets/models/elf-female.json' if player_model==MODULAR_PLAYER_MODEL else '/assets/models/forest-elf.json','Bip01_Head','playerIcon',
          'web self-avatar reuse; original playerIcon belongs to selected-player-target gauge'),
         ('targetWolf',WOLF_MODEL,'/assets/models/wolf.json','Bip001_Head','m_enemyIcon',
          'web target portrait adaptation; original enemy slot is an elite/status icon')):
@@ -216,12 +218,16 @@ def recover_character_portraits(extract,output):
             'sourcePack':'res_npc.bin','sourceModelSHA256':hashlib.sha256(raw).hexdigest(),
             'slot':slot,'sourceSlotRole':role,'sourceModelTableIds':[row['ID'] for row in matches],
             'originalStaticPortraitMapping':False,**_head(nodes,alias)}
-    models['player']['sourceDisplayIds']=[row['ID'] for row in displays]
+    models['player']['sourceDisplayIds']=[row['ID'] for row in displays] if player_model==PLAYER_MODEL else []
+    models['player']['webPlayerSelection']='modular-elf-female-body' if player_model==MODULAR_PLAYER_MODEL else 'forest-elf-npc'
     models['player']['webFraming']={'frameHeight':.52,'direction':[.16,.04,1]}
     models['targetWolf']['webFraming']={'frameHeight':.86,'direction':[.25,.08,1]}
     models['targetWolf']['unprovenTableCandidates']=[{'id':row['ID'],'modelPath':row['ModelPath']}
         for row in model_table['rows'] if row['ModelPath']=='model/npc/creature/beast/wolf/wolf_skin.bdae']
     profile={'format':'oc2-character-portraits-v1','models':models,
+        'forestElfReference':{'modelPath':PLAYER_MODEL,'sourceModelTableId':335,
+            'sourceDisplayIds':[row['ID'] for row in displays],
+            'isCurrentWebPlayer':player_model==PLAYER_MODEL},
         'sourceComponents':{
             'selectedPlayer':{'sourceSWF':GAUGE_SWF,'root':'Window_PlayerGauges',
                 'slot':'playerIcon.objImage','component':'Common.gluicEx.components.ui.Model3D',

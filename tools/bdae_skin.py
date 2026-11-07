@@ -57,8 +57,10 @@ def read_nodes(reader):
     return nodes
 
 
-def recover_skin(reader, model):
-    nodes = read_nodes(reader)
+def recover_skin(reader, model, *, external_nodes=None):
+    # Modular clothing references the player's skeleton rather than duplicating
+    # it in the piece file. The same inverse-bind/rest-shape checks still apply.
+    nodes = read_nodes(reader) if external_nodes is None else external_nodes
     aliases, world = {}, []
     for index, node in enumerate(nodes):
         for name in [node['name'], *node['aliases']]:

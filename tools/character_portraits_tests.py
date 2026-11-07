@@ -7,7 +7,7 @@ from unittest import mock
 
 from resource_packs import ResourceArchive,DEFAULT_SOURCE
 from character_portraits import (decode_abc_metadata,decode_gauge_abc,source_portrait_slot,
-    recover_character_portraits,_head,GAUGE_SWF,MODEL_TABLE,DISPLAY_TABLE,PLAYER_MODEL,WOLF_MODEL)
+    recover_character_portraits,_head,GAUGE_SWF,MODEL_TABLE,DISPLAY_TABLE,PLAYER_MODEL,WOLF_MODEL,MODULAR_PLAYER_MODEL)
 
 
 def u30(value):
@@ -132,6 +132,18 @@ class CharacterPortraitTests(unittest.TestCase):
             [{'ID':1,'Model':335,'Icon':'different.png'}])
         with tempfile.TemporaryDirectory() as td:
             with self.assertRaisesRegex(ValueError,'static icon'):recover_character_portraits(source.__getitem__,td)
+
+    def test_modular_player_does_not_inherit_the_npc335_portrait_identity(self):
+        source=fixtures();source[MODULAR_PLAYER_MODEL]=b'fake-modular-body'
+        with tempfile.TemporaryDirectory() as td,mock.patch('character_portraits._model_nodes',side_effect=lambda raw:
+                nodes('Bip001_Head' if raw==source[WOLF_MODEL] else 'Bip01_Head')):
+            profile=recover_character_portraits(source.__getitem__,td,player_model=MODULAR_PLAYER_MODEL)
+            player=profile['models']['player']
+            self.assertEqual(player['modelURL'],'/assets/models/elf-female.json')
+            self.assertEqual(player['sourceModelTableIds'],[]);self.assertEqual(player['sourceDisplayIds'],[])
+            self.assertEqual(player['webPlayerSelection'],'modular-elf-female-body')
+            self.assertFalse(profile['forestElfReference']['isCurrentWebPlayer'])
+            self.assertEqual(profile['forestElfReference']['sourceModelTableId'],335)
 
     @unittest.skipUnless(all((DEFAULT_SOURCE/name).is_file() for name in ('ui.bin','tables.bin','res_npc.bin')),
                          'Original SWF/tables/models remain local-only')

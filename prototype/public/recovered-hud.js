@@ -24,6 +24,11 @@ export function createRecoveredHUD(profile) {
   }
   document.body.classList.add('recovered-hud');
   let portraits;
+  function setPlayerPortrait(value){
+    if(!portraits)portraits={};portraits.player=value;
+    for(const id of ['field-portrait','character-portrait']){$(id).src=value.url;$(id).dataset.mode=value.mode;}
+    if(portraits.targetWolf)$('scene').dataset.portraits=`${value.opaquePixels},${portraits.targetWolf.opaquePixels}`;
+  }
   function character(data){
     const ratio=data.maxHp>0?Math.max(0,Math.min(1,data.hp/data.maxHp)):0;hp.set(ratio);
     const progress=Math.max(0,Number(data.xp)||0)%60;xp.set(progress/60);cardXP.set(progress/60);
@@ -59,10 +64,10 @@ export function createRecoveredHUD(profile) {
   }
   return {character,combat,setPortraits(value){
     portraits=value;
-    for(const id of ['field-portrait','character-portrait']){$(id).src=value.player.url;$(id).dataset.mode=value.player.mode;}
+    setPlayerPortrait(value.player);
     $('target-portrait').src=value.targetWolf.url;$('target-portrait').dataset.mode=value.targetWolf.mode;
     $('scene').dataset.portraits=`${value.player.opaquePixels},${value.targetWolf.opaquePixels}`;
-  },get playerPortrait(){return portraits?.player?.url;},clear(){
+  },setPlayerPortrait,get playerPortrait(){return portraits?.player?.url;},clear(){
     document.body.classList.remove('hud-playing','hud-dead');$('target-hud').hidden=true;$('field-experience').hidden=true;
     for(const cooldown of Object.values(cooldowns))cooldown.set(0);
   }};

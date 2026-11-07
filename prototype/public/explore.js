@@ -1,5 +1,6 @@
 import {createQuestBook} from './quest-book.js';
 import {createSourceTerrain} from './terrain-materials.js';
+import {sceneDiffuseTexture} from './scene-sampling.js';
 import {createContextControl} from './context-control.js';
 import {monsterStateText} from './monster-state.js';
 import {buffText} from './buff-presentation.js';
@@ -236,6 +237,7 @@ async function loadModel(entry) {
   const data = await json(entry.url), group = new THREE.Group();
   if (entry===assets.player && (data.appearance?.hair?.format!=='oc2-character-hair-v1'||data.characterMaterials?.format!=='oc2-character-materials-v1')) throw new Error('原发型和角色材质资源缺失，请重新构建本地资源');
   let materials;
+  if(assets.scenery?.includes(entry)&&data.sceneSampling?.format!=='oc2-scene-sampling-v1')throw new Error('原场景采样资源缺失，请更新本地素材包');
   if(data.characterMaterials){
     const profile=data.characterMaterials,textures=new Map();
     await Promise.all([...new Set(profile.materials.flatMap(mat=>Object.values(mat.samplers)))].map(async url=>{
@@ -246,8 +248,9 @@ async function loadModel(entry) {
     }
     materials=profile.materials.map(entry=>createCharacterMaterial(THREE,entry,textures,profile.colors));
     if(entry===assets.player)playerLookProfile={hair:data.appearance.hair,materials:profile};
-  }else materials = await Promise.all(data.materials.map(async mat => {
-    const tex = await texture(assets.textures[mat.diffuse]);
+  }else materials = await Promise.all(data.materials.map(async (mat,index) => {
+    const cached = await texture(assets.textures[mat.diffuse]);
+    const tex = data.sceneSampling ? sceneDiffuseTexture(THREE,cached,mat,index,data.sceneSampling) : cached;
     return new THREE.MeshStandardMaterial({ map: tex, color: tex ? 0xffffff : 0xa7bda1, roughness: .93, metalness: 0, side: THREE.DoubleSide, alphaTest: .35 });
   }));
   if (entry.animated) {
@@ -272,6 +275,7 @@ async function loadModel(entry) {
   const box = new THREE.Box3().setFromObject(group), size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
   group.position.set(-center.x, -box.min.y, -center.z);
   const root = new THREE.Group(); root.add(group); root.userData.height = size.y;
+  if(data.sceneSampling)root.userData.sceneSampling={format:data.sceneSampling.format,diffuseMaterials:materials.length};
   return root;
 }
 
@@ -394,6 +398,8 @@ async function init() {
         model.quaternion.fromArray(inst.quaternion); model.scale.fromArray(inst.scale); scene.add(model);
       }
     }
+    canvas.dataset.sceneSampling='oc2-scene-sampling-v1';
+    canvas.dataset.sceneDiffuseMaterials=String([...staticModels.values()].reduce((n,model)=>n+(model.userData.sceneSampling?.diffuseMaterials||0),0));
     for(const item of assets.dynamicModels||[])dynamicTemplates.set(item.url,await loadModel(item));
     $('map-title').textContent = assets.map.label; $('scene-subtitle').textContent = assets.map.subtitle;
     $('asset-detail').textContent = assets.summary;

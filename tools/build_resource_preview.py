@@ -30,6 +30,7 @@ from character_hair import recover_character_hair
 from character_materials import recover_character_materials
 from terrain_convert import convert as terrain_convert
 from terrain_materials import recover_materials as recover_terrain_materials
+from scene_texture_sampling import recover_scene_sampling
 from texture_decode import convert as texture_convert
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -111,8 +112,11 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
             result['animationBinding']['source'] = animation_path
             result['animationBinding']['restSource'] = animation_model
         else:
-            result = BDAE(extract(path)).parse()
-            if scene_model:apply_scene_transforms(BDAE(extract(path)),result)
+            reader = BDAE(extract(path))
+            result = reader.parse()
+            if scene_model:
+                apply_scene_transforms(reader,result)
+                result['sceneSampling']=recover_scene_sampling(extract,reader,result)
         result['source'] = path
         if not result['meshes']:
             raise ValueError('Model has no supported meshes')

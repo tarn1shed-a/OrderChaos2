@@ -45,6 +45,8 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
 
 开发机还可运行 `python3 tools/art_library.py export`，将完整转换资源整理为独立 ZIP，默认保存在 `game-data/transfers/`。目标机拉取相同版本代码、停止服务后，运行 `python3 tools/art_library.py verify /path/to/oc2-assets.zip`，再运行 `python3 tools/art_library.py import /path/to/oc2-assets.zip`。该工具仅需 Python 标准库；实际文件名以导出结果为准。校验失败不会替换现有资源；成功时旧 `converted/` 自动留为同目录下的 `converted.backup-…`，不会读写角色存档。完成后重新启动服务、刷新浏览器。
 
+M01 A4之后的场景模型需要包含 `sceneSampling`（`oc2-scene-sampling-v1`）。出现“原场景采样资源缺失”时，同步开发机新构建的素材ZIP；仅拉取Git代码不会更新这些忽略资源。不要用旧模型补回默认采样来跳过检查。
+
 素材库入口为 `http://localhost:8787/assets/library/index.html`，也可从三维页“资源与玩法”打开。分类目录含原图、字体示例、资源用途/来源、像素尺寸与校验信息，方便另一个网页项目按相对路径复用。不要只拷某几个图标或字体文件；整套 ZIP 与代码匹配后再更新正式服。
 
 ## 朋友连接服务器

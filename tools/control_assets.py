@@ -32,6 +32,7 @@ METHODS = {
     'OperationPanel2.onJumpRelease': '4de38af28912f79072a0674b0f96a32642d111463c438f2ab52be2ee8541ea33',
     'OperationPanel2.onEventInteraction': 'c00334196188f37654403540d18d22681a433a0daad9a9279b26a24d3351745d',
     'OperationPanel2.onInteractChangeMid': 'b393a41113c7434c4db339d24626ccb692638367d959805947a0cffcbf6dc18e',
+    'OperationPanel2.onInteractionClick':'737ba313fd06a0a6308f009a9542a59e369a32a29ac33270ab670f0efd6c8e13',
     'SpellPanel2.onRotateMidCallback': 'a9e41109ba59da2ecf2ae7cb0bf11f571d3221ae257ff0e0067bdbde75a1bac9',
 }
 
@@ -70,7 +71,7 @@ def recover_controls(extract, output, hud):
             raise ValueError('Original basic attack proto/rune/icon mismatch')
         icons[key] = {'sourceSkillId': pid, 'sourceRuneId': rid, 'sourceEditName': name,
                       'sourcePath': 'ui/icons/'+icon, 'sourcePack': 'ui_icon_1.bin'}
-    for key, filename in [('jump', 'jumpicon.png'), ('fly', 'fly.png')]:
+    for key, filename in [('jump', 'jumpicon.png'), ('fly', 'fly.png'),('loot','loot.png')]:
         icons[key] = {'sourcePath': 'ui/icons/interactive/'+filename, 'sourcePack': 'ui_icon_2.bin'}
     for key, entry in icons.items():
         raw = load(entry['sourcePath'])
@@ -119,7 +120,7 @@ def recover_controls(extract, output, hud):
         'interaction': {'default': 'jump', 'pressCallback': 'Hero_SetJumpState(true)',
             'releaseCallback': 'Hero_SetJumpState(false)', 'releaseOutReleases': True,
             'contextualFunctionOverridesJump': True, 'flyIconRecovered': True,
-            'webGameplay': 'default jump only; contextual targets/flying not implemented',
+            'webGameplay': 'default jump; server-owned local corpse loot overrides it with contextual tap; flying/other quest functions not implemented',
             'nativeJumpPhysicsRecovered': False},
         'sources': {path: {'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()} for path, raw in loaded.items()},
         'scriptExecution': False}

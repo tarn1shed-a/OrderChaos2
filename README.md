@@ -118,6 +118,7 @@ python3 -m venv .venv
 .venv/bin/python tools/native_gameplay_tests.py
 .venv/bin/python tools/native_cast_tests.py
 .venv/bin/python tools/native_combat_tests.py
+.venv/bin/python tools/native_interaction_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -161,7 +162,7 @@ python3 tools/art_library_tests.py
 .venv/bin/python tools/analyze_native_effects.py /path/to/game.apk
 ```
 
-转换入口按原索引提取330个包内源文件并校验长度/CRC，另按精确SHA256/长度读取两个松散原字体。生成22个模型、108张场景/特效/角色贴图、9张基础UI裁片、3张战斗技能原图、18张技能目录原图、4张技能面板裁片、15张HUD裁片、14张背包/装备裁片、6张物品原图、4张操作原图、4张状态原图、61张普攻原图、4个WOFF及各清单、地图和9块源导航。玩家 `models/elf-female.json` 合并25个原网格、22份蒙皮、12份材质，保留124节点与76段动作（含55段不同普攻片段），内含 `oc2-equipment-appearance-v1`、`oc2-character-hair-v1`、`oc2-character-materials-v1`。完整中文字体来自原松散文件，不从系统字体替代转换。原始包不修改，产物留在忽略目录。当前要求 `oc2-combat-effects-v4`、`oc2-scene-render-v1` 和 `oc2-original-ui-v15`、`oc2-native-gameplay-v6` 和 `oc2-scene-collision-v2`、`oc2-source-navigation-v1`，请整体重建或同步匹配版本的 `converted/` 后刷新页面。
+转换入口按原索引提取341个包内源文件并校验长度/CRC，另按精确SHA256/长度读取两个松散原字体。生成22个模型、108张场景/特效/角色贴图、9张基础UI裁片、3张战斗技能原图、18张技能目录原图、4张技能面板裁片、15张HUD裁片、14张背包/装备裁片、6张物品原图、5张操作原图、4张状态原图、61张普攻原图、4个WOFF及各清单、地图和9块源导航。玩家 `models/elf-female.json` 合并25个原网格、22份蒙皮、12份材质，保留124节点与76段动作（含55段不同普攻片段），内含 `oc2-equipment-appearance-v1`、`oc2-character-hair-v1`、`oc2-character-materials-v1`。完整中文字体来自原松散文件，不从系统字体替代转换。原始包不修改，产物留在忽略目录。当前要求 `oc2-combat-effects-v4`、`oc2-scene-render-v1` 和 `oc2-original-ui-v16`、`oc2-native-gameplay-v7` 和 `oc2-scene-collision-v2`、`oc2-source-navigation-v1`，请整体重建或同步匹配版本的 `converted/` 后刷新页面。
 
 ## 美术素材复用与同步
 

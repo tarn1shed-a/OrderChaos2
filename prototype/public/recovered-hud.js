@@ -57,7 +57,7 @@ export function createRecoveredHUD(profile) {
       text('hud-target-health',`${enemy.hp} / ${enemy.maxHp}`);
       const respawn=Math.max(0,Math.ceil(((enemy.respawnAt||0)-now)/1000));
       const slow=Math.max(0,((enemy.slowUntil||0)-now)/1000);
-      text('hud-target-state',!enemy.alive?`已击败${respawn?` · ${respawn} 秒后重生`:''}`:buffText(enemy,now)|| (slow>0?`冰霜减速 · ${slow.toFixed(1)}s`:monsterStateText(enemy)));
+      text('hud-target-state',!enemy.alive?`${enemy.loot?.availableFor?.includes(me?.id)?'狼皮可拾取':'已击败'}${respawn?` · ${respawn} 秒后重生`:''}`:buffText(enemy,now)|| (slow>0?`冰霜减速 · ${slow.toFixed(1)}s`:monsterStateText(enemy)));
       $('target-hud').classList.toggle('dead',!enemy.alive);
     }
   }

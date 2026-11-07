@@ -19,7 +19,7 @@ async function fixture(t,options={}) {
     saveFile,
     advance(ms) { now += ms; },
     async start() {
-      game = createGameServer({ saveFile, motion:null,ai:false,casting:false,clock: () => now,...options });
+      game = createGameServer({ saveFile, motion:null,ai:false,contextualLoot:false,casting:false,clock: () => now,...options });
       f.game=game;
       await new Promise(resolve => game.server.listen(0, '127.0.0.1', resolve));
       f.url = `ws://127.0.0.1:${game.server.address().port}/ws`;
@@ -75,6 +75,43 @@ const stateAfter = (c, after, predicate = () => true) => c.wait(m => m.type === 
 const player = (state, id) => state.players.find(p => p.id === id);
 const wolf = state => state.monsters.find(m => m.kind === 'wolf');
 const monster = (state, id) => state.monsters.find(m => m.id === id);
+
+test('contextual corpse loot is personal, authoritative, idempotent and saved across reconnect/restart',async t=>{
+  const gameplay={weapons:{},skills:{},comboRows:[],interaction:{format:'oc2-source-interaction-v1'}};
+  const f=await fixture(t,{gameplay,contextualLoot:true});
+  const a=await enter(f,'拾取甲',{scene:'resources'}),b=await enter(f,'拾取乙',{scene:'resources'});
+  await stateAfter(a,a.mark(),s=>s.players.length===2);
+  const encounter=[...f.game.combatRooms.values()][0],server=id=>encounter.clients.get(id),now=Date.now();
+  for(const c of [a,b])Object.assign(server(c.id).player,{x:encounter.monster.x,y:encounter.monster.y});
+  encounter.damageMonster(server(a.id),20,now);encounter.damageMonster(server(b.id),40,now);
+  const dead=await stateAfter(a,a.mark(),s=>s.interaction?.kind==='loot'),generation=dead.interaction.generation;
+  const peer=await stateAfter(b,b.mark(),s=>s.tick===dead.tick);assert.deepEqual(wolf(dead),wolf(peer));assert(peer.interaction);
+  assert.equal(server(a.id).character.gold,10);assert.equal(server(a.id).character.inventory.wolfPelt,0);
+  assert.equal(server(b.id).character.inventory.wolfPelt,0);
+  const late=await enter(f,'拾取迟到',{scene:'resources'});assert.equal((await stateAfter(late,late.mark())).interaction,null);
+  let mark=late.mark();late.send({type:'loot',targetId:encounter.monster.id,generation,itemId:'wolfPelt',count:999});
+  await late.wait(m=>m.type==='notice',{after:mark});assert.equal(server(late.id).character.inventory.wolfPelt,0);
+  const claim={type:'loot',targetId:encounter.monster.id,generation,itemId:'trainingSword',count:999};
+  mark=a.mark();a.send(claim);a.send(claim);
+  const saved=await a.wait(m=>m.type==='progress'&&m.character.inventory.wolfPelt===1,{after:mark});
+  assert.equal(saved.character.inventory.trainingSword,1);await stateAfter(a,a.mark(),s=>s.interaction===null);
+  assert.equal(server(a.id).character.inventory.wolfPelt,1);assert(peer.interaction);
+  const creds={characterId:b.id,resumeToken:b.welcome.resumeToken};await b.close();
+  const resumed=await enter(f,'拾取乙',{scene:'resources',...creds});
+  await stateAfter(resumed,resumed.mark(),s=>s.interaction?.generation===generation);
+  mark=resumed.mark();resumed.send(claim);await resumed.wait(m=>m.type==='progress'&&m.character.inventory.wolfPelt===1,{after:mark});
+  const disk=JSON.parse(await readFile(f.saveFile,'utf8'));assert.equal(disk.version,6);
+  assert(!JSON.stringify(disk).includes(generation));assert.equal(disk.characters.find(c=>c.id===a.id).inventory.wolfPelt,1);
+  // Entitlements are scoped to this room and corpse lifetime, never supplied by the client.
+  const isolated=await enter(f,'拾取隔离',{scene:'resources',room:'OTHER-LOOT'});mark=isolated.mark();isolated.send(claim);
+  await isolated.wait(m=>m.type==='notice',{after:mark});
+  f.advance(10000);await stateAfter(a,a.mark(),s=>wolf(s).alive);
+  mark=a.mark();a.send(claim);await a.wait(m=>m.type==='notice',{after:mark});assert.equal(server(a.id).character.inventory.wolfPelt,1);
+  const owner={characterId:a.id,resumeToken:a.welcome.resumeToken};await f.stop();await f.start();
+  const restored=await enter(f,'拾取甲',{scene:'resources',...owner});assert.equal(restored.welcome.character.inventory.wolfPelt,1);
+  assert.equal((await stateAfter(restored,restored.mark())).interaction,null);
+  publicStateHasNoCredentials(late,[owner.resumeToken,creds.resumeToken]);
+});
 
 function publicStateHasNoCredentials(c, tokens) {
   for (const message of c.messages.filter(m => m.type === 'state')) {

@@ -46,6 +46,7 @@ jobs:
       - run: python tools/native_gameplay_tests.py
       - run: python tools/native_cast_tests.py
       - run: python tools/native_combat_tests.py
+      - run: python tools/native_interaction_tests.py
       - run: python tools/navmesh_tests.py
       - run: python tools/player_spell_effects_tests.py
       - run: python tools/scene_collision_tests.py

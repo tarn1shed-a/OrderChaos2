@@ -59,7 +59,7 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
 
 技能及换装版本需要匹配的 `converted/models/elf-female.json`、`wolf.json`、`effects/combat.json`、角色/装备贴图与 `manifest.json`，请整体复制本次构建的 `converted/`。旧 `forest-elf.json` 只保留为研究参考，不能代替新玩家基体。只有旧资源时页面会明确要求重建；开发机执行 `.venv/bin/python tools/build_resource_preview.py` 后把产物单独传给正式服。本轮代码会将旧角色存档安全升级到v6，原装备、外观、奖励和技能栏保留，仅v4及更早角色补上法师职业（2）、法杖和大剑各一件，v5已有职业与装备不变；更新后刷新页面。待结算施法、技能冷却和怪物减速仍为会话/房间状态。
 
-当前要求 `oc2-combat-effects-v4` 与 `oc2-original-ui-v15` 与 `oc2-native-gameplay-v6`（`converted/gameplay/native.json`）及 `oc2-scene-collision-v2`（`converted/maps/collision.json`）与 `oc2-source-navigation-v1`（`converted/maps/navigation.json`），玩家模型内含 `oc2-equipment-appearance-v1`、`oc2-character-hair-v1` 与 `oc2-character-materials-v1`。整包包括原LUT、各界面清单与图标（含手机摇杆/小地图边框、技能面板及法师资料）、108张场景/特效/角色贴图、4个WOFF，请完整同步 `converted/`。原材质库、源表和松散TTF只由开发机转换时读取；运行机器只需转换产物，无须BDAE、SWF、APK或反汇编。角色头像和装备全身预览随穿脱渲染并缓存，无需另传截图。未覆盖的稀有字仍回退系统字体。
+当前要求 `oc2-combat-effects-v4` 与 `oc2-original-ui-v16` 与 `oc2-native-gameplay-v7`（`converted/gameplay/native.json`）及 `oc2-scene-collision-v2`（`converted/maps/collision.json`）与 `oc2-source-navigation-v1`（`converted/maps/navigation.json`），玩家模型内含 `oc2-equipment-appearance-v1`、`oc2-character-hair-v1` 与 `oc2-character-materials-v1`。整包包括原LUT、各界面清单与图标（含手机摇杆/小地图边框、技能面板及法师资料）、108张场景/特效/角色贴图、4个WOFF，请完整同步 `converted/`。原材质库、源表和松散TTF只由开发机转换时读取；运行机器只需转换产物，无须BDAE、SWF、APK或反汇编。角色头像和装备全身预览随穿脱渲染并缓存，无需另传截图。未覆盖的稀有字仍回退系统字体。
 
 角色存档当前为 **version 6**，v5职业/物品结构保留；v6在首个空技能槽加入奥术飞弹，不改变任何旧绑定。v4及更早版本仍补上职业与两件练习武器。读取v1/v2/v3/v4/v5时先验证全文件；首次落盘前，在同一个runtime目录保留精确原字节的characters.json.vN-backup-….json，再原子写入v6。仅v4及更早角色迁入法师原型（2）并补发一次新增法杖/大剑；旧奖励、生命、装备、外观、位置、凭据哈希与已有技能栏不变。尚无服务器技能栏的旧版本继续执行原一次性导入。坏存档拒绝启动并保留原文件，不使用旧版程序打开v6。回退需停服，同时恢复旧代码与对应旧版本备份。
 
@@ -73,7 +73,7 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
 
 布局和键位配置本身仍为version1，嵌入v6服务器角色存档中，只通过本角色welcome/progress及保存回执返回，不进入房间公开快照。修改即时写盘，成功回执后显示“已保存到服务器”；待确认期间的连续改动会排队保留最后一份，超时显示“重试保存”，断线后未确认的改动不冒称已保存。已有服务器设置始终优先于旧浏览器缓存；一次性旧设置导入请求不会覆盖服务器已有值。刷新、重连、服务器重启或换设备恢复同一角色后均载入服务器配置。
 
-本轮需要同时更新前后端代码和UI v13完整资源包。务必整体同步包含gameplay/native.json和maps/collision.json的新converted，再启动服务器并刷新页面。仅git pull不足以获得原版资源。
+本轮需要同时更新前后端代码和UI v16 / gameplay v7完整资源包。务必整体同步包含gameplay/native.json和maps/collision.json的新converted，再启动服务器并刷新页面。仅git pull不足以获得原版资源。
 
 当前角色进度保存在根目录 `runtime/characters.json`，始终不进 Git。奖励立即保存，移动定期保存，离开和正常关闭服务会保存最新状态。异常强制断电时，尚未落盘的短时间移动可能丢失；正常关闭请使用 Control-C。
 
@@ -91,8 +91,15 @@ GitHub 仓库不含任何游戏资源。二维营地无需资源即可使用；�
 
 ## 动态碰撞与施法验证
 
-开发检查顺序和未完成分支见 [逆向目录](REVERSE_ROADMAP.md)。UI v13 / gameplay v4 / collision v2 需要整体更新，额外包含原门模型和三个原施法动作片段。普通地图仍为39个原场景实例；`explore.html?room=DYNAMIC-01&lab=collision` 单独启用门体试验（近门点右上“打开/关闭试验门”）。两个窗口使用不同角色、相同房间和同一lab参数；普通房间与试验房间隔离。试验摆放与升降轨迹是本地验证工具，不写回常规角色位置，重启后门关闭。
+开发检查顺序和未完成分支见 [逆向目录](REVERSE_ROADMAP.md)。UI v16 / gameplay v7 / collision v2 / navigation v1 需要整体更新，额外包含原门模型和三个原施法动作片段。普通地图仍为39个原场景实例；`explore.html?room=DYNAMIC-01&lab=collision` 单独启用门体试验（近门点右上“打开/关闭试验门”）。两个窗口使用不同角色、相同房间和同一lab参数；普通房间与试验房间隔离。试验摆放与升降轨迹是本地验证工具，不写回常规角色位置，重启后门关闭。
 
 三维炎爆术17吟唱1500ms、独立CD0/公共CD600ms；霜爆术94无吟唱、CD20000ms/公共CD700ms；奥术飞弹90引导1500ms、300ms间隔、CD4000ms。默认新角色1/2/3，旧角色Q等已有设置保留，新技能使用首个空槽原绑定。三种原玩家法术当前限法师；尚未接原MP/学习条件。Esc在没有面板时取消在施技能，炎爆/奥术移动按源位标记中断；奥术每发使用独立事件ID和待命中快照，延迟批量命中只结算一次击杀奖励。
 
 本地伤害仍为炎爆30、霜爆20、奥术每发8，原服确认和飞行/命中时序仍为适配；完整原协议、原数值和全部技能规则未恢复。炎爆命中组有一条缺失的39号特效引用，未用其他美术替代。完整素材包包含新动作、源图标和六个玩家特效；只更新代码会产生版本不匹配。存档升为v6，保留原字节v5备份及所有进度/凭据/键位；回退须停服并同时恢复旧代码、对应旧存档和旧资源。
+
+
+## 尸体拾取（R10 A分支）
+
+三维营地狼的经验、金币、击杀数仍在击杀时保存；狼皮改为靠近尸体后点击右下的原拾取图标，或在画面获得焦点时按G。自定义技能若绑定G则优先使用技能。拾取完成后该按钮恢复跳跃。每位存活且实际参与伤害的在线角色有一次个人拾取资格；其他人、其他房间、过期尸体和重复请求无法领取。按钮的跳跃/情境点击切换来自原OperationPanel2，狼皮数量、个人归属、24逻辑单位半径、2米高度差、视线及存活/施法/控制检查是本地规则，尚未恢复原版掉落列表界面或原服分配算法。
+
+未拾取物只保留到尸体8秒重生或服务进程重启，不写入角色存档；已拾取狼皮立即使用现有v6存档保存。本轮不迁移存档、不补发历史掉落。源任务572/632与对象610/621保留为研究资料，没有可证明的原服务端脚本，尚未激活为可接取任务。需要整体更新UI16 / gameplay7素材，其中新增原loot.png；只git pull不能获得这些素材。

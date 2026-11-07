@@ -20,7 +20,7 @@ const CONVERTED = fileURLToPath(new URL('../game-data/converted/', import.meta.u
 const THREE_BUILD = fileURLToPath(new URL('./node_modules/three/build/', import.meta.url));
 const COLORS = ['#80e5d1', '#ffc47c', '#b7a2f7', '#f39da9', '#90bdec', '#d4e993', '#ffdfaa', '#b4e4ed'];
 
-export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGameplay(), motion=loadCollision(), navigation=loadNavigation(),ai=true,casting=true, allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean) } = {}) {
+export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGameplay(), motion=loadCollision(), navigation=loadNavigation(),contextualLoot=true,ai=true,casting=true, allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean) } = {}) {
   if (saveFile && [PUBLIC, CONVERTED].some(root => resolve(saveFile).startsWith(root.endsWith(sep) ? root : root + sep))) throw new Error('角色存档必须放在静态资源目录之外');
   const store = new CharacterStore(saveFile);
   const rooms = new Map();
@@ -117,7 +117,7 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
         }
         if (activeCharacters.has(identity.record.id)) return reject(ws, '这个角色已在另一个窗口在线，请先退出原窗口');
         ws.character = identity.record; ws.scene = scene;ws.lab=lab;
-        if (!combatRooms.has(roomKey)) combatRooms.set(roomKey, new CombatRoom(roomKey, world, scene, room, { changed, emit: data => emit(room, data), notice,gameplay,motion,navigation,ai,casting,lab }));
+        if (!combatRooms.has(roomKey)) combatRooms.set(roomKey, new CombatRoom(roomKey, world, scene, room, { changed, emit: data => emit(room, data), notice,gameplay,motion,navigation,contextualLoot,ai,casting,lab }));
         ws.motion=combatRooms.get(roomKey).motion;ws.gameplay=gameplay;
         const position = ws.character.positions[scene];
         const restorePosition = !lab&&position && walkable(position.x, position.y, world) && ws.character.hp > 0;
@@ -152,6 +152,10 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
         if(msg.pressed&&combatRooms.get(ws.roomId).blocked(ws.player,'jump',clock()))return notice(ws,'控制效果中无法跳跃');
         const result=setJumpPressed(ws,msg.pressed,clock(),combatRooms.get(ws.roomId).casts.has(ws.player.id));
         if(result)notice(ws,result);
+      } else if(msg.type==='loot'&&ws.player){
+        const encounter=combatRooms.get(ws.roomId);
+        if(!encounter.loot)return notice(ws,'当前场景没有可拾取的掉落');
+        encounter.loot.pick(ws,msg.targetId,msg.generation,clock());
       } else if(msg.type==='interact'&&ws.player){
         const encounter=combatRooms.get(ws.roomId);
         if(!encounter.dynamic)return notice(ws,'当前场景没有试验门');
@@ -240,7 +244,7 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
       const snapshot = { type: 'state', tick, serverTime: clock(), players: [...room.values()].map(ws => ({ ...ws.player, animation: { ...ws.player.animation },
         skillReadyAt: { ...ws.player.skillReadyAt }, cast: ws.player.cast ? structuredClone(ws.player.cast) : null })), monsters: encounter.snapshot(),
         objects:encounter.dynamic?.snapshot()||[],projectiles:encounter.runtime?.snapshot()||[] };
-      for (const ws of room.values()) send(ws, snapshot);
+      for (const ws of room.values()) send(ws, {...snapshot,interaction:encounter.loot?.context(ws,clock())||null});
     }
     } catch (error) { storageFailure(error); }
   }, 50);

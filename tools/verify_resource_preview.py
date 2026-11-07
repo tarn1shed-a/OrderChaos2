@@ -96,7 +96,7 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v15' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v16' and not ui['provenance']['swfScriptExecution']
     controls=ui['controls'];assert controls['format']=='oc2-original-controls-v1' and not controls['scriptExecution']
     assert m['player']['jumpAnimations']
     collision=json.loads(asset(m['collision']['url'],output).read_text())
@@ -106,7 +106,12 @@ def verify(output=OUT):
     assert all(mesh.get('sourceNodeTransform') for ref in m['scenery'] for mesh in json.loads(asset(ref['url'],output).read_text())['meshes'])
     assert controls==json.loads((output/'ui/controls.json').read_text())
     gameplay=json.loads(asset(m['gameplay']['url'],output).read_text())
-    assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v6'
+    assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v7'
+    interaction=gameplay['interaction'];assert interaction['format']=='oc2-source-interaction-v1'
+    assert interaction['button']['tapCallback']=='onInteractionClick' and interaction['button']['nonemptyFunctionReplacesJump']
+    assert len(interaction['previewObjectSpawns'])==3 and {r['entry'] for r in interaction['previewObjectProtos']}=={610,621}
+    assert controls['icons']['loot']['sourcePath']=='ui/icons/interactive/loot.png'
+    assert 'OperationPanel2.onInteractionClick' in controls['methods']
     navigation=json.loads(asset(m['navigation']['url'],output).read_text())
     assert navigation['format']=='oc2-source-navigation-v1' and len(navigation['tiles'])==9 and len(navigation['nodes'])==381
     assert gameplay['npc']['navigation']==m['navigation'] and gameplay['npc']['nonzeroAIPlans']==0

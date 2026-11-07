@@ -7,6 +7,7 @@ import {DynamicScene} from './dynamic-scene.mjs';
 import {BuffRuntime} from './buffs.mjs';
 import {resolveDamage} from './damage.mjs';
 import {MonsterAI} from './monster-ai.mjs';
+import {CorpseLoot} from './corpse-loot.mjs';
 
 export const COMBAT = Object.freeze({ playerDamage: 20, playerCooldownMs: 700, monsterHp: 60, monsterDamage: 6,
   monsterCooldownMs: 1000, monsterRespawnMs: 8000, playerRespawnMs: 4000,
@@ -19,7 +20,7 @@ export function syncPlayerStats(ws) {
 }
 
 export class CombatRoom {
-  constructor(key, world, scene, clients, { changed, emit, notice, gameplay=null, motion=null, navigation=null, ai=true,casting=true,lab=false, random=Math.random }) {
+  constructor(key, world, scene, clients, { changed, emit, notice, gameplay=null, motion=null, navigation=null, contextualLoot=true,ai=true,casting=true,lab=false, random=Math.random }) {
     this.gameplay=scene==='resources'?gameplay:null;this.random=random;
     this.motion=scene==='resources'?(motion?.fork?.()||motion):null;
     this.world = world; this.scene = scene; this.clients = clients; this.changed = changed; this.emit = emit; this.notice = notice;
@@ -54,9 +55,10 @@ export class CombatRoom {
       },hit:(r,now)=>this.damageMonster(r.ws,r.skill.damage,now,r.cast)});
     if(lab){if(!this.motion)throw new Error('碰撞验证场需要本地资源');this.dynamic=new DynamicScene(this.motion,Date.now());}
     if(ai&&scene==='resources'&&this.motion&&navigation)this.brain=new MonsterAI(this,navigation);
+    if(contextualLoot&&this.gameplay?.interaction?.format==='oc2-source-interaction-v1')this.loot=new CorpseLoot(this);
   }
 
-  snapshot() { return [{ ...this.monster, ...(this.monster.ai?{ai:{...this.monster.ai}}:{}),buffs:structuredClone(this.monster.buffs||[]), animation: { ...this.monster.animation } }]; }
+  snapshot() { return [{ ...this.monster, ...(this.loot?{loot:this.loot.view()}:{}),...(this.monster.ai?{ai:{...this.monster.ai}}:{}),buffs:structuredClone(this.monster.buffs||[]), animation: { ...this.monster.animation } }]; }
 
   blocked(target,action,now){return this.buffs?.blocked(target,action,now)||false;}
   applyStatus(target,kind,source,now,options){
@@ -162,23 +164,26 @@ export class CombatRoom {
     m.alive = false; m.respawnAt = now + COMBAT.monsterRespawnMs;
     this.buffs?.clear(m,now,'death');this.publishStatuses(now);
     this.brain?.tick(now,0);
+    this.loot?.begin(now,m.respawnAt);
     for (const id of this.contributors) {
       const recipient = this.clients.get(id);
       if (!recipient || recipient.player.hp <= 0) continue;
       const c = recipient.character, oldLevel = c.level;
       c.xp += COMBAT.reward.xp; c.gold += COMBAT.reward.gold; c.kills++;
-      c.inventory.wolfPelt += COMBAT.reward.wolfPelt;
+      if(this.loot)this.loot.grant(id);else c.inventory.wolfPelt += COMBAT.reward.wolfPelt;
       c.level = 1 + Math.floor(c.xp / 60); c.maxHp = equipmentStats(c).maxHp;
       if (c.level > oldLevel) c.hp = c.maxHp;
       syncPlayerStats(recipient);
       this.changed(recipient, true);
-      this.notice(recipient, `击败野狼：经验 +30，金币 +10，狼皮 +1${c.level > oldLevel ? `；升至 ${c.level} 级，生命恢复` : ''}`);
+      this.notice(recipient, `击败野狼：经验 +30，金币 +10，${this.loot?'靠近尸体拾取狼皮':'狼皮 +1'}${c.level > oldLevel ? `；升至 ${c.level} 级，生命恢复` : ''}`);
     }
-    this.emit({ type: 'combat', action: 'kill', attackerId: ws.player.id, targetId: m.id, targetHp: 0, serverTime: now, rewards: { ...COMBAT.reward } });
+    this.emit({ type: 'combat', action: 'kill', attackerId: ws.player.id, targetId: m.id, targetHp: 0, serverTime: now,
+      rewards: { ...COMBAT.reward,...(this.loot?{wolfPelt:0}:{}) },...(this.loot?{loot:this.loot.view()}:{} ) });
     this.contributors.clear();
   }
 
   tick(now, dt) {
+    this.loot?.tick(now);
     this.updateStatuses(now);
     if(this.runtime)this.runtime.tick(now);
     else for (const [id, { ws, cast }] of this.casts) {

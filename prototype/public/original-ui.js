@@ -1,10 +1,11 @@
 // Only decoded art and embedded glyphs are loaded. Original SWF scripts never run.
 export async function loadOriginalUI(profile) {
-  if (profile.format !== 'oc2-original-ui-v15' || profile.gameplay?.format!=='oc2-native-gameplay-v6'||profile.controls?.format!=='oc2-original-controls-v1' || profile.fonts?.requiredTextStatus !== 'complete' ||
+  if (profile.format !== 'oc2-original-ui-v16' || profile.gameplay?.format!=='oc2-native-gameplay-v7'||profile.controls?.format!=='oc2-original-controls-v1' || profile.fonts?.requiredTextStatus !== 'complete' ||
       !['chineseText','chineseDisplay'].every(key=>profile.fonts.faces?.[key]?.conversion==='lossless-full-sfnt-to-woff') ||
       profile.skillIcons?.format !== 'oc2-skill-icons-v1'||profile.hud?.format!=='oc2-original-hud-v1'||profile.hud?.nativeControls?.format!=='oc2-original-mobile-controls-v2'||
       profile.portraits?.format!=='oc2-character-portraits-v1'||profile.inventory?.format!=='oc2-original-inventory-v1'||
       profile.itemIcons?.format!=='oc2-item-icons-v1'||profile.skillUI?.format!=='oc2-original-skill-ui-v1') throw new Error('原版界面资源需要更新，请重新构建本地资源');
+  if(profile.gameplay.interaction?.format!=='oc2-source-interaction-v1'||!profile.controls.icons.loot)throw new Error('原版交互资源需要更新');
   const imageKeys = ['buttonGreen','buttonGray','skillOrb','skillFrame','healthRing','experienceRing','healthFill','manaFill','panelBlue'];
   const localURL = url => {
     if (typeof url !== 'string' || !/^\/assets\/ui\/[A-Za-z0-9_-]+\.(png|woff)$/.test(url)) throw new Error('原版界面资源路径无效');

@@ -11,7 +11,7 @@ export function createRecoveredHUD(profile) {
   const xp=mountSourceProgress($('field-xp-fill'),profile.progress.experience,profile.assets);
   const cardXP=mountSourceProgress($('card-xp-track'),profile.progress.experience,profile.assets);
   const cooldowns={};
-  for(const [id,definition]of [['field-attack','cooldownAttack'],['field-fireball','cooldownSkill'],['field-frost_blast','cooldownSkill']]){
+  for(const [id,definition]of [['field-attack','cooldownAttack'],['field-fireball','cooldownSkill'],['field-frost_blast','cooldownSkill'],['field-arcane_missile','cooldownSkill']]){
     const element=document.createElement('span');element.className='hud-cooldown';element.setAttribute('aria-hidden','true');
     $(id).querySelector('.attack-art,.skill-art').append(element);
     cooldowns[id]=mountSourceProgress(element,profile.progress[definition],profile.assets);cooldowns[id].set(0);

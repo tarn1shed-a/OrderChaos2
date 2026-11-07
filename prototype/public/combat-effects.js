@@ -3,7 +3,8 @@ import { resolveSkillAttachment } from './skill-attachments.js';
 import { createParticleRenderer } from './particle-renderer.js';
 
 export function createCombatEffects(THREE,{scene,data,textures,findView,position,camera}) {
-  if(data?.format!=='oc2-combat-effects-v3'||!data.attachments?.slots||!['fireCast','fireMissile','fireHit','frostHit'].every(key=>data.effects?.[key]?.verification?.completePayload))throw new Error('原始粒子与挂点参数版本不匹配，请重新构建本地资源');
+  if(data?.format!=='oc2-combat-effects-v4'||!data.attachments?.slots||!['fireCast','fireMissile','fireHit','frostHit'].every(key=>data.effects?.[key]?.verification?.completePayload))throw new Error('原始粒子与挂点参数版本不匹配，请重新构建本地资源');
+  const bindings=data.playerSpells?.bindings||{fireball:{cast:'fireCast',missile:'fireMissile',hit:'fireHit'},frost_blast:{hit:'frostHit'}};
   const active=new Map(),seen=new Map(),particles=createParticleRenderer(THREE,{data,textures,camera});
   const statusGeometry=new THREE.RingGeometry(.72,.79,32);
   let disposed=false;
@@ -27,16 +28,17 @@ export function createCombatEffects(THREE,{scene,data,textures,findView,position
   function cast(event,now){
     const c=event.cast,skill=skillById(c?.skillId);
     if(!skill||!c?.id||![c.startedAt,c.releaseAt,c.impactAt,c.origin?.x,c.origin?.y,c.target?.x,c.target?.y].every(Number.isFinite)||c.startedAt>now+1000||c.impactAt<=now)return;
-    add(`cast:${c.id}`,'cast',c.startedAt,c.impactAt,{...c,attackerId:event.attackerId});
+    const channel=Boolean(c.channelEndsAt&&!c.executionId);
+    add(`cast:${c.id}`,channel?'channel':'cast',c.startedAt,channel?c.channelEndsAt:c.impactAt,{...c,attackerId:event.attackerId});
   }
   function handle(event,now){
-    if(event.action==='skill-cast')cast(event,now);
-    if(event.action==='skill-cancel'||event.action==='respawn')for(const [id,e]of active)if(e.type==='cast'&&(event.castId===e.payload.id||event.targetId===e.payload.attackerId)){destroy(e);active.delete(id);}
+    if(event.action==='skill-cast'||event.action==='skill-pulse')cast(event,now);
+    if(event.action==='skill-cancel'||event.action==='respawn')for(const [id,e]of active)if(['cast','channel'].includes(e.type)&&(event.castId===e.payload.id||event.castId===e.payload.executionId||event.targetId===e.payload.attackerId)){destroy(e);active.delete(id);}
     if(event.action==='skill-hit'&&skillById(event.skillId)&&event.position&&Number.isFinite(event.serverTime)){
-      const type=event.skillId==='fireball'?'fireHit':'frostHit',duration=data.effects[type].durationMs;
+      const type=bindings[event.skillId]?.hit;if(!type)return;const duration=data.effects[type].durationMs;
       if(now>=event.serverTime-1000&&now<event.serverTime+duration)add(`hit:${event.castId}`,type,event.serverTime,event.serverTime+duration,event);
     }
-    if((event.action==='player-hit'&&event.targetHp<=0)||event.action==='kill')for(const [id,e]of active)if(e.type==='cast'&&(e.payload.attackerId===event.targetId||e.payload.targetId===event.targetId)){destroy(e);active.delete(id);}
+    if((event.action==='player-hit'&&event.targetHp<=0)||event.action==='kill')for(const [id,e]of active)if(['cast','channel'].includes(e.type)&&(e.payload.attackerId===event.targetId||e.payload.targetId===event.targetId)){destroy(e);active.delete(id);}
   }
   function sync(players,monsters,now,projectiles=[]){
     for(const player of players)if(player.hp>0&&player.cast)cast({cast:player.cast,attackerId:player.id},now);
@@ -49,24 +51,27 @@ export function createCombatEffects(THREE,{scene,data,textures,findView,position
       if(now>=e.end){destroy(e);active.delete(id);continue;}
       e.group.visible=now>=e.start;if(!e.group.visible)continue;
       const p=e.payload;e.count=0;
-      if(e.type==='cast'){
+      if(e.type==='channel'){
+        const key=bindings[p.skillId]?.cast;if(!key)continue;
+        for(const slot of data.attachments.effects[key].slots){const at=attachment(slot,p.attackerId,p.targetId,p.origin);if(at)e.count+=system(e,key,slot).update(now-e.start,at,at);}
+      }else if(e.type==='cast'){
         // Only the fire cast/missile has a recovered source effect. Frost's source
         // bundle is an impact effect; do not invent a pre-cast particle layer.
-        if(p.skillId!=='fireball')continue;
+        const binding=bindings[p.skillId];if(!binding?.missile)continue;
         e.birthPoses ||= {};
-        if(now<p.releaseAt){for(const slot of data.attachments.effects.fireCast.slots){
+        if(now<p.releaseAt){for(const slot of data.attachments.effects[binding.cast].slots){
           const at=attachment(slot,p.attackerId,p.targetId,p.origin);if(!at)continue;
           e.birthPoses[slot] ||= {position:at.position.clone(),quaternion:at.quaternion.clone(),scale:at.scale.clone()};
-          e.count+=system(e,'fireCast',slot).update(now-e.start,at,e.birthPoses[slot]);
+          e.count+=system(e,binding.cast,slot).update(now-e.start,at,e.birthPoses[slot]);
         }}
         else{
-          for(const[id,value]of e.systems)if(id.startsWith('fireCast:')){value.dispose();e.systems.delete(id);}
-          const start=attachment('casterRHand',p.attackerId,p.targetId,p.origin),end=attachment(data.attachments.effects.fireMissile.slot,p.attackerId,p.targetId,p.target);
+          for(const[id,value]of e.systems)if(id.startsWith(binding.cast+':')){value.dispose();e.systems.delete(id);}
+          const start=attachment('casterRHand',p.attackerId,p.targetId,p.origin),end=attachment('targetChest',p.attackerId,p.targetId,p.target);
           if(!start||!end)continue;e.releasePose ||= start;
           const from=e.releasePose.position,to=end.position,t=Math.max(0,Math.min(1,(now-p.releaseAt)/(p.impactAt-p.releaseAt)));
           const q=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1,0,0),to.clone().sub(from).normalize());
-          const at={position:from.clone().lerp(to,t),quaternion:q,scale:new THREE.Vector3(1,1,1)};
-          e.count=system(e,'fireMissile',data.attachments.effects.fireMissile.slot).update(now-p.releaseAt,at,at);
+          const at={position:p.skillId==='arcane_missile'?start.position:from.clone().lerp(to,t),quaternion:q,scale:new THREE.Vector3(1,1,1),target:to};
+          e.count=system(e,binding.missile,data.attachments.effects[binding.missile].slot).update(now-p.releaseAt,at,at);
         }
       }else if(e.type==='slow'){
         const view=findView(p.id);if(!view?.alive){destroy(e);active.delete(id);continue;}

@@ -22,14 +22,12 @@ NAME_TABLES = {'en': ('tables/String_Skill_en.tbl', 'EN'),
                'zh': ('tables/String_Skill_zh.tbl', 'SC')}
 ICON_PACK = 'ui_icon_1.bin'
 SELECTION = {
-    'fireball': {'skillId': 592, 'editName': 'Fireball', 'runeId': 2368,
-        'icon': 'skill/fire.png', 'nameStrId': 3279,
-        'links': [('chantState', 728, [('casterRHandEff', 464,
-                   'effects/skill/mage/fire_cast_inhand_red_loop.beff'),
-                  ('casterLHandEff', 464,
-                   'effects/skill/mage/fire_cast_inhand_red_loop.beff')]),
-                  ('releaseState', 729, [('targetChestEff', 234,
-                   'effects/skill/mage/fireball_default_missile_inhand_loop.beff')])]},
+    'fireball': {'skillId':17,'editName':'Scorcher','runeId':68,'icon':'skill/fire_blast.png','nameStrId':3279,
+        'links':[('chantState',67,[('casterRHandEff',24,'effects/skill/mage/scorcher_default_cast_hand_loop.beff')]),
+                 ('releaseState',32,[('casterRHandEff',23,'effects/skill/mage/scorcher_default_missile_link_loop.beff')])]},
+    'arcane_missile': {'skillId':90,'editName':'ArcaneMissile','runeId':360,'icon':'skill/arcane_missile.png','nameStrId':3263,
+        'links':[('channellingState',130,[('casterRHandEff',110,'effects/skill/mage/arcane_blade_absorption_channel_chest_acyclic.beff')]),
+                 ('releaseState',128,[('casterRHandEff',59,'effects/skill/mage/arcane_missile_default_missile_link_loop.beff')])]},
     'frost_blast': {'skillId': 94, 'editName': 'FrostBlast', 'runeId': 376,
         'icon': 'skill/frost_blast.png', 'nameStrId': 3287,
         'links': [('releaseState', 137, [('targetGroundEff', 65,
@@ -156,9 +154,7 @@ def recover_skill_icons(extract, output):
         'provenance': {'selection': 'source-proto-to-rune-to-icon, cross-checked with selected source effects',
             'resizing': False, 'atlasInference': False, 'completeOriginalPlayerSkills': False,
             'limitations': [
-                'The web fireball keeps local rules and its existing name. Source NPC Fireball 592/rune 2368 proves this icon and matching hand-cast/missile states 728/729.',
-                'Source rune 2368 reuses the localized Fireburst name; it does not prove the complete player spell, and the web fire hit state 1584 is a separate source selection.',
-                'Source FrostBlast 94/rune 376 proves its icon and state 137 ground effect. Web timings, damage and targeting remain local adaptations.',
+                'Selected player Scorcher17/rune68, ArcaneMissile90/rune360 and FrostBlast94/rune376 are linked to their actual icons and source states; server combat outcomes remain local.',
                 'Full 96x96 source PNGs are copied unchanged; cropping/masking and button layout in the browser are web adaptations.']}}
     destination = Path(output) / 'ui'
     destination.mkdir(parents=True, exist_ok=True)

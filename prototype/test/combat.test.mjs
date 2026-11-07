@@ -380,14 +380,14 @@ test('normal press/release casts once per press and a lost release clears withou
 test('native chant/release/end and source cooldowns agree for two peers; forged stages and another player cannot cancel a cast',
  {skip:!existsSync(new URL('../../game-data/converted/gameplay/native.json',import.meta.url))},async t=>{
  const f=await fixture(t,{casting:true}),a=await enter(f,'施法状态甲',{scene:'resources'}),b=await enter(f,'施法状态乙',{scene:'resources'});
- assert.equal(a.welcome.combat.skills.fireball.castMs,2000);assert.equal(a.welcome.combat.skills.frost_blast.cooldownMs,20000);
+ assert.equal(a.welcome.combat.skills.fireball.castMs,1500);assert.equal(a.welcome.combat.skills.frost_blast.cooldownMs,20000);
  const target=wolf(await stateAfter(a,a.mark(),s=>s.players.length===2));await moveNear(a,target);
  let ma=a.mark(),mb=b.mark();a.send({type:'skill',skillId:'fireball',targetId:target.id,stage:2,chantTime:0,sourceSkillId:17});
  const first=await stateAfter(a,ma,s=>player(s,a.id)?.cast?.stage===1),other=await stateAfter(b,mb,s=>s.tick===first.tick);
- const c=player(first,a.id).cast;assert.equal(c.sourceSkillId,592);assert.equal(c.releaseAt-c.startedAt,2000);assert.deepEqual(player(other,a.id).cast,c);
- f.advance(1999);const waiting=await stateAfter(a,a.mark());assert.equal(player(waiting,a.id).cast.stage,1);assert.equal(wolf(waiting).hp,60);
+ const c=player(first,a.id).cast;assert.equal(c.sourceSkillId,17);assert.equal(c.releaseAt-c.startedAt,1500);assert.deepEqual(player(other,a.id).cast,c);
+ f.advance(1499);const waiting=await stateAfter(a,a.mark());assert.equal(player(waiting,a.id).cast.stage,1);assert.equal(wolf(waiting).hp,60);
  f.advance(1);const released=await stateAfter(a,a.mark(),s=>player(s,a.id)?.cast?.stage===2);assert.equal(player(released,a.id).cast.phaseAt,c.releaseAt);
- f.advance(350);await stateAfter(a,a.mark(),s=>wolf(s).hp===30);f.advance(150);
+ f.advance(350);await stateAfter(a,a.mark(),s=>wolf(s).hp===30);f.advance(250);
  const done=await stateAfter(a,a.mark(),s=>player(s,a.id)?.cast===null);assert.equal(player(done,a.id).lastCast.stage,6);
  ma=a.mark();a.send({type:'skill',skillId:'fireball',targetId:target.id});const repeat=await stateAfter(a,ma,s=>player(s,a.id)?.cast?.stage===1),active=player(repeat,a.id).cast;
  mb=b.mark();b.send({type:'cancel-skill',castId:active.id});await b.wait(m=>m.type==='notice',{after:mb});assert.equal(player(await stateAfter(a,a.mark()),a.id).cast.id,active.id);
@@ -415,4 +415,29 @@ test('moving source-shape gate blocks both peers, opens authoritatively, isolate
  ma=a.mark();a.send({type:'save'});await a.wait(m=>m.type==='notice'&&m.message.includes('保存'),{after:ma});
  const data=JSON.parse(await readFile(f.saveFile,'utf8'));assert.deepEqual(data.characters.find(c=>c.id===a.id).positions,{});
  publicStateHasNoCredentials(b,[a.welcome.resumeToken,b.welcome.resumeToken]);
+});
+
+test('original player channel shares five source-timed pulses and late projectiles, enforces class/CD, and movement cancels remaining damage',
+ {skip:!existsSync(new URL('../../game-data/converted/gameplay/native.json',import.meta.url))},async t=>{
+ const f=await fixture(t,{casting:true}),a=await enter(f,'引导甲',{scene:'resources'}),b=await enter(f,'引导乙',{scene:'resources'});
+ const target=wolf(await stateAfter(a,a.mark(),s=>s.players.length===2));await moveNear(a,target);
+ let mark=a.mark();a.send({type:'skill',skillId:'arcane_missile',targetId:target.id,channelTime:0,damage:999});
+ const start=await a.wait(m=>m.action==='skill-cast',{after:mark}),cast=start.cast;assert.equal(cast.sourceSkillId,90);assert.equal(cast.stage,3);assert.equal(cast.channelEndsAt-cast.startedAt,1500);
+ f.advance(300);const pulse=await a.wait(m=>m.action==='skill-pulse',{after:mark}),peer=await b.wait(m=>m.action==='skill-pulse');assert.deepEqual(pulse,peer);assert.equal(pulse.cast.pulse,1);
+ const late=await enter(f,'引导迟到',{scene:'resources'});const view=await stateAfter(late,late.mark(),s=>s.projectiles?.some(p=>p.cast.id===pulse.cast.id));assert.equal(player(view,a.id).cast.stage,3);
+ f.advance(250);await stateAfter(a,a.mark(),s=>wolf(s).hp===52);
+ f.advance(950);await stateAfter(a,a.mark(),s=>player(s,a.id).cast===null);f.advance(250);
+ const done=await stateAfter(a,a.mark(),s=>wolf(s).hp===20);assert.equal(player(done,a.id).lastCast.phaseVisual.id,147);
+ assert.equal(a.messages.filter(m=>m.action==='skill-pulse'&&m.cast.executionId===cast.id).length,5);
+ assert.equal(a.messages.filter(m=>m.action==='skill-hit'&&m.skillId==='arcane_missile').length,5);
+ mark=a.mark();a.send({type:'skill',skillId:'arcane_missile',targetId:target.id});await a.wait(m=>m.type==='notice'&&m.message.includes('冷却'),{after:mark});
+ f.advance(2300);mark=a.mark();a.send({type:'skill',skillId:'arcane_missile',targetId:target.id});const next=await a.wait(m=>m.action==='skill-cast',{after:mark});
+ a.send({type:'input',x:1,y:0});await a.wait(m=>m.action==='skill-cancel'&&m.castId===next.cast.id,{after:mark});a.send({type:'input',x:0,y:0});f.advance(2000);
+ assert.equal(wolf(await stateAfter(a,a.mark())).hp,20);publicStateHasNoCredentials(late,[a.welcome.resumeToken]);
+ // A delayed server tick may settle several outstanding impacts together.
+ // Only one living-to-dead transition may award this channel's kill.
+ f.advance(4000);mark=a.mark();a.send({type:'skill',skillId:'arcane_missile',targetId:target.id});await a.wait(m=>m.action==='skill-cast',{after:mark});f.advance(1750);
+ await stateAfter(a,a.mark(),s=>wolf(s).hp===0);const reward=await a.wait(m=>m.type==='progress'&&m.character.kills>0,{after:mark});
+ assert.equal(reward.character.gold,10);assert.equal(reward.character.xp,30);assert.equal(reward.character.kills,1);assert.equal(reward.character.inventory.wolfPelt,1);
+ assert.equal(a.messages.filter(m=>m.action==='kill').length,1);
 });

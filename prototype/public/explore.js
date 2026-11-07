@@ -319,6 +319,7 @@ async function init() {
     controlProfile=uiProfile.controls;
     gameplayProfile=uiProfile.gameplay;
     configureSkills(gameplayProfile.casting);
+    for(const skill of Object.values(SKILLS))for(const id of [`field-${skill.id}`,`skill-${skill.id}`])$(id).querySelector('.skill-label').textContent=skill.name;
     $('fireball-summary').textContent=`远程火球 · 吟唱 ${SKILLS.fireball.castMs/1000} 秒 · 30 伤害`;
     $('frost-summary').textContent=`20 伤害 · 减速 2.5 秒 · 冷却 ${SKILLS.frost_blast.cooldownMs/1000} 秒`;
     mobileHUD=createMobileHUD(uiProfile.hud);

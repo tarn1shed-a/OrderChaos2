@@ -171,7 +171,7 @@ export function playCharacterAction(root, kind, { at, now, attackSeconds, basicA
 
 export function playCharacterSkill(root, cast, { now } = {}) {
   const c = controllers.get(root), skill = skillById(cast?.skillId);
-  if (!c || c.dead || !skill || !c.shots[skill.clip] || !Number.isFinite(cast.startedAt) || !Number.isFinite(cast.releaseAt)
+  if (!c || c.dead || !skill || !(cast.stage!==undefined?c.shots[cast.phaseVisual?.pre?.clip]||c.shots[cast.phaseVisual?.loop?.clip]||cast.stage===6:c.shots[skill.clip]) || !Number.isFinite(cast.startedAt) || !Number.isFinite(cast.releaseAt)
     || (cast.stage===undefined&&cast.releaseAt<=cast.startedAt) || cast.startedAt < c.lifeSince) return false;
   if(c.cast?.id===cast.id&&cast.stage!==undefined){
     if(cast.revision<=c.cast.revision)return false;

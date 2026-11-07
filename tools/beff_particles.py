@@ -67,6 +67,25 @@ class ParticleReader:
         if kind in (3,4): result['mode'] = self.read('i')
         return result
 
+    def model_node(self):
+        # eb46c0: parent string, 76 fixed bytes, three texture references,
+        # nine float, seven integer, then three float curves. eaabe8 builds
+        # the selected type-2 hemisphere; do not pretend it is an emitter.
+        offset=self.at;parent=self.string();words=self.read('19i');refs=self.read('3i')
+        f=struct.unpack('<19f',struct.pack('<19i',*words))
+        if words[0]!=2 or parent or any(not math.isfinite(f[i]) for i in range(1,6)):
+            raise ValueError('Unsupported BEFF procedural node')
+        if not (f[1]>0 and f[2]>0 and 3<=int(f[4])<=128 and 1<=int(f[5])<=128):raise ValueError('Invalid BEFF hemisphere dimensions')
+        if any(i<0 or i>=len(self.dependencies) for i in refs) or self.dependencies[refs[0]]=='.':raise ValueError('Invalid procedural texture reference')
+        names=['translateX','translateY','translateZ','rotateX','rotateY','rotateZ','scaleX','scaleY','scaleZ','red','green','blue','alpha','secondaryRed','secondaryGreen','secondaryBlue','unknownF0','scrollU','scrollV']
+        curves={name:self.curve('int' if 9<=i<16 else 'float') for i,name in enumerate(names)}
+        if any(not 0<=v<=255 for name in names[9:16] for v in curves[name]['values']):raise ValueError('Invalid procedural color')
+        return {'sourceOffset':offset,'sourceEnd':self.at,'parent':parent,'type':2,'headerWords':words,
+            'height':f[1],'radius':f[2],'radialSegments':int(f[4]),'rings':int(f[5]),'materialId':words[6],
+            'startFrame':words[7],'durationFrames':words[8],'uvRotation':words[11],
+            'textureIndices':refs,'texture':'texture/'+self.dependencies[refs[0]],'curves':curves,
+            'uvScroll':bool(words[10]),'flipH':bool(words[12]),'flipV':bool(words[13])}
+
     def emitter(self, depth=0):
         if depth > 8 or self.emitter_count >= 256: raise ValueError('Particle emitter nesting/count limit')
         self.emitter_count += 1
@@ -117,15 +136,16 @@ class ParticleReader:
 def decode_particle_payload(data, start, dependencies, count):
     if not 1 <= count <= 256: raise ValueError('Invalid root emitter count')
     reader = ParticleReader(data,dependencies);reader.at = start
-    emitters = []
+    emitters = [];model_nodes=[]
     for _ in range(count):
         kind = reader.read('i')
-        if kind != 0: raise ValueError(f'Unsupported BEFF node type {kind}')
-        emitters.append(reader.emitter())
+        if kind==0:emitters.append(reader.emitter())
+        elif kind==3:model_nodes.append(reader.model_node())
+        else:raise ValueError(f'Unsupported BEFF node type {kind}')
     if reader.at != len(data): raise ValueError(f'Unconsumed particle payload at {reader.at:#x}')
-    return {'emitters':emitters,'sampleRate':30,'keySampling':'integer-frame-linear',
+    return {'emitters':emitters,'modelNodes':model_nodes,'sampleRate':30,'keySampling':'integer-frame-linear',
             'verification':{'bytesConsumed':reader.at,'fileSize':len(data),'completePayload':True,
-                            'emitters':reader.emitter_count,'curves':reader.curve_count,'keys':reader.key_count}}
+                            'emitters':reader.emitter_count,'modelNodes':len(model_nodes),'curves':reader.curve_count,'keys':reader.key_count}}
 
 
 def recover_materials(path):
@@ -135,15 +155,15 @@ def recover_materials(path):
     reader = BDAE(path)
     count, table = reader.section(164)
     if count != 21: raise ValueError('Unsupported Efflib material library')
-    expected = {0:'eff_unlit_textured_alpha-fx',6:'eff_unlit_textured_additive-fx',
-                12:'eff_unlit_textured_mix_2color-fx',16:'eff_unlit_textured_mix_2color_additive-fx'}
+    expected = {0:'eff_unlit_textured_alpha-fx',2:'eff_unlit_textured_alpha_DS-fx',6:'eff_unlit_textured_additive-fx',7:'eff_unlit_textured_additive_NDT-fx',8:'eff_unlit_textured_additive_DS-fx',
+                12:'eff_unlit_textured_mix_2color-fx',16:'eff_unlit_textured_mix_2color_additive-fx',17:'eff_unlit_textured_mix_2color_additive_NDT-fx'}
     result = {}
     for index, name in expected.items():
         at = table + index*56
         if reader.string(reader.q(at)) != name: raise ValueError('Effect material index/name mismatch')
         # Both relative pointers must address real source technique blocks.
         reader.at(reader.rel(at+32),16);reader.at(reader.rel(at+36),16)
-        result[index] = {'id':index,'name':name,'blend':'additive' if index in (6,16) else 'alpha',
-                         'twoColor':index in (12,16),'source':'EfflibEffects.bdae',
+        result[index] = {'id':index,'name':name,'blend':'additive' if index in (6,7,8,16,17) else 'alpha',
+                         'twoColor':index in (12,16,17),'noDepthTest':index in (7,17),'source':'EfflibEffects.bdae',
                          'sourceSHA256':hashlib.sha256(reader.b).hexdigest()}
     return result

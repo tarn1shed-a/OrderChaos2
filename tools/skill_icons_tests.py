@@ -41,7 +41,7 @@ def ftable(fields, rows, localized=False):
 def fixtures():
     states, effects, protos, runes = {}, {}, [], []
     slots = ['casterRHandEff', 'casterLHandEff', 'targetChestEff', 'targetGroundEff']
-    state_fields = ['chantState', 'releaseState']
+    state_fields = ['chantState', 'releaseState','channellingState']
     for expected in SELECTION.values():
         protos.append({'skillId': expected['skillId'], 'editName': expected['editName'], 'rune0': expected['runeId']})
         rune = {'id': expected['runeId'], 'icon': expected['icon'], 'nameStrId': expected['nameStrId'],
@@ -62,6 +62,7 @@ def fixtures():
     }
     for locale, (path, _) in NAME_TABLES.items():
         result[path] = ftable([('ID','u'),('text','s')], [
+            {'ID':3263,'text':'奥术飞弹' if locale=='zh' else 'Arcane Missile'},
             {'ID':3279,'text':'炎爆术' if locale=='zh' else 'Fireburst'},
             {'ID':3287,'text':'霜爆术' if locale=='zh' else 'Arctic Blast'},
         ], localized=True)
@@ -103,11 +104,11 @@ class SkillIconTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             profile=recover_skill_icons(source.__getitem__,td)
             self.assertEqual(profile['format'],'oc2-skill-icons-v1')
-            self.assertEqual(set(profile['icons']),{'fireball','frost_blast'})
+            self.assertEqual(set(profile['icons']),{'fireball','frost_blast','arcane_missile'})
             self.assertFalse(profile['provenance']['completeOriginalPlayerSkills'])
             fire=profile['icons']['fireball'];ice=profile['icons']['frost_blast']
-            self.assertEqual(fire['sourceSkill']['id'],592)
-            self.assertEqual(fire['sourceRune']['id'],2368)
+            self.assertEqual(fire['sourceSkill']['id'],17)
+            self.assertEqual(fire['sourceRune']['id'],68)
             self.assertEqual(fire['sourceNames']['zh']['value'],'炎爆术')
             self.assertEqual(ice['effectLinks'][0]['stateId'],137)
             self.assertEqual(ice['effectLinks'][0]['effects'][0]['effectId'],65)
@@ -120,8 +121,8 @@ class SkillIconTests(unittest.TestCase):
                 self.assertEqual(icon['sourceSHA256'],hashlib.sha256(output.read_bytes()).hexdigest())
 
     def test_recovery_refuses_icon_or_effect_chain_mismatch(self):
-        for path, old, new in [(RUNE_TABLE,b'skill/fire.png',b'skill/fake.png'),
-                              (EFFECT_TABLE,b'fire_cast_inhand_red_loop',b'fake_cast_inhand_red_loop')]:
+        for path, old, new in [(RUNE_TABLE,b'skill/fire_blast.png',b'skill/fake_blast.png'),
+                              (EFFECT_TABLE,b'scorcher_default_cast_hand_loop',b'scorcher_default_fake_hand_loop')]:
             source=fixtures();self.assertIn(old,source[path]);source[path]=source[path].replace(old,new)
             with tempfile.TemporaryDirectory() as td:
                 with self.assertRaisesRegex(ValueError,'reference mismatch'):
@@ -131,7 +132,7 @@ class SkillIconTests(unittest.TestCase):
     def test_recovery_refuses_unverified_image_dimensions(self):
         source=fixtures();output=io.BytesIO()
         Image.new('RGBA',(48,48)).save(output,format='PNG')
-        source['ui/icons/skill/fire.png']=output.getvalue()
+        source['ui/icons/skill/fire_blast.png']=output.getvalue()
         with tempfile.TemporaryDirectory() as td:
             with self.assertRaisesRegex(ValueError,'dimensions'):
                 recover_skill_icons(source.__getitem__,td)

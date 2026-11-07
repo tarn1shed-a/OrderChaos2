@@ -28,7 +28,7 @@ class NativeCastTests(unittest.TestCase):
     def test_recovered_stage_clips_and_cooldowns_match_actual_model_without_alias_loss(self):
         p=json.loads((ROOT/'game-data/converted/gameplay/native.json').read_text());model=json.loads((ROOT/'game-data/converted/models/elf-female.json').read_text())
         spells=p['casting']['spells'];clips={c['name']:c for c in model['clips']}
-        self.assertEqual(p['casting']['serverWaitExtraMs'],5000);self.assertEqual(spells['fireball']['sourceSkillId'],592)
+        self.assertEqual(p['casting']['serverWaitExtraMs'],5000);self.assertEqual(spells['fireball']['sourceSkillId'],17)
         self.assertEqual(spells['frost_blast']['visuals']['2']['pre']['clip'],'skill_frost_blast')
         for s in spells.values():
             for v in s['visuals'].values():

@@ -37,7 +37,7 @@ test('v3 migration preserves exact source bytes, look, inventory, stats and cred
   assert.equal(readFileSync(file,'utf8'),bytes);assert.equal(record.hotbar,null);
   const {hotbar,profession,...preserved}=record;const {trainingStaff,trainingGreatsword,...inventory}=preserved.inventory;
   assert.deepEqual({...preserved,inventory},legacy.characters[0]);assert.equal(profession,2);assert.equal(trainingStaff,1);assert.equal(trainingGreatsword,1);
-  migrated.flush();assert.equal(JSON.parse(readFileSync(file,'utf8')).version,5);
+  migrated.flush();assert.equal(JSON.parse(readFileSync(file,'utf8')).version,6);
   const backups=readdirSync(dir).filter(name=>name.includes('.v3-backup-'));assert.equal(backups.length,1);assert.equal(readFileSync(join(dir,backups[0]),'utf8'),bytes);
   record.hotbar=custom();migrated.touch(record);migrated.flush();
   const view=characterView(record);view.hotbar.slots[0]='forged';assert.deepEqual(record.hotbar,custom());
@@ -56,7 +56,7 @@ test('private hotbars persist across a fresh client and restart; forged updates 
   assert.equal(a.response.character.hotbar,null);
   a.send({type:'hotbar',requestId:1,settings:custom(),initializeOnly:true,characterId:b.response.id,gold:999});
   const saved=await a.wait(msg=>msg.type==='hotbar-result'&&msg.requestId===1);assert(saved.ok);assert.deepEqual(saved.hotbar,custom());
-  let disk=JSON.parse(readFileSync(file,'utf8'));assert.equal(disk.version,5);
+  let disk=JSON.parse(readFileSync(file,'utf8'));assert.equal(disk.version,6);
   assert.deepEqual(disk.characters.find(c=>c.id===a.response.id).hotbar,custom());assert.equal(disk.characters.find(c=>c.id===b.response.id).hotbar,null);
   assert.equal(disk.characters.find(c=>c.id===a.response.id).gold,0);
   const state=await b.wait(msg=>msg.type==='state');assert(!JSON.stringify(state).includes('hotbar'));assert(!JSON.stringify(state).includes('resumeToken'));
@@ -83,4 +83,15 @@ test('a failed hotbar disk write never sends a successful saved acknowledgement'
   rmSync(dir,{recursive:true});writeFileSync(dir,'blocked');
   const closed=once(a.ws,'close');a.send({type:'hotbar',requestId:1,settings:custom()});await closed;
   assert(!a.messages.some(msg=>msg.type==='hotbar-result'&&msg.ok));assert.equal(readFileSync(dir,'utf8'),'blocked');
+});
+
+test('v5 adds the channel skill to an empty slot once, preserving all existing bindings, progress and exact backup bytes',t=>{
+ const file=join(temporary(t),'characters.json'),s=new CharacterStore(file),identity=s.resolveCharacter('旧法师');
+ const settings=custom();settings.slots[2]=null;identity.record.hotbar=settings;identity.record.hp=78;identity.record.gold=30;identity.record.positions.resources={x:912.65,y:417.16};
+ s.touch(identity.record);s.flush();const old=JSON.parse(readFileSync(file,'utf8'));old.version=5;const bytes=JSON.stringify(old,null,1);writeFileSync(file,bytes);
+ const upgraded=new CharacterStore(file),record=upgraded.resolveCharacter('',identity.record.id,identity.resumeToken).record;
+ const expected=structuredClone(old.characters[0]);expected.hotbar.slots[0]='arcane_missile';assert.deepEqual(record,expected);assert.equal(readFileSync(file,'utf8'),bytes);
+ upgraded.flush();const backups=readdirSync(join(file,'..')).filter(n=>n.includes('.v5-backup-'));assert.equal(backups.length,1);assert.equal(readFileSync(join(file,'..',backups[0]),'utf8'),bytes);
+ const again=new CharacterStore(file);again.flush();assert.equal(again.resolveCharacter('',record.id,identity.resumeToken).record.hotbar.slots.filter(s=>s==='arcane_missile').length,1);
+ assert.deepEqual(record.hotbar.bindings,settings.bindings);
 });

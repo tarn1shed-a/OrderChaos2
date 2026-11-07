@@ -17,7 +17,7 @@ function fixture() {
     return[id,{root,body,alive:true}];
   }));
   const camera=new THREE.PerspectiveCamera();
-  const renderer=createCombatEffects(THREE,{scene,camera,data:{format:'oc2-combat-effects-v3',effects,attachments:attachmentProfile},textures,findView:id=>views.get(id),position:(x,y)=>new THREE.Vector3(x,0,y)});
+  const renderer=createCombatEffects(THREE,{scene,camera,data:{format:'oc2-combat-effects-v4',effects,attachments:attachmentProfile},textures,findView:id=>views.get(id),position:(x,y)=>new THREE.Vector3(x,0,y)});
   return {renderer,scene,views};
 }
 const cast={id:'p:1',skillId:'fireball',startedAt:1000,releaseAt:1500,impactAt:1850,origin:{x:0,y:0},target:{x:4,y:3},targetId:'wolf'};

@@ -45,6 +45,7 @@ jobs:
       - run: python tools/control_assets_tests.py
       - run: python tools/native_gameplay_tests.py
       - run: python tools/native_cast_tests.py
+      - run: python tools/player_spell_effects_tests.py
       - run: python tools/scene_collision_tests.py
       - run: python tools/character_portraits_tests.py
       - run: python tools/inventory_assets_tests.py

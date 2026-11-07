@@ -23,6 +23,7 @@ from inventory_assets import recover_inventory_assets
 from item_icons import recover_item_icons
 from equipment_appearance import convert_equipment_character, BASE_MODEL, SELECTED
 from native_gameplay import recover_gameplay
+from player_spell_effects import recover_player_effects
 from scene_collision import apply_scene_transforms, recover_collision
 from character_hair import recover_character_hair
 from character_materials import recover_character_materials
@@ -155,7 +156,9 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     surface = texture('texture/tiles/textures/cliffside/cliffside_rock05.tga')
     effects = {}
     effect_materials = recover_materials(extract('EfflibEffects.bdae'))
-    for key, path in EFFECT_SOURCES.items():
+    player_effects=recover_player_effects(extract)
+    attachments['effects'].update(player_effects['effects'])
+    for key, path in {**EFFECT_SOURCES,**{k:v['path'] for k,v in player_effects['effects'].items()}}.items():
         effect = recover_effect(extract(path))
         effect['source'] = path
         if attachments['effects'][key]['path'].lower()!=path.lower():raise ValueError('Skill attachment effect path mismatch')
@@ -163,11 +166,12 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         effect['textureURLs'] = {name: texture(name) for name in effect['textures']}
         for emitter in effect['emitters']:
             emitter['particle']['material'] = effect_materials[emitter['particle']['materialId']]
+        for node in effect['modelNodes']:node['material']=effect_materials[node['materialId']]
         if not all(effect['textureURLs'].values()): raise ValueError(f'Missing original effect textures: {path}')
         effects[key] = effect
     effect_output = output/'effects/combat.json'
     effect_output.parent.mkdir(parents=True, exist_ok=True)
-    effect_output.write_text(json.dumps({'format':'oc2-combat-effects-v3','effects':effects,'attachments':attachments,
+    effect_output.write_text(json.dumps({'format':'oc2-combat-effects-v4','effects':effects,'attachments':attachments,'playerSpells':player_effects,
         'adaptation':'Recovered particle parameters, materials and source skill slots. The modular elf female uses its native hand/chest dummies. Deterministic random seeds and overall skill flight path remain web adaptations.'}, ensure_ascii=False, indent=2))
     rendering=build_scene_profile(extract)
     rendering['format']='oc2-scene-render-v1'
@@ -189,7 +193,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     chinese = recover_chinese_fonts(read_loose, output, required_text)
     if chinese['requiredTextStatus'] != 'complete':raise ValueError('Original Chinese fonts do not cover the current interface')
     icons = recover_skill_icons(extract, output)
-    ui['format'] = 'oc2-original-ui-v12'
+    ui['format'] = 'oc2-original-ui-v13'
     ui['fonts']['faces'].update(chinese['faces'])
     ui['fonts']['chineseStatus'] = chinese['chineseStatus']
     ui['fonts']['requiredTextStatus'] = chinese['requiredTextStatus']
@@ -215,7 +219,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     (output/'ui/profile.json').write_text(json.dumps(ui,ensure_ascii=False,indent=2))
     manifest = {'format':'oc2-web-preview-v1','map':{'url':'/assets/maps/tutorial-preview.json','label':'新手区域 · 神殿遗迹','subtitle':'原作地形高程与场景摆放 · 地表使用单层材质预览','surfaceTexture':surface},
                 'player':player,'exhibits':exhibits,'scenery':scenery,'textures':textures,
-                'effects': {'url':'/assets/effects/combat.json','format':'oc2-combat-effects-v3'},
+                'effects': {'url':'/assets/effects/combat.json','format':'oc2-combat-effects-v4'},
                 'rendering':{'url':'/assets/rendering/tutorial.json','format':'oc2-scene-render-v1'},
                 'ui':{'url':'/assets/ui/profile.json','format':ui['format']},
                 'gameplay':{'url':'/assets/gameplay/native.json','format':gameplay['format']},

@@ -141,7 +141,8 @@ test('native chant loops, zero-chant release and back use source clips without p
   const create=createCharacterFactory(THREE,data,data.materials.map(()=>new THREE.MeshStandardMaterial()));
   for(const [skillId,spec] of Object.entries(profile.spells)){
     const a=create(),b=create(),machine=new CastMachine(spec,1000);
-    const frames=skillId==='fireball'?[[1100,null],[2400,null],[3000,2],[3200,null],[3500,null]]:[[1100,null],[1700,null],[1800,null]];
+    const frames=skillId==='fireball'?[[1100,null],[2400,null],[2500,2],[2600,null],[3100,null],[3300,null],[3600,null]]:
+      skillId==='arcane_missile'?[[1100,null],[1700,null],[2400,null],[2500,6],[2700,null],[3300,null]]:[[1100,null],[1700,null],[1800,null]];
     for(const [now,signal] of frames){
       if(signal!==null)machine.signal(signal,now);machine.tick(now);
       const cast={id:skillId,skillId,startedAt:1000,releaseAt:1000+spec.chantMs,...machine.snapshot()};
@@ -153,7 +154,8 @@ test('native chant loops, zero-chant release and back use source clips without p
       for(const mesh of skinnedMeshes(a))for(let vertex=0;vertex<mesh.geometry.attributes.position.count;vertex+=13){
         const point=mesh.getVertexPosition(vertex,new THREE.Vector3());assert(point.toArray().every(Number.isFinite));assert(point.length()<10);
       }
-      if(now===2400)assert.equal(sa.phase,spec.visuals['1'].loop.clip);
+      if(now===2400)assert.equal(sa.phase,spec.visuals[skillId==='arcane_missile'?'3':'1'].loop.clip);
+      if(skillId==='fireball'&&now===3300||skillId==='arcane_missile'&&now===2700)assert.equal(sa.phase,spec.visuals['6'].pre.clip);
       if(skillId==='frost_blast'&&now===1100)assert.equal(sa.phase,'skill_frost_blast');
       if(skillId==='frost_blast'&&now===1800)assert.equal(sa.phase,spec.visuals['6'].pre.clip);
     }

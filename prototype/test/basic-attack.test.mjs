@@ -49,7 +49,7 @@ test('v4 migrates once, preserving credentials, HP, rewards, equipment and hotba
   const {profession,...rest}=r;delete rest.inventory.trainingStaff;delete rest.inventory.trainingGreatsword;
   assert.deepEqual(rest,c);r.inventory.trainingStaff=1;r.inventory.trainingGreatsword=1;migrated.flush();
   assert.equal(readFileSync(join(dir,readdirSync(dir).find(n=>n.includes('v4-backup'))),'utf8'),bytes);
-  assert.equal(JSON.parse(readFileSync(file,'utf8')).version,5);
+  assert.equal(JSON.parse(readFileSync(file,'utf8')).version,6);
   assert.equal(new CharacterStore(file).resolveCharacter('',r.id,id.resumeToken).record.profession,2);
   assert.throws(()=>new CharacterStore().resolveCharacter('invalid',undefined,undefined,7),/职业/);
 });

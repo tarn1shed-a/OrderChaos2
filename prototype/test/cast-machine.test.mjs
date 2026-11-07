@@ -43,3 +43,20 @@ test('movement follows the per-stage source interruption flag, cancellation clea
  const c=cast('moving',0,1500);c.releaseAt=1000;runtime.start(ws,{native},c);const record=runtime.pending.get(c.id);runtime.move(ws,{x:1,y:0},100);assert.equal(runtime.cancel(record,'duplicate',101),false);runtime.tick(2000);
  assert.equal(runtime.pending.size,0);assert.equal(ws.player.cast,null);assert.deepEqual(hits,[]);assert.equal(events.filter(e=>e.action==='skill-cancel').length,1);
 });
+
+test('channel pulses have unique authoritative IDs, settle once, and survive end of execution until their last impact',()=>{
+ const {runtime,ws,hits,events,executions}=runtimeFixture();
+ const native={...spec(),chantMs:0,channelMs:1500,channelIntervalMs:300,visuals:{'3':visual('skill_channel',100,true),'6':visual('skill_back',200)}};
+ const c={...cast('channel',1000,2750),channelEndsAt:2500};runtime.start(ws,{native,flightMs:250},c);
+ runtime.tick(1299);assert.equal(hits.length,0);assert.equal(events.filter(e=>e.action==='skill-pulse').length,0);
+ runtime.tick(1300);assert.equal(runtime.snapshot()[0].cast.id,'channel:pulse:1');runtime.tick(1550);assert.deepEqual(hits,['channel:pulse:1']);
+ runtime.tick(2500);assert.equal(executions.size,0);assert.equal(ws.player.lastCast.stage,6);assert.equal(hits.length,4);assert.equal(runtime.pending.size,1);
+ runtime.tick(2750);runtime.tick(3000);assert.equal(hits.length,5);assert.equal(new Set(hits).size,5);assert.equal(runtime.pending.size,0);
+ assert.equal(events.filter(e=>e.action==='skill-pulse').length,5);
+});
+test('channel movement cancels future pulses and outstanding impacts; pre-stage stop does not disable later movement checks',()=>{
+ const {runtime,ws,hits,events}=runtimeFixture(),native={...spec(),chantMs:0,channelMs:1500,channelIntervalMs:300,
+  visuals:{'-1':{movement:{stopOnEnter:true}},'3':{...visual('skill_channel',100,true),movement:{interruptOnMove:true}}}};
+ ws.input={x:1,y:0};runtime.start(ws,{native,flightMs:250},{...cast('channel',1000,2750),channelEndsAt:2500});assert.deepEqual(ws.input,{x:0,y:0});
+ runtime.tick(1300);runtime.move(ws,{x:1,y:0},1400);runtime.tick(5000);assert.deepEqual(hits,[]);assert.equal(runtime.snapshot().length,0);assert.equal(events.filter(e=>e.action==='skill-pulse').length,1);
+});

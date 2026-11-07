@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ITEMS, EQUIPMENT_SLOTS, itemById, starterInventory, emptyEquipment, equipmentStats } from '../public/items.js';
 import { defaultLook, validLook } from '../public/character-look.js';
-import { validHotbar, cloneHotbar } from '../public/hotbar-settings.js';
+import { validHotbar, cloneHotbar,LEGACY_HOTBAR_SKILLS,upgradeLegacyHotbar } from '../public/hotbar-settings.js';
 import {validProfession} from '../public/professions.js';
 
 const hash = token => createHash('sha256').update(token).digest('hex');
@@ -16,7 +16,7 @@ export function characterView(record) {
     equipment: { ...record.equipment }, look: { ...record.look }, hotbar:record.hotbar===null?null:cloneHotbar(record.hotbar), stats: equipmentStats(record) };
 }
 
-function validate(record, legacy = false, requireLook = true, requireHotbar = true, version=5) {
+function validate(record, legacy = false, requireLook = true, requireHotbar = true, version=6) {
   if (!record || typeof record.id !== 'string' || !/^[0-9a-f-]{36}$/.test(record.id) ||
       typeof record.name !== 'string' || !record.name.trim() || record.name.length > 16 ||
       typeof record.tokenHash !== 'string' || !/^[0-9a-f]{64}$/.test(record.tokenHash) ||
@@ -26,7 +26,7 @@ function validate(record, legacy = false, requireLook = true, requireHotbar = tr
     throw new Error('角色存档结构无效');
   }
   if(requireLook && !validLook(record.look))throw new Error('角色外观存档无效');
-  if(requireHotbar && record.hotbar!==null && !validHotbar(record.hotbar))throw new Error('角色技能栏存档无效');
+  if(requireHotbar && record.hotbar!==null && !validHotbar(record.hotbar,version<6?LEGACY_HOTBAR_SKILLS:undefined))throw new Error('角色技能栏存档无效');
   if(version>=5&&!validProfession(record.profession))throw new Error('角色职业存档无效');
   const itemKeys=Object.keys(ITEMS).filter(k=>version>=5||!['trainingStaff','trainingGreatsword'].includes(k));
   if (legacy) {
@@ -58,7 +58,7 @@ export class CharacterStore {
       let original;
       try { original = readFileSync(this.saveFile); data = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(original)); }
       catch (error) { throw new Error(`无法读取角色存档，原文件保留：${error.message}`); }
-      if (![1, 2, 3, 4, 5].includes(data.version) || !Array.isArray(data.characters)) throw new Error('不支持的角色存档版本，原文件保留');
+      if (![1, 2, 3, 4, 5, 6].includes(data.version) || !Array.isArray(data.characters)) throw new Error('不支持的角色存档版本，原文件保留');
       for (const record of data.characters) {
         validate(record, data.version === 1, data.version >= 3, data.version >= 4, data.version);
         if (this.records.has(record.id)) throw new Error('角色存档含重复 ID');
@@ -71,10 +71,11 @@ export class CharacterStore {
         // Existing avatars already use mage skills. No inferred original class:
         // explicitly migrate the local prototype to Mage, preserving progress.
         if(data.version<5){record.profession=2;record.inventory.trainingStaff=1;record.inventory.trainingGreatsword=1;}
+        if(data.version<6)record.hotbar=upgradeLegacyHotbar(record.hotbar);
         validate(record);
         this.records.set(record.id, record);
       }
-      if (data.version < 5) { this.legacySource = original; this.legacyVersion=data.version; this.dirty = true; }
+      if (data.version < 6) { this.legacySource = original; this.legacyVersion=data.version; this.dirty = true; }
       this.savedAt = data.savedAt || null;
     }
   }
@@ -118,7 +119,7 @@ export class CharacterStore {
         try { fsyncSync(backupFd); } finally { closeSync(backupFd); }
         this.legacySource = undefined;
       }
-      writeFileSync(temporary, JSON.stringify({ version: 5, savedAt: now, characters: [...this.records.values()] }, null, 2), { mode: 0o600, flag: 'wx' });
+      writeFileSync(temporary, JSON.stringify({ version: 6, savedAt: now, characters: [...this.records.values()] }, null, 2), { mode: 0o600, flag: 'wx' });
       const fd = openSync(temporary, 'r');
       try { fsyncSync(fd); } finally { closeSync(fd); }
       renameSync(temporary, this.saveFile);

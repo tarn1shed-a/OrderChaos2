@@ -36,7 +36,7 @@ export class CombatRoom {
       check:(r,now)=>{
         if(this.clients.get(r.ws.player.id)!==r.ws||r.ws.player.hp<=0)return '施法已中断';
         if(!r.hit&&!this.monster.alive)return '目标已倒地';
-        if(!r.hit&&now>=r.cast.impactAt&&Math.hypot(r.ws.player.x-this.monster.x,r.ws.player.y-this.monster.y)>r.skill.range)return '目标离开技能范围';
+        if(!r.hit&&(r.channel||now>=r.cast.impactAt)&&Math.hypot(r.ws.player.x-this.monster.x,r.ws.player.y-this.monster.y)>r.skill.range)return '目标离开技能范围';
         return null;
       },hit:(r,now)=>this.damageMonster(r.ws,r.skill.damage,now,r.cast)});
     if(lab){if(!this.motion)throw new Error('碰撞验证场需要本地资源');this.dynamic=new DynamicScene(this.motion,Date.now());}
@@ -46,7 +46,8 @@ export class CombatRoom {
 
   skillDefinition(id) {
     const base=skillById(id),native=this.castProfile?.spells[id];
-    return base&&native?{...base,castMs:native.chantMs,cooldownMs:native.cooldownMs,commonCD:native.commonCD,native}:base;
+    if(id==='arcane_missile'&&!native)return null;
+    return base&&native?{...base,name:native.displayName||base.name,castMs:native.chantMs,cooldownMs:native.cooldownMs,commonCD:native.commonCD,native}:base;
   }
 
   attack(ws, targetId, now) {
@@ -71,6 +72,7 @@ export class CombatRoom {
   skill(ws, skillId, targetId, now) {
     const skill=this.skillDefinition(skillId),native=skill?.native,m = this.monster;
     if (!skill) return this.notice(ws, '未知技能');
+    if(native&&ws.character.profession!==2)return this.notice(ws,'当前接入的原玩家法术需要法师职业');
     if (targetId !== m.id || typeof targetId !== 'string') return this.notice(ws, '目标不在当前营地');
     if (ws.player.hp <= 0) return this.notice(ws, '倒地后无法施法');
     if (!m.alive) return this.notice(ws, '目标已倒地，无法施法');
@@ -81,6 +83,7 @@ export class CombatRoom {
     const cast = { id: `${ws.player.id}:${++this.castSequence}`, skillId: skill.id, targetId: m.id,
       startedAt: now, releaseAt: now + skill.castMs, impactAt: now + skill.castMs + skill.flightMs,
       origin: { x: ws.player.x, y: ws.player.y }, target: { x: m.x, y: m.y } };
+    if(native?.channelMs>0){cast.channelEndsAt=cast.releaseAt+native.channelMs;cast.impactAt=cast.channelEndsAt+skill.flightMs;}
     ws.player.skillReadyAt ||= {};
     ws.player.skillReadyAt[skill.id] = now + skill.cooldownMs;
     if(native)ws.player.globalReadyAt=now+native.commonCD;
@@ -93,6 +96,7 @@ export class CombatRoom {
 
   damageMonster(ws, amount, now, cast = null) {
     const m = this.monster;
+    if(!m.alive||m.hp<=0)return;
     this.contributors.add(ws.player.id);
     const damage = Math.min(amount, m.hp); m.hp -= damage;
     m.animation.hitAt = now;

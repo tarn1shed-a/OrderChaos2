@@ -68,6 +68,15 @@ ROUTINES = {
     0x5d3aa8: (52, '1626bbcd3d7485a5d6b8538a95602cf18909b8ac0b7b6aca0c89e7896f7a5a48'),
     0x5d3c6c: (384, '6bf25b27af264914e36f9650aa0bcc7531d651722935f0c2877500b7dca8ec5d'),
     0x5d3dec: (296, '6929f4525d7c6583d63ed54e5cff66076d69c765b03482a4fd8636b08944c74d'),
+    0xeb2cf0: (4040, 'b92138339e9adfbb5aa19df31e6b4d1f3f53f962d23f016a18cf7108d92a60de'),
+    0xeb46c0: (1532, '9637ebb24c509d59334bb87d23eba8b7c49f6ddda9a7461783639724be0ad3f8'),
+    0xeaabe8: (1756, '5754f8beb32d37b75cb29f359dae174747f6b2f381fb755aad991d8a16acc7aa'),
+    0xeae36c: (772, '3680078e3ba836151a86936c1f233a24a54a6019e8380376efb6fe5632a4f264'),
+    0xeae694: (200, '597ce5c00da11216400063e47c59fe14c83525a83a6f2fab92270a49bcb1c895'),
+    0xe956d8: (924, '9e9b1ee72b0b0aabe778f4ed2e306e0e4e49a0a1e9125d03e3b62e5c095695e2'),
+    0xea220c: (1692, 'ffa33ab3a5e94fa6faaec9f8e9c4b77f0b168eaba6a1a2b0c7f076ed0034e545'),
+    0xea1508: (1380, '0f0d59eb9dbded623d26992a137feb1c3f8bd9e6e9a83e83b74524cd23f90996'),
+    0xe8bd74: (1708, '44839ceebd18d6641f4045576c68500fc67d0a1393d965aa1e42f9820933c43f'),
 }
 CONSTANTS = {0x250b8cc:-41.6,0x250b8d0:-20,0x250b8d4:-75,0x250b8d8:-6.7,
              0x250b8dc:10,0x250b8e0:3.5,0x250b8e4:13.1,0x250b8ec:5,0x250b8f0:8,
@@ -166,7 +175,7 @@ def recover_gameplay(extract, output, selected_items):
                       'word':second+(third<<16),'allowedProfessions':[i+1 for i,k in enumerate(fields) if r[k]],
                       'legacy':not any(r[k] for k in fields),'sourceTypeName':r['weapon_type']}
     casting,cast_actions=recover_cast(extract,animation);actions.update(cast_actions)
-    result={'format':'oc2-native-gameplay-v3','comboRows':rows,'skills':skills,'weapons':weapons,'icons':icons,'casting':casting,
+    result={'format':'oc2-native-gameplay-v4','comboRows':rows,'skills':skills,'weapons':weapons,'icons':icons,'casting':casting,
         'jump':{'mode':'normal-on-foot','initialVelocity':10,'initialGravity':struct.unpack('<f',struct.pack('<f',-41.6))[0],
                 'gravityByNextVelocity':[[-13.1,-6.7],[-3.5,-75],[3.5,-20]],'predictPositionBeforeVelocity':True,
                 'velocityStepCapMs':100,'stationaryAnimationAvailable':'jump_in_place' in ranges,

@@ -50,8 +50,8 @@ test('free XZ quads, velocity-aligned streaks, source blend/secondary colors and
 });
 
 const original=new URL('../../game-data/converted/effects/combat.json',import.meta.url);
-test('all 15 recovered emitters stay finite, deterministic, within source lifetimes and bounded across repeated samples',{skip:!existsSync(original)},()=>{
-  const data=JSON.parse(readFileSync(original,'utf8'));assert.equal(Object.values(data.effects).reduce((n,e)=>n+e.emitters.length,0),15);
+test('all 47 recovered emitters stay finite, deterministic, within source lifetimes and bounded across repeated samples',{skip:!existsSync(original)},()=>{
+  const data=JSON.parse(readFileSync(original,'utf8'));assert.equal(Object.values(data.effects).reduce((n,e)=>n+e.emitters.length,0),47);
   for(const[key,e]of Object.entries(data.effects))for(const time of[0,34,200,400,600,900]){
     const a=sampleParticleSystem(e,time,`cast:${key}`),b=sampleParticleSystem(e,time,`cast:${key}`);assert.deepEqual(a,b);assert(a.length<=256);
     for(const p of a){assert([...p.position,...p.velocity,...p.size,...p.uv,...p.color].every(Number.isFinite));assert(p.age<p.life);assert(p.size.every(v=>v>=0));}

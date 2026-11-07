@@ -1,6 +1,6 @@
 // Only decoded art and embedded glyphs are loaded. Original SWF scripts never run.
 export async function loadOriginalUI(profile) {
-  if (profile.format !== 'oc2-original-ui-v12' || profile.gameplay?.format!=='oc2-native-gameplay-v3'||profile.controls?.format!=='oc2-original-controls-v1' || profile.fonts?.requiredTextStatus !== 'complete' ||
+  if (profile.format !== 'oc2-original-ui-v13' || profile.gameplay?.format!=='oc2-native-gameplay-v4'||profile.controls?.format!=='oc2-original-controls-v1' || profile.fonts?.requiredTextStatus !== 'complete' ||
       !['chineseText','chineseDisplay'].every(key=>profile.fonts.faces?.[key]?.conversion==='lossless-full-sfnt-to-woff') ||
       profile.skillIcons?.format !== 'oc2-skill-icons-v1'||profile.hud?.format!=='oc2-original-hud-v1'||profile.hud?.nativeControls?.format!=='oc2-original-mobile-controls-v2'||
       profile.portraits?.format!=='oc2-character-portraits-v1'||profile.inventory?.format!=='oc2-original-inventory-v1'||
@@ -58,7 +58,7 @@ export async function loadOriginalUI(profile) {
     if(key==='chineseText')document.documentElement.style.setProperty('--oc2-cjk-text',JSON.stringify(entry.family));
     if(key==='chineseDisplay')document.documentElement.style.setProperty('--oc2-cjk-display',JSON.stringify(entry.family));
   }));
-  await Promise.all(['fireball','frost_blast'].map(async key => {
+  await Promise.all(['fireball','frost_blast','arcane_missile'].map(async key => {
     const entry=profile.skillIcons.icons[key],url=localURL(entry?.url);
     for(const id of [`field-${key}`,`skill-${key}`]){
       const element=document.querySelector(`#${id} .skill-icon`);
@@ -72,7 +72,7 @@ export async function loadOriginalUI(profile) {
   document.body.dataset.ui = profile.format;
   document.body.dataset.chineseFont = 'original-full-source-fonts';
   document.body.dataset.fontFaces = String(Object.keys(profile.fonts.faces).length);
-  document.body.dataset.skillIcons = 'fireball,frost_blast';
+  document.body.dataset.skillIcons = 'fireball,frost_blast,arcane_missile';
   document.body.dataset.hud = profile.hud.format;
   return profile;
 }

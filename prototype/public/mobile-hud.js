@@ -33,9 +33,9 @@ export function createMobileHUD(profile) {
   const slots=[...root.querySelectorAll('.hotbar-slot')];slots.forEach(slot=>root.append(slot));
   root.querySelectorAll('.hotbar-bank').forEach(bank=>bank.remove());
   function layout(){
-    let empty=3;
+    let empty=4;
     for(const slot of slots){
-      const sourceSlot=slot.querySelector('#field-fireball')?1:slot.querySelector('#field-frost_blast')?2:empty++;
+      const sourceSlot=slot.querySelector('#field-fireball')?1:slot.querySelector('#field-frost_blast')?2:slot.querySelector('#field-arcane_missile')?3:empty++;
       slot.dataset.nativeSlot=String(sourceSlot);slot.hidden=sourceSlot>4;
       if(sourceSlot<=4)place(slot,operations.slots[String(sourceSlot)].boundsPixels,origin);
     }

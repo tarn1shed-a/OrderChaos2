@@ -1,9 +1,8 @@
-import { SKILLS } from './skills.js';
-
 export const HOTBAR_STORAGE_PREFIX='oc2.hotbar.v1.';
 export const SLOT_COUNT=10;
 const reserved=new Set(['KeyW','KeyA','KeyS','KeyD','KeyF','KeyB','KeyC','KeyH']);
-const skillIds=Object.keys(SKILLS);
+const skillIds=['fireball','frost_blast','arcane_missile'];
+export const LEGACY_HOTBAR_SKILLS=['fireball','frost_blast'];
 const plainObject=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const exactKeys=(value,keys)=>plainObject(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
 export function validBinding(value){
@@ -16,10 +15,10 @@ export function defaultHotbar(){
   return {version:1,slots:[...skillIds,...Array(SLOT_COUNT-skillIds.length).fill(null)],
     bindings:Array.from({length:SLOT_COUNT},(_,i)=>({code:'Digit'+(i+1)%10,shift:false}))};
 }
-export function validHotbar(value){
+export function validHotbar(value,required=skillIds){
   if(!exactKeys(value,['version','slots','bindings'])||value.version!==1||!Array.isArray(value.slots)||!Array.isArray(value.bindings)||value.slots.length!==SLOT_COUNT||value.bindings.length!==SLOT_COUNT)return false;
-  if(!value.slots.every(id=>id===null||(typeof id==='string'&&Object.hasOwn(SKILLS,id))))return false;
-  if(!skillIds.every(id=>value.slots.filter(slot=>slot===id).length===1))return false;
+  if(!value.slots.every(id=>id===null||(typeof id==='string'&&required.includes(id))))return false;
+  if(!required.every(id=>value.slots.filter(slot=>slot===id).length===1))return false;
   return value.bindings.every(validBinding)&&new Set(value.bindings.map(binding=>binding.code+':'+binding.shift)).size===SLOT_COUNT;
 }
 export const cloneHotbar=value=>({version:1,slots:[...value.slots],bindings:value.bindings.map(binding=>({...binding}))});
@@ -44,7 +43,8 @@ export function loadHotbar(storage,characterId){
   try{
     const raw=storage.getItem(HOTBAR_STORAGE_PREFIX+characterId);
     if(raw===null)return {settings:defaultHotbar(),found:false};
-    const value=JSON.parse(raw);
+    let value=JSON.parse(raw);
+    if(validHotbar(value,LEGACY_HOTBAR_SKILLS))value=upgradeLegacyHotbar(value);
     if(!validHotbar(value))throw new Error('invalid settings');
     return {settings:copy(value),found:true};
   }catch{return {settings:defaultHotbar(),found:false,warning:'无法读取旧版本机技能栏设置，将使用服务器设置。'};}
@@ -53,4 +53,10 @@ export function saveHotbar(storage,characterId,settings){
   if(!characterId||!validHotbar(settings))return {error:'技能栏设置无效，未保存。'};
   try{storage.setItem(HOTBAR_STORAGE_PREFIX+characterId,JSON.stringify(settings));return {saved:true};}
   catch{return {error:'浏览器无法保存设置。本次调整已生效，关闭页面后可能丢失。'};}
+}
+
+export function upgradeLegacyHotbar(value){
+  if(value===null)return null;
+  if(!validHotbar(value,LEGACY_HOTBAR_SKILLS))throw new Error('旧版技能栏无效');
+  const next=cloneHotbar(value);next.slots[next.slots.indexOf(null)]='arcane_missile';return next;
 }

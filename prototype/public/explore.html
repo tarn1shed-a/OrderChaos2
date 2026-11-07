@@ -39,9 +39,9 @@
         <button id="field-interaction" type="button" disabled aria-label="跳跃" aria-pressed="false" title="跳跃"><img class="control-icon" alt=""><span class="control-hit-area"></span></button>
         <span class="desktop-shortcuts">WASD 移动 · F 普攻 · B 背包 · H 营地</span>
         <div class="hotbar-bank hotbar-left">
-          <div class="hotbar-slot" data-slot="0"><kbd class="slot-key">1</kbd><button id="field-fireball" class="field-skill fire" aria-label="火球术 · 1" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">1</span></span><span class="skill-label">火球术</span></button></div>
-          <div class="hotbar-slot" data-slot="1"><kbd class="slot-key">2</kbd><button id="field-frost_blast" class="field-skill frost" aria-label="冰霜爆破 · 2" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">2</span></span><span class="skill-label">冰霜爆破</span></button></div>
-          <div class="hotbar-slot" data-slot="2"><kbd class="slot-key">3</kbd></div>
+          <div class="hotbar-slot" data-slot="0"><kbd class="slot-key">1</kbd><button id="field-fireball" class="field-skill fire" aria-label="炎爆术 · 1" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">1</span></span><span class="skill-label">炎爆术</span></button></div>
+          <div class="hotbar-slot" data-slot="1"><kbd class="slot-key">2</kbd><button id="field-frost_blast" class="field-skill frost" aria-label="霜爆术 · 2" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">2</span></span><span class="skill-label">霜爆术</span></button></div>
+          <div class="hotbar-slot" data-slot="2"><kbd class="slot-key">3</kbd><button id="field-arcane_missile" class="field-skill arcane" aria-label="奥术飞弹 · 3" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">3</span></span><span class="skill-label">奥术飞弹</span></button></div>
           <div class="hotbar-slot" data-slot="3"><kbd class="slot-key">4</kbd></div>
           <div class="hotbar-slot" data-slot="4"><kbd class="slot-key">5</kbd></div>
         </div>
@@ -91,15 +91,16 @@
       </section>
       <section class="combat-panel"><div class="section-title"><h3>战斗目标</h3><span id="target-name">等待进入</span></div><p id="target-detail">靠近野狼，按空格、F 或下方按钮攻击。</p><button id="attack" class="attack-button" disabled>攻击野狼 <kbd>Space</kbd></button><p id="combat-rule">服务器判定距离、伤害与冷却；野狼会反击。</p></section>
       <section class="skill-panel"><div class="section-title"><h3>技能</h3><span>选择目标后施放</span></div>
-        <button id="skill-fireball" class="skill-button fire" aria-label="火球术 · 1" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden></span><span class="skill-label">火球术</span><span class="skill-status" aria-hidden="true">1</span></button><p id="fireball-summary">远程火球 · 30 伤害</p>
-        <button id="skill-frost_blast" class="skill-button frost" aria-label="冰霜爆破 · 2" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden></span><span class="skill-label">冰霜爆破</span><span class="skill-status" aria-hidden="true">2</span></button><p id="frost-summary">20 伤害 · 减速 2.5 秒</p>
+        <button id="skill-fireball" class="skill-button fire" aria-label="炎爆术 · 1" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden></span><span class="skill-label">炎爆术</span><span class="skill-status" aria-hidden="true">1</span></button><p id="fireball-summary">远程火球 · 30 伤害</p>
+        <button id="skill-frost_blast" class="skill-button frost" aria-label="霜爆术 · 2" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden></span><span class="skill-label">霜爆术</span><span class="skill-status" aria-hidden="true">2</span></button><p id="frost-summary">20 伤害 · 减速 2.5 秒</p>
       </section>
       <section class="battle-log"><h3>冒险记录</h3><ol id="events"><li>完成第一次击杀，获得你的第一份奖励。</li></ol></section>
       <section class="party"><div class="section-title"><h3>同行者</h3><span id="count">0 / 8</span></div><ul id="players"><li class="empty">等待冒险者进入。</li></ul></section>
       <div class="invite-actions"><button id="invite" disabled>⌁ 复制邀请链接</button><button id="second" disabled>↗ 打开第二个玩家窗口</button></div>
       <details class="recovery-transfer"><summary>换设备继续这个角色</summary><p>复制恢复码后退出原窗口，在新设备的进入窗口使用。恢复码可登录角色，请自己保管。</p><div class="recovery-actions"><button id="recovery-copy" class="glass-tool" type="button" disabled>复制角色恢复码</button><button id="recovery-show" class="glass-tool" type="button" disabled>显示恢复码</button></div><textarea id="recovery-export" aria-label="角色恢复码，请自己保管" readonly hidden></textarea><p id="recovery-status" role="status"></p></details>
       <div class="controls"><h3>探索指南</h3><p>WASD / 方向键：相对视角移动</p><p>点击野狼选中 · 空格 / F：攻击</p><p>B / C：背包与装备 · Esc：关闭</p><p>右键拖动：旋转镜头 · 滚轮：缩放</p><p>点击地面：直线移动 · B：背包与外观</p></div>
-      <p id="skill-hint" class="skill-hint">1：火球术 · 2：冰霜爆破<br>施法时短暂停步，倒地或目标失效会中断。</p>
+      <button id="skill-arcane_missile" class="skill-button arcane" aria-label="奥术飞弹 · 3" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden></span><span class="skill-label">奥术飞弹</span><span class="skill-status" aria-hidden="true">3</span></button><p id="arcane-summary">引导 1.5 秒 · 每 0.3 秒释放</p>
+      <p id="skill-hint" class="skill-hint">1：炎爆术 · 2：霜爆术<br>施法时短暂停步，倒地或目标失效会中断。</p>
       <section class="recovery"><h3>资源与玩法</h3><p id="asset-detail">正在核对资源…</p><p>原版摇杆、弧形战斗按钮、生命弧与左上小地图已接入；触控与键鼠共用本地服务器的移动和战斗判定。</p><a class="asset-library-link" href="/assets/library/index.html" target="_blank" rel="noopener">浏览本地美术素材库 ↗</a></section>
       <button id="leave" class="leave" hidden>离开营地</button><a class="back-link" href="/">← 返回营地原型</a>
     </aside>
@@ -135,7 +136,7 @@
       <button id="source-learn" type="button" disabled>学习<small>资料预览</small></button>
       <div id="source-stats" class="source-stats"><span id="source-mana"></span><span id="source-cooldown"></span><span id="source-cast"></span></div><p class="source-reference">原版技能数值与说明</p>
     </section></div></div>
-    <footer id="skill-book-note" class="skill-book-footer">资料预览：可查看技能与铭文，学习和装配尚未接入角色存档；现有战斗技能保持不变。</footer>
+    <footer id="skill-book-note" class="skill-book-footer">资料预览：可查看技能与铭文，学习和装配尚未接入角色存档；已接入炎爆术、霜爆术与奥术飞弹，学习条件仍未接入。</footer>
   </dialog>
   <footer class="site-footer"><span>原作资源本地研究 · 独立实现的本地玩法</span><span id="network">角色进度由本地服务器保存</span></footer>
 </body>

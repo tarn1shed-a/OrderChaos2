@@ -61,7 +61,7 @@ def decode_effect(data):
         'durationMs': None if duration == 0xffffffff else duration,
         'loop': duration == 0xffffffff,
         'fogRate':fog_rate,
-        'emitters':particles['emitters'], 'sampleRate':30, 'keySampling':particles['keySampling'],
+        'emitters':particles['emitters'],'modelNodes':particles['modelNodes'], 'sampleRate':30, 'keySampling':particles['keySampling'],
         'textures': ['texture/' + name for name in names if name != '.'],
         'verification': {
             'version': version, 'dependencyCount': count,

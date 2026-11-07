@@ -73,10 +73,10 @@ def verify(output=OUT):
     for url in m['textures'].values():
         with Image.open(asset(url, output)) as image: image.verify()
     effects = json.loads(asset(m['effects']['url'], output).read_text())
-    assert effects['format'] == 'oc2-combat-effects-v3'
+    assert effects['format'] == 'oc2-combat-effects-v4'
     attachments = effects['attachments']
     assert attachments['format'] == 'oc2-skill-attachments-v1'
-    assert set(effects['effects']) == {'fireCast','fireMissile','fireHit','frostHit'}
+    assert set(effects['effects']) == {'fireCast','fireMissile','fireHit','frostHit','playerFireCast','playerFireMissile','playerFireHit','arcaneCast','arcaneMissile','arcaneHit'}
     for key, effect in effects['effects'].items():
         assert effect['particleScale'] == attachments['effects'][key]['particleScale']
         assert effect['particleScale'] > 0 and 0 <= effect['fogRate'] <= 1
@@ -96,7 +96,7 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v12' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v13' and not ui['provenance']['swfScriptExecution']
     controls=ui['controls'];assert controls['format']=='oc2-original-controls-v1' and not controls['scriptExecution']
     assert m['player']['jumpAnimations']
     collision=json.loads(asset(m['collision']['url'],output).read_text())
@@ -106,7 +106,7 @@ def verify(output=OUT):
     assert all(mesh.get('sourceNodeTransform') for ref in m['scenery'] for mesh in json.loads(asset(ref['url'],output).read_text())['meshes'])
     assert controls==json.loads((output/'ui/controls.json').read_text())
     gameplay=json.loads(asset(m['gameplay']['url'],output).read_text())
-    assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v3'
+    assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v4'
     assert gameplay['weapons']['trainingSword']['legacy']
     for icon in gameplay['icons'].values():
         assert hashlib.sha256(asset(icon['url'],output).read_bytes()).hexdigest()==icon['sourceSHA256']
@@ -135,7 +135,7 @@ def verify(output=OUT):
     assert ui['fonts']['chineseStatus'] == 'source-fonts-available'
     assert ui['fonts']['requiredTextStatus'] == 'complete'
     icons = ui['skillIcons']
-    assert icons['format'] == 'oc2-skill-icons-v1' and set(icons['icons']) == {'fireball','frost_blast'}
+    assert icons['format'] == 'oc2-skill-icons-v1' and set(icons['icons']) == {'fireball','frost_blast','arcane_missile'}
     for icon in icons['icons'].values():
         path = asset(icon['url'], output)
         assert hashlib.sha256(path.read_bytes()).hexdigest() == icon['sourceSHA256']

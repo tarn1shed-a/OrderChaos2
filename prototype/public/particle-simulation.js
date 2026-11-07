@@ -62,7 +62,16 @@ export function sampleParticleSystem(definition, milliseconds, seed, {quality=0,
         else if(e.shape===3)shape=outer.map((v,i)=>(rnd(i+1)*2-1)*v);
         let velocity=normalized([signed(5),signed(6),signed(7)]);
         const radial=emit('radialSpeed')*percentage(h[16],rnd(8)),directed=emit('directedSpeed')*percentage(h[17],rnd(9));
-        const direction=normalized(emit('direction'));
+        let direction=normalized(emit('direction'));
+        const cone=emit('coneAngle')*Math.PI/180;
+        if(cone){
+          // e8c058..e8c1c0 rotates about a random perpendicular axis by the
+          // source angle; it does not sample a uniform cone opening.
+          const q=normalized([signed(40),signed(41),signed(42)]),d=direction;
+          const axis=normalized([q[1]*d[2]-q[2]*d[1],q[2]*d[0]-q[0]*d[2],q[0]*d[1]-q[1]*d[0]]);
+          const cross=[axis[1]*d[2]-axis[2]*d[1],axis[2]*d[0]-axis[0]*d[2],axis[0]*d[1]-axis[1]*d[0]];
+          direction=d.map((v,i)=>v*Math.cos(cone)+cross[i]*Math.sin(cone));
+        }
         velocity=rotate(velocity.map((v,i)=>(v*radial+direction[i]*directed)*effectScale),angles);
         let point=rotate(shape,angles).map((v,i)=>(v+translation[i])*effectScale);
         // Native order: integrate with old velocity, then apply affectors. Fixed

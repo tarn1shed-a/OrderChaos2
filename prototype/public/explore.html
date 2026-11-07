@@ -106,7 +106,7 @@
     <button id="session-close" class="panel-close" type="button" aria-label="关闭进入营地窗口">×</button>
     <span class="eyebrow">RETURN TO THE CAMP</span><h2 id="session-title">重返营地</h2>
     <p class="intro">填入名字与营地编号，和朋友在同一张地图碰面。</p>
-      <form id="join-form"><label for="name">你的冒险者名字</label><input id="name" placeholder="例如：林间旅人" maxlength="16" required autocomplete="nickname"><label for="room">营地编号</label><input id="room" value="EXPLORE-01" pattern="[A-Za-z0-9\-]{3,16}" minlength="3" maxlength="16" required spellcheck="false"><button id="join" class="primary" disabled><span>等待资源就绪</span><span>↗</span></button></form>
+      <form id="join-form"><label for="name">你的冒险者名字</label><input id="name" placeholder="例如：林间旅人" maxlength="16" required autocomplete="nickname"><label for="profession">新角色职业（恢复角色沿用存档）</label><select id="profession" aria-label="新角色职业"></select><label for="room">营地编号</label><input id="room" value="EXPLORE-01" pattern="[A-Za-z0-9\-]{3,16}" minlength="3" maxlength="16" required spellcheck="false"><button id="join" class="primary" disabled><span>等待资源就绪</span><span>↗</span></button></form>
       <p id="message" class="message" role="status">地形与模型载入后即可进入。</p>
     <details class="recovery-transfer"><summary>已有角色？使用恢复码继续</summary><label for="recovery-code">原设备复制的角色恢复码</label><textarea id="recovery-code" rows="3" autocomplete="off" spellcheck="false"></textarea><button id="recovery-join" class="glass-tool" type="button" disabled>使用恢复码进入</button><p>请先退出原窗口。恢复码可登录角色，请自己保管。</p></details>
     <p class="session-shortcuts">WASD 移动 · F 普攻 · B 背包 · 技能键可自定义</p>

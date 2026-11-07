@@ -1,13 +1,15 @@
 // Local prototype rules. The recovered art does not imply original item stats.
 export const EQUIPMENT_SLOTS = Object.freeze({ mainHand: '主手', chest: '胸甲', feet: '鞋靴' });
 export const ITEMS = Object.freeze({
-  trainingSword: Object.freeze({ id: 'trainingSword', name: '营地练习剑', kind: '装备', slot: 'mainHand', attack: 4, armor: 0, health: 0, description: '普通攻击伤害 +4。技能伤害不变。' }),
+  trainingStaff: Object.freeze({id:'trainingStaff',name:'营地练习法杖',kind:'装备',slot:'mainHand',attack:4,armor:0,health:0,professions:[2,4],description:'法师、武僧可用。按职业选择法杖普攻；伤害 +4 为本地规则。'}),
+  trainingGreatsword: Object.freeze({id:'trainingGreatsword',name:'营地练习大剑',kind:'装备',slot:'mainHand',attack:4,armor:0,health:0,professions:[1,5],description:'战士、血骑士可用。使用大剑普攻连击；伤害 +4 为本地规则。'}),
+  trainingSword: Object.freeze({ id: 'trainingSword', name: '营地练习剑', kind: '装备', slot: 'mainHand', attack: 4, armor: 0, health: 0, description: '旧版单手剑外观保留。原版普攻入口尚未核实；3D 场景请换法杖、大剑或空手。' }),
   linenArmor: Object.freeze({ id: 'linenArmor', name: '营地布甲', kind: '装备', slot: 'chest', attack: 0, armor: 1, health: 20, description: '防御 +1，生命上限 +20。穿戴不会恢复当前生命。' }),
   travelerBoots: Object.freeze({ id: 'travelerBoots', name: '营地旅靴', kind: '装备', slot: 'feet', attack: 0, armor: 1, health: 0, description: '防御 +1。每次受到野狼攻击至少损失 1 点生命。' }),
   wolfPelt: Object.freeze({ id: 'wolfPelt', name: '狼皮', kind: '材料', description: '参与击败野狼获得的材料，保存在角色背包中。' }),
 });
 export const itemById = id => typeof id === 'string' && Object.hasOwn(ITEMS, id) ? ITEMS[id] : null;
-export const starterInventory = () => ({ trainingSword: 1, linenArmor: 1, travelerBoots: 1, wolfPelt: 0 });
+export const starterInventory = () => ({ trainingSword: 1, linenArmor: 1, travelerBoots: 1, wolfPelt: 0, trainingStaff:1,trainingGreatsword:1 });
 export const emptyEquipment = () => ({ mainHand: null, chest: null, feet: null });
 export function equipmentStats(character) {
   const result = { attack: 20, armor: 0, maxHp: 100 + (character.level - 1) * 20 };

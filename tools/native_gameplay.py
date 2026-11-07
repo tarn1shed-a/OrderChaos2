@@ -1,0 +1,138 @@
+"""Checked source-table links and manually traced normal jump/combo algorithms.
+
+No original code executes. Full decoded rows/icons stay in converted/, ignored
+by Git. The exported bank is not evidence that every native caller is traced.
+"""
+import hashlib
+import io
+import json
+import struct
+from pathlib import Path
+from PIL import Image
+from skill_attachments import decode_ftable
+from bdae_animation import BDAEAnimation
+
+LIB_SHA256 = '77f449f2100a4717578e282bb04f1f8fff25d25c7bfa461d7d39ee49d1cb8ca4'
+ROUTINES = {
+    0x90e63c: (672, '27e3667da4b90d04d6c05697a443b7ca6d9f532c582a09256627f557509b88bc'),
+    0x9ec1e4: (72, '5d0c1624c747868be6ee4136b9e443a18f87ab3b3010d83eb3527684ad49bfe7'),
+    0x9e171c: (596, 'b3a903695c8af76423778a1221b8477d888502e22b8c30219549c25f28f1c2ee'),
+    0x9e3fbc: (652, '08a42f008a60553b0055f1decb2b25fc06bf3c3670a36444ce2f4d8d5fe3e4e2'),
+    0x5bec6c: (284, '8b1d607c652451b7eb5e6e5e51da66bf94eff7721f784bacc1515795c3f2d9fc'),
+    0x5bef40: (532, 'e71a5f1b68969591e0e01cfa996606e9e32b38a0f09bebede2fa906de11b074e'),
+    0x5bf5d0: (404, 'ab5494092fda443785cac132ee46e5d6425e411c2053a7833f822b33998c4e66'),
+    0xa6a1ac: (684, 'ead25770556979ec674765653485abe423188e8533fa4efa0dac2aba0d69765a'),
+}
+CONSTANTS = {0x250b8cc:-41.6,0x250b8d0:-20,0x250b8d4:-75,0x250b8d8:-6.7,
+             0x250b8dc:10,0x250b8e0:3.5,0x250b8e4:13.1,0x250b8ec:5,0x250b8f0:8,
+             0x1df7a48:100,0x1df79f4:.001}
+
+def verify_native(data):
+    if hashlib.sha256(data).hexdigest() != LIB_SHA256:
+        raise ValueError('Native gameplay build changed; retrace required')
+    from analyze_native_resources import NativeImage
+    image = NativeImage(data)
+    for address, (size, expected) in ROUTINES.items():
+        if hashlib.sha256(image.read(address, size)).hexdigest() != expected:
+            raise ValueError('Native gameplay routine changed')
+    for address, expected in CONSTANTS.items():
+        if image.read(address,4) != struct.pack('<f',expected):
+            raise ValueError('Native motion constant changed')
+    return {'librarySHA256':LIB_SHA256,'routines':{hex(a):{'bytes':n,'sha256':h} for a,(n,h) in ROUTINES.items()},
+            'constants':{hex(a):struct.unpack('<f',struct.pack('<f',v))[0] for a,v in CONSTANTS.items()}}
+
+def recover_gameplay(extract, output, selected_items):
+    loaded, tables, proofs = {}, {}, {}
+    def load(path):
+        if path not in loaded:
+            value=extract(path)
+            loaded[path]=bytes(value) if isinstance(value,(bytes,bytearray)) else Path(value).read_bytes()
+        return loaded[path]
+    for name, key in [('skill_combo','id'),('skill_proto','skillId'),('skill_runes','id'),
+                      ('skill_visual_state','id'),('c_animationdata','anim_id'),('items','entry'),('cls_weapon','id')]:
+        parsed=decode_ftable(load('tables/'+name+'.tbl'),key)
+        tables[name]={r[key]:r for r in parsed['rows']};proofs[name]=parsed['verification']
+    anim_path='model/npc/character/elf/female/anim/animations.bdae'
+    # Parser needs a file; extract returns a checked local file in this builder.
+    animation=BDAEAnimation(Path(extract(anim_path)))
+    source_ranges=animation.ranges()
+    ranges={r['name'] for r in source_ranges}
+    normal=[r for r in tables['skill_combo'].values() if r['isNormalAttack']==1]
+    # Keep the player normal bank reachable from its first matching starter.
+    # Later empty-hand NPC starters and unrelated poison skills are not selected.
+    seeds=set()
+    for main in {r['reqMainWeaponType'] for r in normal}:
+        for profession in range(1,7):
+            matches=[r for r in normal if r['skillId']==0 and r['reqMainWeaponType']==main and
+                r['reqOffWeaponType']==0xffff and tables['skill_proto'][r['nextSkillId']]['reqProfession'] in (0,7,profession)]
+            if matches:seeds.add(matches[0]['id'])
+    reachable={r['nextSkillId'] for r in normal if r['id'] in seeds}
+    while True:
+        expanded=reachable|{r[k] for r in normal if r['skillId'] in reachable for k in ('nextSkillId','timeOutSkill') if r[k]}
+        if expanded==reachable:break
+        reachable=expanded
+    rows=[r for r in normal if r['id'] in seeds or r['skillId'] in reachable]
+    ids={r[k] for r in rows for k in ['skillId','nextSkillId','timeOutSkill'] if r[k]}
+    skills, actions, icons = {}, {}, {}
+    output=Path(output);(output/'ui').mkdir(parents=True,exist_ok=True)
+    for identifier in sorted(ids):
+        proto=tables['skill_proto'].get(identifier)
+        if proto is None:raise ValueError('Combo references missing proto')
+        rune=tables['skill_runes'].get(proto['rune0'])
+        state=tables['skill_visual_state'].get(rune['releaseState']) if rune else None
+        anim=tables['c_animationdata'].get(state['casterPreAnim']) if state else None
+        name=anim['anim_name'] if anim else None
+        entry={'id':identifier,'reqProfession':proto['reqProfession'],'editName':proto['editName'],
+               'runeId':proto['rune0'],'releaseState':rune['releaseState'] if rune else None,
+               'animationId':state['casterPreAnim'] if state else None,'sourceAnimation':name,
+               'clip':None,'commonCD':proto['commonCD'],'coolDownTime':proto['coolDownTime']}
+        if name in ranges and sum(r['name']==name or r['sourceName']==name for r in source_ranges)==1:
+            entry['clip']=next((k for k,v in actions.items() if v==name),'attack_'+str(identifier))
+            actions[entry['clip']]=name
+        if rune and rune['icon']:
+            path='ui/icons/'+rune['icon'];raw=load(path)
+            with Image.open(io.BytesIO(raw)) as image:
+                if image.format!='PNG' or image.size!=(96,96):raise ValueError('Invalid basic attack PNG')
+                image.verify()
+            target='basic-attack-'+str(identifier)+'.png';(output/'ui'/target).write_bytes(raw)
+            icons[str(identifier)]={'url':'/assets/ui/'+target,'width':96,'height':96,'sourcePath':path,
+                                    'sourceSHA256':hashlib.sha256(raw).hexdigest()}
+        skills[str(identifier)]=entry
+    weapons={}
+    for key, selection in selected_items.items():
+        if selection['slot']!='mainHand':continue
+        item=tables['items'][selection['entry']]
+        if item['class']!=1:raise ValueError('Selected main hand is not a source weapon')
+        second,third=item['subclass'],item['third_cat']
+        match=[r for r in tables['cls_weapon'].values() if r['second_category']==second and r['third_category']==third]
+        if len(match)!=1:raise ValueError('Ambiguous source weapon category')
+        r=match[0];fields=['cls_warrior','cls_mage','cls_hunter','cls_priest','cls_demon_slayer','cls_sword_man']
+        weapons[key]={'sourceItemId':item['entry'],'secondCategory':second,'thirdCategory':third,
+                      'word':second+(third<<16),'allowedProfessions':[i+1 for i,k in enumerate(fields) if r[k]],
+                      'legacy':not any(r[k] for k in fields),'sourceTypeName':r['weapon_type']}
+    result={'format':'oc2-native-gameplay-v1','comboRows':rows,'skills':skills,'weapons':weapons,'icons':icons,
+        'jump':{'mode':'normal-on-foot','initialVelocity':10,'initialGravity':struct.unpack('<f',struct.pack('<f',-41.6))[0],
+                'gravityByNextVelocity':[[-13.1,-6.7],[-3.5,-75],[3.5,-20]],'predictPositionBeforeVelocity':True,
+                'velocityStepCapMs':100,'stationaryAnimationAvailable':'jump_in_place' in ranges,
+                'webStepMs':50,'webLandingClip':'jumplandrun'},
+        'evidence':{'librarySHA256':LIB_SHA256,'routines':{hex(a):{'bytes':n,'sha256':h} for a,(n,h) in ROUTINES.items()},
+                    'tables':proofs,'animationSHA256':hashlib.sha256(load(anim_path)).hexdigest()},
+        'limitations':['Native normal-air impulse/gravity branches and table filters are traced; original frame timing, speed/direction renormalization, collision, water, mounts and flying remain outside this web solver.',
+            'Horizontal speed/air steering remains existing web movement. Jump height is relative to the sampled ground; jumping does not bypass current ground obstacles.',
+            'Weapon word layout is inferred from items/cls_weapon and exact combo requirements; its native item getter and the complete live hotbar caller remain untraced.',
+            'Normal bank 1 only; no bank-0 legacy-weapon fallback is guessed. Starter selection and timeout reset are web orchestration around recovered rows.',
+            'Current elf animation pack lacks jump_in_place; start/air/jumplandrun is an explicit web fallback.',
+            'Damage, range, 700 ms attack cooldown, character class creation and item grants remain local prototype rules.']}
+    (output/'gameplay').mkdir(exist_ok=True)
+    (output/'gameplay/native.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
+    return result,actions
+
+if __name__=='__main__':
+    import argparse
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--library',type=Path,required=True)
+    parser.add_argument('--report',type=Path,required=True)
+    args=parser.parse_args();report=verify_native(args.library.read_bytes())
+    args.report.parent.mkdir(parents=True,exist_ok=True)
+    args.report.write_text(json.dumps(report,indent=2))
+    print(json.dumps({'verifiedRoutines':len(report['routines']),'verifiedConstants':len(report['constants'])}))

@@ -65,12 +65,12 @@ class EquipmentAppearanceTests(unittest.TestCase):
             return packs[pack].read(path)
         data = convert_equipment_character(extract); appearance = data['appearance']
         self.assertEqual(data['source'], BASE_MODEL)
-        self.assertEqual(len(data['meshes']), 20); self.assertEqual(len(data['rig']['skins']), 19)
+        self.assertEqual(len(data['meshes']), 22); self.assertEqual(len(data['rig']['skins']), 19)
         self.assertEqual(len(appearance['foundationMeshIndices']), 2)
         self.assertEqual(len(appearance['items']['linenArmor']['meshIndices']), 2)
         self.assertTrue(set(appearance['foundationMeshIndices']) <= set(appearance['items']['linenArmor']['hideBaseMeshIndices']))
         self.assertFalse(appearance['provenance']['nativeBodyFlagMeaningRestored'])
-        self.assertEqual(set(clip['name'] for clip in data['clips']), {'idle','walk_forward','attack','hurt','death','skill_fireball','skill_frost_blast','jump_start','jump_air','jump_land'})
+        self.assertEqual(set(clip['name'] for clip in data['clips']), {'idle','walk_forward','attack','hurt','death','skill_fireball','skill_frost_blast','jump_start','jump_air','jump_land','jumplandrun'})
         weapon = data['meshes'][appearance['items']['trainingSword']['meshIndices'][0]]
         self.assertEqual(data['rig']['nodes'][weapon['attachment']['node']]['name'], 'Weapon_R-node')
         identity = multiply(weapon['attachment']['sourceGripMatrix'], weapon['attachment']['matrix'])

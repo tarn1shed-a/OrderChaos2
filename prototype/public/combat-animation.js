@@ -9,7 +9,7 @@ export function applyCombatAnimations(event, findView, now) {
     if (victim) actor.combatFacing = Math.atan2(victim.root.position.x-actor.root.position.x, victim.root.position.z-actor.root.position.z);
   } else if (event.action === 'skill-cancel' && actor) cancelCharacterSkill(actor.body, event.castId);
   else if (event.action === 'hit' || event.action === 'player-hit' || event.action === 'skill-hit') {
-    if (actor && event.action !== 'skill-hit') playCharacterAction(actor.body, 'attack', { at, now, attackSeconds: actor.attackSeconds });
+    if (actor && event.action !== 'skill-hit') playCharacterAction(actor.body, 'attack', { at, now, attackSeconds: actor.attackSeconds,basicAttack:event.basicAttack });
     if (victim) playCharacterAction(victim.body, event.targetHp <= 0 ? 'death' : 'hurt', { at, now });
     if (actor && victim) {
       const target = victim.target || victim.root.position;

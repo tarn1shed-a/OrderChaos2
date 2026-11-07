@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
 import { createGameServer } from '../server.mjs';
+import {existsSync} from 'node:fs';
 
 // Every test has a fresh save directory; no test reads or modifies runtime/.
 async function fixture(t) {
@@ -288,7 +289,7 @@ test('jump is server timed, shared with late observers, transient across reconne
   a.send({type:'jump',pressed:true,startedAt:0,height:999999,endsAt:Infinity});
   const first=await stateAfter(a,markA,m=>player(m,a.id)?.jump),second=await stateAfter(b,markB,m=>player(m,a.id)?.jump);
   const jump=player(first,a.id).jump;assert.deepEqual(player(second,a.id).jump,jump);
-  assert.equal(jump.startedAt,first.serverTime);assert.equal(jump.takeoffAt-jump.startedAt,500);assert(!('height' in jump));
+  assert.equal(jump.startedAt,first.serverTime);assert.equal(jump.takeoffAt-jump.startedAt,0);assert(!('height' in jump));
   const late=await enter(f,'跳跃旁观',{scene:'resources'});
   const observed=await stateAfter(late,late.mark());assert.deepEqual(player(observed,a.id).jump,jump);
   a.send({type:'jump',pressed:false});a.send({type:'jump',pressed:true});
@@ -303,4 +304,30 @@ test('jump is server timed, shared with late observers, transient across reconne
   const restored=await enter(f,'跳跃甲',{scene:'resources',characterId:a.id,resumeToken:a.welcome.resumeToken});
   const state=await stateAfter(restored,restored.mark());assert.equal(player(state,a.id).jump,null);
   const bad=restored.mark();restored.send({type:'jump',pressed:1});await restored.wait(m=>m.type==='error'&&m.message.includes('跳跃'),{after:bad});
+});
+
+test('original staff attack is chosen on the server and both peers receive its skill; weapon changes and reconnect reset it',
+  {skip:!existsSync(new URL('../../game-data/converted/gameplay/native.json',import.meta.url))},async t=>{
+  const f=await fixture(t),a=await enter(f,'法师普攻',{scene:'resources',profession:2}),b=await enter(f,'武僧普攻',{scene:'resources',profession:4});
+  for(const c of [a,b]){
+    const mark=c.mark();c.send({type:'equip',slot:'mainHand',itemId:'trainingStaff'});
+    await c.wait(m=>m.type==='progress'&&m.character.equipment.mainHand==='trainingStaff',{after:mark});
+  }
+  const initial=await stateAfter(a,a.mark(),m=>player(m,a.id)?.basicAttack?.id===84&&player(m,b.id)?.basicAttack?.id===424);
+  const target=wolf(initial);await moveNear(a,target);
+  let ma=a.mark(),mb=b.mark();a.send({type:'attack',targetId:target.id,skillId:424,clip:'forged',profession:4,mainWeaponType:0xffff});
+  const own=await a.wait(m=>m.type==='combat'&&m.action==='hit'&&m.attackerId===a.id,{after:ma});
+  const other=await b.wait(m=>m.type==='combat'&&m.action==='hit'&&m.attackerId===a.id,{after:mb});
+  assert.equal(own.basicAttack.id,84);assert.deepEqual(own.basicAttack,other.basicAttack);
+  assert.equal(own.basicAttack.clip,'attack_84');
+  f.advance(700);ma=a.mark();a.send({type:'attack',targetId:target.id});
+  const chained=await a.wait(m=>m.type==='combat'&&m.action==='hit'&&m.attackerId===a.id,{after:ma});
+  assert([85,86].includes(chained.basicAttack.id));
+  a.send({type:'unequip',slot:'mainHand'});
+  const empty=await stateAfter(a,a.mark(),m=>player(m,a.id)?.basicAttack?.id===4);assert.equal(player(empty,a.id).equipment.mainHand,null);
+  a.send({type:'equip',slot:'mainHand',itemId:'trainingGreatsword'});
+  await a.wait(m=>m.type==='notice'&&m.message.includes('职业'));
+  await a.close();const resumed=await enter(f,'同一法师',{scene:'resources',profession:1,characterId:a.id,resumeToken:a.welcome.resumeToken});
+  assert.equal(resumed.welcome.character.profession,2);
+  const rejoined=await stateAfter(resumed,resumed.mark());assert.equal(player(rejoined,resumed.id).basicAttack.id,4);
 });

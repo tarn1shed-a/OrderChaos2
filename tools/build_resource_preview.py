@@ -21,7 +21,8 @@ from control_assets import recover_controls
 from character_portraits import recover_character_portraits
 from inventory_assets import recover_inventory_assets
 from item_icons import recover_item_icons
-from equipment_appearance import convert_equipment_character, BASE_MODEL
+from equipment_appearance import convert_equipment_character, BASE_MODEL, SELECTED
+from native_gameplay import recover_gameplay
 from character_hair import recover_character_hair
 from character_materials import recover_character_materials
 from terrain_convert import convert as terrain_convert
@@ -71,6 +72,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
             elif safe_output(extracted, items).exists():
                 raise ValueError(f'Stale extracted items absent from the source: {items}')
     output.mkdir(parents=True, exist_ok=True)
+    gameplay, attack_actions = recover_gameplay(extract, output, SELECTED)
     terrain_convert('tutorial', -43, 2, 3, output/'maps/tutorial-preview.json', source=extracted)
     terrain = json.loads((output/'maps/tutorial-preview.json').read_text())
     textures = {}; warnings = []; models = {}
@@ -88,7 +90,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
             return None
     def model(path, key, animated=False, profile='player', equipment=False):
         if equipment:
-            result = convert_equipment_character(extract)
+            result = convert_equipment_character(extract, extra_actions=attack_actions)
             result['appearance']['hair']=recover_character_hair(extract,result)
             result['characterMaterials']=recover_character_materials(extract,result,texture)
             result['appearance']['provenance']['hairSelectionRecovered']=True
@@ -176,13 +178,13 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
         if path not in allowed_loose:raise ValueError(f'Unexpected loose resource: {path}')
         return safe_output(source, path)
     # Check actual Chinese interface characters, including dynamic combat labels.
-    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','recovered-hud.js','inventory-ui.js','skill-book.js','mobile-hud.js','touch-joystick.js','items.js','character-equipment.js','character-look.js','character-materials.js'])
+    ui_text = ''.join((ROOT/'prototype/public'/name).read_text() for name in ['explore.html','explore.js','skills.js','professions.js','recovered-hud.js','inventory-ui.js','skill-book.js','mobile-hud.js','touch-joystick.js','items.js','character-equipment.js','character-look.js','character-materials.js'])
     ui_text += json.dumps(ui['skillUI'], ensure_ascii=False)
     required_text = ''.join(sorted({ch for ch in ui_text if '\u3400' <= ch <= '\u9fff'}))
     chinese = recover_chinese_fonts(read_loose, output, required_text)
     if chinese['requiredTextStatus'] != 'complete':raise ValueError('Original Chinese fonts do not cover the current interface')
     icons = recover_skill_icons(extract, output)
-    ui['format'] = 'oc2-original-ui-v9'
+    ui['format'] = 'oc2-original-ui-v10'
     ui['fonts']['faces'].update(chinese['faces'])
     ui['fonts']['chineseStatus'] = chinese['chineseStatus']
     ui['fonts']['requiredTextStatus'] = chinese['requiredTextStatus']
@@ -191,6 +193,11 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     ui['skillIcons'] = icons
     ui['hud'] = recover_hud_assets(extract, output)
     ui['controls'] = recover_controls(extract, output/'ui', ui['hud'])
+    ui['gameplay'] = gameplay
+    ui['controls']['attack'].pop('webEquipmentSelection',None)
+    ui['controls']['attack'].update(nativeWeaponToSkillSelectionRecovered=False,nativeWeaponTableFilterRecovered=True,runtimeProfile='/assets/gameplay/native.json')
+    ui['controls']['interaction'].update(nativeJumpPhysicsRecovered=False,nativeNormalJumpVerticalStepRecovered=True)
+    (output/'ui/controls.json').write_text(json.dumps(ui['controls'],ensure_ascii=False,indent=2))
     ui['portraits'] = recover_character_portraits(extract, output, player_model=player_path)
     ui['inventory'] = recover_inventory_assets(extract, output)
     ui['itemIcons'] = recover_item_icons(extract, output)
@@ -205,6 +212,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
                 'effects': {'url':'/assets/effects/combat.json','format':'oc2-combat-effects-v3'},
                 'rendering':{'url':'/assets/rendering/tutorial.json','format':'oc2-scene-render-v1'},
                 'ui':{'url':'/assets/ui/profile.json','format':ui['format']},
+                'gameplay':{'url':'/assets/gameplay/native.json','format':gameplay['format']},
                 'summary':f'真实新手地图 3×3 地块；可换装玩家精灵、狼与熊；接入 {sum(len(s["instances"]) for s in scenery)} 个原作场景摆放。地表混合材质和多节点变换尚未完整恢复。',
                 'warnings':warnings}
     archive_names = {entry['pack'] for entry in entries}

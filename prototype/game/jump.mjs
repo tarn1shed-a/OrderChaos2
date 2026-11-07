@@ -8,7 +8,7 @@ export function setJumpPressed(ws,pressed,now,casting=false) {
   if(ws.player.hp<=0)return '倒地后无法跳跃';
   if(casting)return '正在施法，暂时无法跳跃';
   if(ws.player.jump&&now<ws.player.jump.endsAt)return null;
-  ws.player.jump=jumpTimeline(now);return null;
+  ws.player.jump=jumpTimeline(now,Boolean(ws.input?.x||ws.input?.y));return null;
 }
 export function updateJump(ws,now) {
   if(ws.player.hp<=0){ws.player.jump=null;ws.jumpPressed=false;}

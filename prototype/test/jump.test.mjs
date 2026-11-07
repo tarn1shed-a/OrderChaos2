@@ -1,13 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {jumpTimeline,jumpPose,JUMP} from '../public/jump.js';
+import {jumpTimeline,jumpPose,JUMP,JUMP_SAMPLES,FLIGHT_MS,nativeJumpStep,jumpAcceleration} from '../public/jump.js';
 import {setJumpPressed,updateJump} from '../game/jump.mjs';
-test('confirmed jump has bounded source animation phases and an explicit web arc',()=>{
+test('native impulse starts immediately; piecewise gravity and flat landing replace the old parabola',()=>{
   const j=jumpTimeline(1000);
   assert.equal(jumpPose(j,999),null);assert.equal(jumpPose(j,1000).phase,'jump_start');
-  assert.equal(jumpPose(j,j.takeoffAt).phase,'jump_air');assert.equal(jumpPose(j,j.landAt).phase,'jump_land');
+  assert.equal(j.takeoffAt,j.startedAt);assert.equal(jumpPose(j,1500).phase,'jump_air');assert.equal(jumpPose(j,j.landAt).phase,'jumplandrun');
   assert.equal(jumpPose(j,j.endsAt),null);assert.equal(jumpPose({...j,landAt:Infinity},1200),null);
-  const middle=jumpPose(j,(j.takeoffAt+j.landAt)/2);assert(Math.abs(middle.height-JUMP.height)<1e-10);
+  assert.equal(jumpPose(j,1050).height,.5);
+  assert.equal(JUMP_SAMPLES[6].height,1.4940000772476196);assert(Math.abs(FLIGHT_MS-643.1894995792377)<1e-10);
+  assert.deepEqual([jumpAcceleration(4),jumpAcceleration(3.5),jumpAcceleration(-3.5),jumpAcceleration(-Math.fround(13.1))],[JUMP.gravity,-20,-75,JUMP.fastFallGravity]);
+  const capped=nativeJumpStep({height:0,velocity:10,acceleration:JUMP.gravity},200);
+  assert.equal(capped.height,2);assert.equal(capped.velocity,5.839999675750732);
+  assert.throws(()=>nativeJumpStep({height:0,velocity:10,acceleration:-20},NaN));
   assert.equal(jumpPose(j,j.landAt).height,0);
 });
 test('server rejects dead/casting/camp jumps; release cannot cancel flight or auto-repeat; death clears transient state',()=>{

@@ -10,7 +10,7 @@ ACTION_SOURCES = {
     'player': {'idle': 'idle', 'walk_forward': 'walk_forward',
                'attack': 'combat_1h_scepter_npc_01', 'hurt': 'hurt_battle_01', 'death': 'die_ground',
                'skill_fireball': 'skill_mg_directed_instant', 'skill_frost_blast': 'skill_mg_omni_release',
-               'jump_start': 'jump_start', 'jump_air': 'jump_air', 'jump_land': 'jump_land'},
+               'jump_start': 'jump_start', 'jump_air': 'jump_air', 'jump_land': 'jump_land', 'jumplandrun':'jumplandrun'},
     'wolf': {'idle': 'idle', 'walk_forward': 'walk_forward',
              'attack': 'combat_01', 'hurt': 'hurt_battle_01', 'death': 'die_ground'},
 }
@@ -35,14 +35,14 @@ def aliases(nodes):
     return result
 
 
-def convert_character(model_path, animation_path, animation_model_path, profile='player'):
+def convert_character(model_path, animation_path, animation_model_path, profile='player', extra_actions=None):
     reader = BDAE(model_path)
     result = reader.parse()
     rig = recover_skin(reader, result)
     source_nodes = read_nodes(BDAE(animation_model_path))
     socket_nodes = adapt_socket_nodes(source_nodes, rig['nodes']) if profile == 'player' else []
     rig['nodes'].extend(socket_nodes)
-    actions = ACTION_SOURCES[profile]
+    actions = {**ACTION_SOURCES[profile], **(extra_actions or {})}
     animation = BDAEAnimation(animation_path).parse(list(actions.values()))
     action_names = {source: action for action, source in actions.items()}
     target_map, source_map = aliases(rig['nodes']), aliases(source_nodes)

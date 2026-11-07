@@ -46,6 +46,6 @@ class ItemIconTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             profile = recover_item_icons(lambda path: packs['ui_icon_1.bin' if path.startswith('ui/') else 'tables.bin'].read(path), folder)
             self.assertEqual(profile['icons']['wolfPelt']['sourceName']['value'], '狼皮')
-            self.assertEqual(len(profile['icons']), 4)
+            self.assertEqual(len(profile['icons']), 6)
 
 if __name__ == '__main__': unittest.main()

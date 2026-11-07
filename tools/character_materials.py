@@ -26,6 +26,7 @@ EFFECTS = {
     'lt_cull_pal_normal_skin_solid.bdae': ['RIM_LIGHT', 'SKIN_COLOR'],
     'lt_cull_pal_normal_solid.bdae': ['RIM_LIGHT'],
     'lt_pal_normal_solid.bdae': ['RIM_LIGHT'],
+    'lt_pal_normal_trans.bdae': ['ALPHA_TEST', 'RIM_LIGHT'],
     'lt_cull_pal_normal_skin_trans.bdae': ['ALPHA_TEST', 'RIM_LIGHT', 'SKIN_COLOR'],
     'lt_pal_normal_skin_trans.bdae': ['ALPHA_TEST', 'RIM_LIGHT', 'SKIN_COLOR'],
 }

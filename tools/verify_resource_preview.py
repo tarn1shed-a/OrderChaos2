@@ -49,7 +49,10 @@ def verify(output=OUT):
                 assert skin['verification']['maximumRestBindShapeError'] < 1e-5
             expected = {'idle','walk_forward','attack','hurt','death'}
             if ref.get('skillAnimations'): expected |= {'skill_fireball','skill_frost_blast'}
-            if ref.get('jumpAnimations'): expected |= {'jump_start','jump_air','jump_land'}
+            if ref.get('jumpAnimations'): expected |= {'jump_start','jump_air','jump_land','jumplandrun'}
+            if ref is m['player']:
+                profile=json.loads(asset(m['gameplay']['url'],output).read_text())
+                expected |= {s['clip'] for s in profile['skills'].values() if s['clip']}
             assert {clip['name'] for clip in data['clips']} == expected
             for clip in data['clips']:
                 for track in clip['tracks']:
@@ -92,10 +95,15 @@ def verify(output=OUT):
     with Image.open(asset(rendering['lut']['url'], output)) as lut:
         assert lut.size == (512,16)
     ui = json.loads(asset(m['ui']['url'], output).read_text())
-    assert ui['format'] == 'oc2-original-ui-v9' and not ui['provenance']['swfScriptExecution']
+    assert ui['format'] == 'oc2-original-ui-v10' and not ui['provenance']['swfScriptExecution']
     controls=ui['controls'];assert controls['format']=='oc2-original-controls-v1' and not controls['scriptExecution']
     assert m['player']['jumpAnimations']
     assert controls==json.loads((output/'ui/controls.json').read_text())
+    gameplay=json.loads(asset(m['gameplay']['url'],output).read_text())
+    assert gameplay==ui['gameplay'] and gameplay['format']=='oc2-native-gameplay-v1'
+    assert gameplay['weapons']['trainingSword']['legacy']
+    for icon in gameplay['icons'].values():
+        assert hashlib.sha256(asset(icon['url'],output).read_bytes()).hexdigest()==icon['sourceSHA256']
     for icon in controls['icons'].values():
         path=asset(icon['url'],output)
         assert hashlib.sha256(path.read_bytes()).hexdigest()==icon['sourceSHA256']
@@ -166,7 +174,7 @@ def verify(output=OUT):
     for entry in skill_ui['assets'].values():
         with Image.open(asset(entry['url'],output)) as image:assert image.size==(entry['width'],entry['height'])
     item_icons=ui['itemIcons'];assert item_icons['format']=='oc2-item-icons-v1'
-    assert set(item_icons['icons'])=={'trainingSword','linenArmor','travelerBoots','wolfPelt'}
+    assert set(item_icons['icons'])=={'trainingSword','trainingStaff','trainingGreatsword','linenArmor','travelerBoots','wolfPelt'}
     assert not item_icons['provenance']['nativeZeroDisplayFallbackVerified']
     for entry in item_icons['icons'].values():
         image_path=asset(entry['url'],output)
@@ -176,7 +184,7 @@ def verify(output=OUT):
     appearance=player['appearance'];assert appearance['format']==m['player']['appearanceFormat']=='oc2-equipment-appearance-v1'
     hair=appearance['hair'];assert hair['format']==m['player']['hairFormat']=='oc2-character-hair-v1'
     assert set(hair['styles'])=={'hair1','hair2','hair3'}
-    assert set(appearance['items'])=={'trainingSword','linenArmor','travelerBoots'}
+    assert set(appearance['items'])=={'trainingSword','trainingStaff','trainingGreatsword','linenArmor','travelerBoots'}
     covered=set(appearance['baseMeshIndices'])
     for key,entry in appearance['items'].items():
         assert entry['meshIndices'] and set(entry['hideBaseMeshIndices'])<=set(appearance['baseMeshIndices'])
@@ -192,7 +200,7 @@ def verify(output=OUT):
             assert 0<=mesh['attachment']['node']<len(player['rig']['nodes'])
             assert len(mesh['attachment']['matrix'])==16 and all(math.isfinite(v) for v in mesh['attachment']['matrix'])
     materials=player['characterMaterials'];assert materials['format']==m['player']['materialFormat']=='oc2-character-materials-v1'
-    assert len(materials['materials'])==len(player['materials'])==10
+    assert len(materials['materials'])==len(player['materials'])==12
     assert materials['defaults']['neutralIdentityEye']==[0,0,0]
     assert not materials['colors']['skin']['color6']['enabled']
     for index,entry in enumerate(materials['materials']):
@@ -202,7 +210,7 @@ def verify(output=OUT):
             with Image.open(asset(url,output)) as image:image.verify()
     catalog = json.loads(asset('/assets/library/catalog.json', output).read_text())
     assert catalog['format'] == 'oc2-art-catalog-v1'
-    assert catalog['sourceFormats'] == {'web':m['format'], **{key:m[key]['format'] for key in ('effects','rendering','ui')}}
+    assert catalog['sourceFormats'] == {'web':m['format'], **{key:m[key]['format'] for key in ('effects','rendering','ui','gameplay')}}
     assert catalog['fileCount'] == len(catalog['entries'])
     for entry in catalog['entries']:
         path = asset('/assets/'+entry['path'], output)

@@ -19,7 +19,7 @@ test('v2 migration backs up exact bytes once and preserves equipped items withou
   const dir=mkdtempSync(join(tmpdir(),'oc2-look-migrate-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
   const file=join(dir,'characters.json'),store=new CharacterStore(file),identity=store.resolveCharacter('原角色');
   changeEquipment(identity.record,{type:'equip',slot:'chest',itemId:'linenArmor'});identity.record.inventory.wolfPelt=14;store.touch(identity.record);store.flush();
-  const old=JSON.parse(readFileSync(file,'utf8'));old.version=2;delete old.characters[0].look;const bytes=JSON.stringify(old,null,2);writeFileSync(file,bytes);
+  const old=JSON.parse(readFileSync(file,'utf8'));old.version=2;delete old.characters[0].look;delete old.characters[0].profession;delete old.characters[0].inventory.trainingStaff;delete old.characters[0].inventory.trainingGreatsword;const bytes=JSON.stringify(old,null,2);writeFileSync(file,bytes);
   const migrated=new CharacterStore(file),c=migrated.resolveCharacter('ignored',identity.record.id,identity.resumeToken).record;
   assert.deepEqual(c.look,defaultLook());assert.equal(c.inventory.linenArmor,0);assert.equal(c.equipment.chest,'linenArmor');assert.equal(c.inventory.wolfPelt,14);assert.equal(c.hp,100);assert.equal(c.maxHp,120);
   migrated.flush();const backups=readdirSync(dir).filter(name=>name.includes('.v2-backup-'));assert.equal(backups.length,1);assert.equal(readFileSync(join(dir,backups[0]),'utf8'),bytes);

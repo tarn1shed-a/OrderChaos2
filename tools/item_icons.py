@@ -11,6 +11,8 @@ ITEMS_TABLE = 'tables/items.tbl'
 DISPLAY_TABLE = 'tables/itemdisplayinfo.tbl'
 NAME_TABLE = 'tables/String_Item_zh.tbl'
 SELECTION = {
+    'trainingStaff': (200520,14949,'plant_staff.png'),
+    'trainingGreatsword': (200496,14925,'plant_greatsword.png'),
     'wolfPelt': (50006, 568, 'tanning_coarse_skin.png'),
     'trainingSword': (200230, 7743, 'august_spatha.png'),
     'linenArmor': (100422, 7780, 'faith_chest.png'),

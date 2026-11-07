@@ -23,12 +23,14 @@ import { createPressControl } from './press-control.js';
 import { createHotbarUI } from './hotbar-ui.js';
 import { encodeCharacterRecovery, decodeCharacterRecovery } from './character-recovery.js';
 import { restoreCredentials, rememberCharacter, lastCharacterName, characterSessionWarning } from './character-session.js';
+import {PROFESSIONS} from './professions.js';
 
 const $ = id => document.getElementById(id);
 const viewport = $('viewport'), canvas = $('scene');
 const query = new URLSearchParams(location.search);
 if (query.has('room')) $('room').value = query.get('room').slice(0, 16);
 $('name').value ||= lastCharacterName();
+for(const [id,name]of Object.entries(PROFESSIONS)){const option=document.createElement('option');option.value=id;option.textContent=name;option.selected=id==='2';$('profession').append(option);}
 let renderer, scene, camera, terrainMeshes = [], terrainData, mapBounds, origin, heightGrid;
 let assets, modelTemplate, ready = false, world = RESOURCE_WORLD, snapshot = [], selfId, socket, connected = false;
 let wolfTemplate, monsterSnapshot = [], selectedMonsterId = null, character = null, nextAttackAt = 0, feedbackUntil = 0, saveAt = null;
@@ -36,7 +38,7 @@ let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset =
 let combatEffects, environment, hdrRenderer, hud, inventoryUI, skillBook, minimap, nextSkillRequestAt = 0;
 let renderEquipmentPreview, equipmentPreviewKey;
 let playerLookProfile;
-let hotbar, mobileHUD, joystick, jumpControl, controlProfile;
+let hotbar, mobileHUD, joystick, jumpControl, controlProfile, gameplayProfile;
 let joystickInput={x:0,y:0,active:false};
 let activeCredentials=null;
 const monsterViews = new Map();
@@ -75,11 +77,7 @@ function updateCharacter(data, savedAt = null) {
   hud?.character(data);
   inventoryUI?.update(data);
   hotbar?.syncCharacter(data);
-  if(controlProfile){
-    const key=data.equipment?.mainHand==='trainingSword'?'sword':'unarmed';
-    const icon=$('field-attack').querySelector('.control-icon');
-    icon.src=controlProfile.icons[key].url;$('field-attack').dataset.icon=key;
-  }
+  if(data.profession)$('profession').value=data.profession;
   $('field-inventory').disabled=false;
   const previewKey=`${equipmentAppearanceKey(data.equipment)}:${lookKey(data.look)}`;
   if (renderEquipmentPreview && previewKey!==equipmentPreviewKey) {
@@ -96,6 +94,14 @@ function nearestMonster() {
 }
 function chosenMonster() { return monsterSnapshot.find(m => m.id === selectedMonsterId && m.alive && m.hp > 0) || nearestMonster(); }
 function updateTarget() {
+  const basic=snapshot.find(p=>p.id===selfId)?.basicAttack;
+  if(controlProfile){
+    const entry=gameplayProfile?.icons[basic?.id]||controlProfile.icons.unarmed;
+    const icon=$('field-attack').querySelector('.control-icon');
+    if(icon.getAttribute('src')!==entry.url)icon.src=entry.url;
+    $('field-attack').dataset.skill=basic?.id||'';
+    $('field-attack').title=basic?.error||`普通攻击${basic?.editName?' · '+basic.editName:''}`;
+  }
   const selected = chosenMonster();
   selectedMonsterId = selected?.id || null;
   if (!connected) { $('target-name').textContent = '等待进入'; $('target-detail').textContent = '靠近野狼，按攻击开始战斗。'; $('attack').disabled = true; $('field-attack').disabled=true; return; }
@@ -104,7 +110,8 @@ function updateTarget() {
     const distance = me ? Math.hypot(selected.x-me.x,selected.y-me.y) : Infinity;
     $('target-name').textContent = selected.name;
     $('target-detail').textContent = `${selected.hp} / ${selected.maxHp} 生命 · ${distance > attackRange ? '靠近一些再攻击' : '已进入攻击距离'}`;
-    $('attack').disabled = (character?.hp ?? 0) <= 0;
+    $('attack').disabled = (character?.hp ?? 0) <= 0||Boolean(basic?.error);
+    if(basic?.error)$('target-detail').textContent=basic.error;
   } else {
     const dead = monsterSnapshot.find(m => !m.alive);
     $('target-name').textContent = dead ? '野狼恢复中' : '等待野狼出现';
@@ -305,6 +312,7 @@ async function init() {
         $('skill-hint').firstChild.textContent=Object.values(SKILLS).map(skill=>(hotbar?.keyForSkill(skill.id)||skill.hotkey)+'：'+skill.name).join(' · ');
       }});
     controlProfile=uiProfile.controls;
+    gameplayProfile=uiProfile.gameplay;
     mobileHUD=createMobileHUD(uiProfile.hud);
     jumpControl=createPressControl($('field-interaction'),{enabled:()=>connected&&Boolean(snapshot.find(p=>p.id===selfId)?.hp>0)&&!inputBlocked(),change:pressed=>send({type:'jump',pressed})});
     joystick=createTouchJoystick($('touch-controls'),{stage:viewport,profile:controlProfile.joystick,scale:()=>mobileHUD.scale,enabled:()=>connected&&Boolean(snapshot.find(p=>p.id===selfId)?.hp>0)&&!inputBlocked(),change:value=>{joystickInput=value;if(value.active){target=null;keys.clear();}else if(connected)send({type:'input',x:0,y:0});}});
@@ -455,16 +463,16 @@ function resetConnection() {
   inventoryUI?.update(null);
   $('field-inventory').disabled=true;$('session-open').hidden=false;
   connected = false; snapshot = []; monsterSnapshot = []; selfId = null; keys.clear(); target = null; selectedMonsterId=null; updateRoster(); syncAvatars(); syncMonsters();
-  for (const id of ['name', 'room']) $(id).disabled = false;
+  for (const id of ['name', 'room','profession']) $(id).disabled = false;
   $('join').disabled = !ready; $('join').firstElementChild.textContent = '进入试炼'; $('invite').disabled = $('second').disabled = true; $('leave').hidden = true;
   updateSkills();
 }
 function connect(name, room, retry = false, importedCredentials=null) {
   clearTimeout(retryTimer); const gen = ++generation; socket?.close(); manualExit = false;
-  status(retry ? '正在重连' : '正在加入'); for (const id of ['name', 'room', 'join','recovery-code','recovery-join']) $(id).disabled = true; $('leave').hidden = false;
+  status(retry ? '正在重连' : '正在加入'); for (const id of ['name', 'room', 'profession','join','recovery-code','recovery-join']) $(id).disabled = true; $('leave').hidden = false;
   const ws = new WebSocket(webSocketEndpoint()); socket = ws; let denied = false;
   const credentials = importedCredentials || (retry&&activeCredentials?.name===name?{characterId:activeCredentials.characterId,resumeToken:activeCredentials.resumeToken}:restoreCredentials(name));
-  ws.addEventListener('open', () => { if (generation === gen) send({ type: 'join', scene: 'resources', name, room, ...credentials }); });
+  ws.addEventListener('open', () => { if (generation === gen) send({ type: 'join', scene: 'resources', name, room, profession:Number($('profession').value), ...credentials }); });
   ws.addEventListener('message', event => {
     if (generation !== gen) return; const msg = JSON.parse(event.data);
     if (msg.type === 'welcome') {

@@ -64,7 +64,7 @@ test('v1 saves migrate additively once with an exact backup; credentials, positi
   const reloaded=new CharacterStore(file).resolveCharacter('ignored',old.record.id,old.resumeToken).record;
   assert.equal(reloaded.inventory.trainingSword,0);assert.equal(reloaded.equipment.mainHand,'trainingSword');
   assert.equal(readdirSync(dir).filter(name=>name.includes('.v1-backup-')).length,1);
-  assert.equal(JSON.parse(readFileSync(file,'utf8')).version,4);
+  assert.equal(JSON.parse(readFileSync(file,'utf8')).version,5);
 });
 
 test('invalid equipment saves fail without replacing the file or creating a migration backup',t=>{
@@ -80,7 +80,7 @@ test('invalid equipment saves fail without replacing the file or creating a migr
 
 test('bag selections follow actual saved ownership and clear stale details after an equip',()=>{
   const c=character();c.inventory.wolfPelt=8;
-  assert.equal(bagEntries(c).length,4);assert.equal(bagEntries(c).find(i=>i.id==='wolfPelt').quantity,8);
+  assert.equal(bagEntries(c).length,6);assert.equal(bagEntries(c).find(i=>i.id==='wolfPelt').quantity,8);
   assert.equal(inventorySelection(c,{id:'trainingSword'}).equipped,false);
   changeEquipment(c,{type:'equip',slot:'mainHand',itemId:'trainingSword'});
   assert.equal(inventorySelection(c,{id:'trainingSword'}),null);

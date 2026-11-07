@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { createCharacterFactory, updateCharacterAnimation, characterAnimationState, disposeCharacterAnimation, snapshotMotion, playCharacterAction, syncCharacterCombat, respawnCharacterAnimation, playCharacterSkill, cancelCharacterSkill, characterAttachment } from '../public/character-animation.js';
+import {jumpTimeline} from '../public/jump.js';
 import { applyCombatAnimations } from '../public/combat-animation.js';
 
 function fixture() {
@@ -209,12 +210,12 @@ test('original recovered character stays finite through repeated walk/idle cycle
 
 test('confirmed source jump phases deform bones consistently in both views and death returns height to zero',()=>{
   const data=combatFixture();
-  for(const [name,duration] of [['jump_start',.5],['jump_air',2/3],['jump_land',13/15]])data.clips.push({name,duration,tracks:[{node:1,type:'quaternion',times:[0,duration],values:[0,0,0,1,0,.6,0,.8]}]});
+  for(const [name,duration] of [['jump_start',.5],['jump_air',2/3],['jump_land',13/15],['jumplandrun',.3]])data.clips.push({name,duration,tracks:[{node:1,type:'quaternion',times:[0,duration],values:[0,0,0,1,0,.6,0,.8]}]});
   const create=createCharacterFactory(THREE,data,materials()),bodies=[create(),create()];
-  const jump={startedAt:1000,takeoffAt:1500,landAt:2166.6666666666665,endsAt:3033.333333333333};
+  const jump=jumpTimeline(1000);
   for(const body of bodies){
     syncCharacterCombat(body,{hp:100,jump,animation:{}},1000,.7);
-    updateCharacterAnimation(body,.1,{moving:true,speed:4.8},1750);
+    updateCharacterAnimation(body,.1,{moving:true,speed:4.8},1550);
     const state=characterAnimationState(body);assert.equal(state.phase,'jump_air');assert(state.jumpHeight>0);assert.equal(state.walkWeight,0);
   }
   assert.deepEqual(characterAnimationState(bodies[0]).bones[1].quaternion.toArray(),characterAnimationState(bodies[1]).bones[1].quaternion.toArray());
@@ -228,12 +229,12 @@ test('confirmed source jump phases deform bones consistently in both views and d
 const originalPlayer=new URL('../../game-data/converted/models/elf-female.json',import.meta.url);
 test('actual player jump clips preserve source lengths, deform real vertices and finish without root drift',{skip:!existsSync(originalPlayer)},()=>{
   const data=JSON.parse(readFileSync(originalPlayer,'utf8'));
-  for(const [name,duration] of [['jump_start',.5],['jump_air',2/3],['jump_land',13/15]])assert(Math.abs(data.clips.find(c=>c.name===name).duration-duration)<1e-8);
+  for(const [name,duration] of [['jump_start',.5],['jump_air',2/3],['jump_land',13/15],['jumplandrun',.3]])assert(Math.abs(data.clips.find(c=>c.name===name).duration-duration)<1e-8);
   const body=createCharacterFactory(THREE,data,data.materials.map(()=>new THREE.MeshStandardMaterial()))();
   const meshes=skinnedMeshes(body),before=meshes[0].getVertexPosition(0,new THREE.Vector3()).clone();
-  const jump={startedAt:1000,takeoffAt:1500,landAt:2166.6666666666665,endsAt:3033.333333333333};
+  const jump=jumpTimeline(1000);
   syncCharacterCombat(body,{hp:100,jump,animation:{}},1000,.7);
-  for(const [now,phase] of [[1250,'jump_start'],[1800,'jump_air'],[2500,'jump_land']]){
+  for(const [now,phase] of [[1250,'jump_start'],[1550,'jump_air'],[1750,'jumplandrun']]){
     updateCharacterAnimation(body,.1,{moving:false},now);body.updateMatrixWorld(true);assert.equal(characterAnimationState(body).phase,phase);
     for(const mesh of meshes)for(let i=0;i<mesh.geometry.attributes.position.count;i++){
       const point=mesh.getVertexPosition(i,new THREE.Vector3());assert(point.toArray().every(Number.isFinite));assert(point.length()<10);
@@ -243,4 +244,24 @@ test('actual player jump clips preserve source lengths, deform real vertices and
   syncCharacterCombat(body,{hp:100,jump:null,animation:{}},3200,.7);updateCharacterAnimation(body,.1,{moving:false},3200);
   assert.equal(characterAnimationState(body).phase,'idle');assert.equal(characterAnimationState(body).jumpHeight,0);assert.deepEqual(body.position.toArray(),[0,0,0]);
   disposeCharacterAnimation(body);
+});
+
+test('actual mage, monk, greatsword and unarmed attacks use their confirmed source clips on independent skeletons',
+  {skip:!existsSync(originalPlayer)},()=>{
+  const data=JSON.parse(readFileSync(originalPlayer,'utf8'));
+  const profilePath=new URL('../../game-data/converted/gameplay/native.json',import.meta.url);
+  const profile=JSON.parse(readFileSync(profilePath,'utf8'));
+  const poses=[];
+  for(const id of [4,84,424,66]){
+    const basic=profile.skills[id];assert(data.clips.some(c=>c.name===basic.clip));
+    const body=createCharacterFactory(THREE,data,data.materials.map(()=>new THREE.MeshStandardMaterial()))();
+    syncCharacterCombat(body,{hp:100,animation:{attackAt:1000},basicAttack:basic},1000,.7);
+    updateCharacterAnimation(body,.1,{moving:false},1150);body.updateMatrixWorld(true);
+    const state=characterAnimationState(body);assert.equal(state.attackClip,basic.clip);assert.equal(state.phase,'attack');
+    poses.push(state.bones.map(b=>b.quaternion.toArray()));
+    for(const mesh of skinnedMeshes(body))for(let i=0;i<mesh.geometry.attributes.position.count;i++)
+      assert(mesh.getVertexPosition(i,new THREE.Vector3()).toArray().every(Number.isFinite));
+    disposeCharacterAnimation(body);
+  }
+  for(let i=1;i<poses.length;i++)assert.notDeepEqual(poses[i],poses[0]);
 });

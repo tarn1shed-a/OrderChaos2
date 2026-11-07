@@ -11,13 +11,14 @@ import { changeEquipment } from './game/equipment.mjs';
 import { validLook } from './public/character-look.js';
 import { validHotbar, cloneHotbar } from './public/hotbar-settings.js';
 import { setJumpPressed, updateJump } from './game/jump.mjs';
+import {loadGameplay,initialBasicAttack} from './game/basic-attack.mjs';
 
 const PUBLIC = fileURLToPath(new URL('./public/', import.meta.url));
 const CONVERTED = fileURLToPath(new URL('../game-data/converted/', import.meta.url));
 const THREE_BUILD = fileURLToPath(new URL('./node_modules/three/build/', import.meta.url));
 const COLORS = ['#80e5d1', '#ffc47c', '#b7a2f7', '#f39da9', '#90bdec', '#d4e993', '#ffdfaa', '#b4e4ed'];
 
-export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean) } = {}) {
+export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGameplay(), allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean) } = {}) {
   if (saveFile && [PUBLIC, CONVERTED].some(root => resolve(saveFile).startsWith(root.endsWith(sep) ? root : root + sep))) throw new Error('角色存档必须放在静态资源目录之外');
   const store = new CharacterStore(saveFile);
   const rooms = new Map();
@@ -103,7 +104,7 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
         const used = new Set([...room.values()].map(s => s.player.color));
         const index = COLORS.findIndex(c => !used.has(c));
         let identity;
-        try { identity = store.resolveCharacter(name, msg.characterId, msg.resumeToken); }
+        try { identity = store.resolveCharacter(name, msg.characterId, msg.resumeToken, msg.profession); }
         catch (error) {
           if (/存档写入失败/.test(error.message)) throw error;
           return reject(ws, error.message);
@@ -122,7 +123,8 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
         ws.input = { x: 0, y: 0 }; ws.inputAt = Date.now(); ws.roomId = roomKey; ws.world = world;
         activeCharacters.set(ws.player.id, ws);
         room.set(ws.player.id, ws); rooms.set(roomKey, room); clearTimeout(deadline);
-        if (!combatRooms.has(roomKey)) combatRooms.set(roomKey, new CombatRoom(roomKey, world, scene, room, { changed, emit: data => emit(room, data), notice }));
+        if (!combatRooms.has(roomKey)) combatRooms.set(roomKey, new CombatRoom(roomKey, world, scene, room, { changed, emit: data => emit(room, data), notice,gameplay }));
+        ws.player.basicAttack=initialBasicAttack(scene==='resources'?gameplay:null,ws.character);
         store.savePosition(ws.character, scene, ws.player); store.touch(ws.character); store.flush();
         send(ws, { type: 'welcome', id: ws.player.id, room: roomId, scene, world,
           character: characterView(ws.character), resumeToken: identity.resumeToken, restored: identity.restored,
@@ -145,6 +147,7 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
         const result = changeEquipment(ws.character, msg);
         if (result.error) return notice(ws, result.error);
         syncPlayerStats(ws); changed(ws, true); notice(ws, result.message);
+        ws.basicCombo=null;ws.player.basicAttack=initialBasicAttack(ws.scene==='resources'?gameplay:null,ws.character);
       } else if (msg.type === 'hotbar' && ws.player) {
         if(!Number.isSafeInteger(msg.requestId)||msg.requestId<1||msg.requestId>1_000_000_000)return notice(ws,'技能栏请求编号无效');
         const result=(ok,message)=>send(ws,{type:'hotbar-result',requestId:msg.requestId,ok,message,

@@ -1,6 +1,7 @@
 import { advance, walkable } from '../public/world.js';
 import { skillById } from '../public/skills.js';
 import { equipmentStats } from '../public/items.js';
+import {chooseBasicAttack} from './basic-attack.mjs';
 
 export const COMBAT = Object.freeze({ playerDamage: 20, playerCooldownMs: 700, monsterHp: 60, monsterDamage: 6,
   monsterCooldownMs: 1000, monsterRespawnMs: 8000, playerRespawnMs: 4000,
@@ -8,11 +9,13 @@ export const COMBAT = Object.freeze({ playerDamage: 20, playerCooldownMs: 700, m
 
 export function syncPlayerStats(ws) {
   Object.assign(ws.player, { level: ws.character.level, hp: ws.character.hp, maxHp: ws.character.maxHp,
+    profession:ws.character.profession,
     equipment: { ...ws.character.equipment }, look: { ...ws.character.look }, stats: equipmentStats(ws.character) });
 }
 
 export class CombatRoom {
-  constructor(key, world, scene, clients, { changed, emit, notice }) {
+  constructor(key, world, scene, clients, { changed, emit, notice, gameplay=null, random=Math.random }) {
+    this.gameplay=scene==='resources'?gameplay:null;this.random=random;
     this.world = world; this.scene = scene; this.clients = clients; this.changed = changed; this.emit = emit; this.notice = notice;
     this.range = scene === 'resources' ? 32 : 95;
     this.monsterSpeed = scene === 'resources' ? 14 : 70;
@@ -36,6 +39,10 @@ export class CombatRoom {
     if (!m.alive) return this.notice(ws, '野狼已被击败，稍后会重新出现');
     if (Math.hypot(ws.player.x - m.x, ws.player.y - m.y) > this.range) return this.notice(ws, '距离太远，先靠近野狼');
     if (now - ws.player.attackAt < COMBAT.playerCooldownMs) return this.notice(ws, '攻击尚在冷却中');
+    const result=chooseBasicAttack(this.gameplay,ws.character,ws.basicCombo,now,this.random);
+    if(result.error)return this.notice(ws,result.error);
+    ws.basicCombo=result.state;
+    ws.player.basicAttack=result.skill;
     ws.player.attackAt = now;
     ws.player.animation ||= { attackAt: null, hitAt: null, deathAt: null };
     ws.player.animation.attackAt = now;
@@ -73,7 +80,7 @@ export class CombatRoom {
     const skill = cast && skillById(cast.skillId);
     if (m.hp > 0 && skill?.slowMs) m.slowUntil = Math.max(m.slowUntil || 0, now + skill.slowMs);
     this.emit({ type: 'combat', action: cast ? 'skill-hit' : 'hit', attackerId: ws.player.id, targetId: m.id,
-      damage, targetHp: m.hp, serverTime: now, ...(cast ? { skillId: cast.skillId, castId: cast.id, position: { x: m.x, y: m.y } } : {}) });
+      damage, targetHp: m.hp, serverTime: now, ...(cast ? { skillId: cast.skillId, castId: cast.id, position: { x: m.x, y: m.y } } : {basicAttack:ws.player.basicAttack}) });
     if (m.hp > 0) return;
 
     // Mark death before awarding. Further messages cannot perform a second living→dead transition.
@@ -114,6 +121,7 @@ export class CombatRoom {
         ws.player.x = this.world.spawn.x; ws.player.y = this.world.spawn.y; ws.player.deadUntil = 0;
         ws.player.animation = { attackAt: null, hitAt: null, deathAt: null };
         ws.player.cast = null;
+        ws.basicCombo=null;ws.player.basicAttack=null;
         ws.input = { x: 0, y: 0 }; this.changed(ws, true);
         this.emit({ type: 'combat', action: 'respawn', attackerId: null, targetId: ws.player.id, targetHp: ws.player.hp, serverTime: now });
       }

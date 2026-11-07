@@ -8,6 +8,7 @@ export function changeEquipment(character, request) {
   if (request.type === 'equip') {
     const item = itemById(request.itemId);
     if (!item || item.slot !== slot) return { error: '物品不能装备到这个位置' };
+    if(item.professions&&!item.professions.includes(character.profession))return {error:'当前职业不能使用这件武器'};
     if (character.equipment[slot] === item.id) return { error: '这件装备已穿戴' };
     if (!(character.inventory[item.id] > 0)) return { error: '背包中没有这件物品' };
     const previous = character.equipment[slot];

@@ -31,12 +31,13 @@ test('v3 migration preserves exact source bytes, look, inventory, stats and cred
   changeEquipment(identity.record,{type:'equip',slot:'chest',itemId:'linenArmor'});
   identity.record.look={hair:'hair3',hairColor:'color6',skinColor:'color5'};identity.record.inventory.wolfPelt=11;
   identity.record.positions.resources={x:905,y:333};old.touch(identity.record);old.flush();
-  const legacy=JSON.parse(readFileSync(file,'utf8'));legacy.version=3;delete legacy.characters[0].hotbar;
+  const legacy=JSON.parse(readFileSync(file,'utf8'));legacy.version=3;delete legacy.characters[0].hotbar;delete legacy.characters[0].profession;delete legacy.characters[0].inventory.trainingStaff;delete legacy.characters[0].inventory.trainingGreatsword;
   const bytes=JSON.stringify(legacy,null,2);writeFileSync(file,bytes);
   const migrated=new CharacterStore(file),record=migrated.resolveCharacter('ignored',identity.record.id,identity.resumeToken).record;
   assert.equal(readFileSync(file,'utf8'),bytes);assert.equal(record.hotbar,null);
-  assert.deepEqual(Object.fromEntries(Object.entries(record).filter(([key])=>key!=='hotbar')),legacy.characters[0]);
-  migrated.flush();assert.equal(JSON.parse(readFileSync(file,'utf8')).version,4);
+  const {hotbar,profession,...preserved}=record;const {trainingStaff,trainingGreatsword,...inventory}=preserved.inventory;
+  assert.deepEqual({...preserved,inventory},legacy.characters[0]);assert.equal(profession,2);assert.equal(trainingStaff,1);assert.equal(trainingGreatsword,1);
+  migrated.flush();assert.equal(JSON.parse(readFileSync(file,'utf8')).version,5);
   const backups=readdirSync(dir).filter(name=>name.includes('.v3-backup-'));assert.equal(backups.length,1);assert.equal(readFileSync(join(dir,backups[0]),'utf8'),bytes);
   record.hotbar=custom();migrated.touch(record);migrated.flush();
   const view=characterView(record);view.hotbar.slots[0]='forged';assert.deepEqual(record.hotbar,custom());
@@ -55,7 +56,7 @@ test('private hotbars persist across a fresh client and restart; forged updates 
   assert.equal(a.response.character.hotbar,null);
   a.send({type:'hotbar',requestId:1,settings:custom(),initializeOnly:true,characterId:b.response.id,gold:999});
   const saved=await a.wait(msg=>msg.type==='hotbar-result'&&msg.requestId===1);assert(saved.ok);assert.deepEqual(saved.hotbar,custom());
-  let disk=JSON.parse(readFileSync(file,'utf8'));assert.equal(disk.version,4);
+  let disk=JSON.parse(readFileSync(file,'utf8'));assert.equal(disk.version,5);
   assert.deepEqual(disk.characters.find(c=>c.id===a.response.id).hotbar,custom());assert.equal(disk.characters.find(c=>c.id===b.response.id).hotbar,null);
   assert.equal(disk.characters.find(c=>c.id===a.response.id).gold,0);
   const state=await b.wait(msg=>msg.type==='state');assert(!JSON.stringify(state).includes('hotbar'));assert(!JSON.stringify(state).includes('resumeToken'));

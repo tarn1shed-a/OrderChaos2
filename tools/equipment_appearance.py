@@ -25,6 +25,12 @@ FOUNDATION = (
     'model/item/armor/8_underwear/oc2_elf_f_underwear_briefs.bdae',
 )
 SELECTED = {
+    'trainingStaff': {'entry':200520,'modelId':149,'slot':'mainHand',
+        'path':'model/item/weapon/6_two_handed_staff/oc2_human_m_voldo_skull/oc2_human_m_voldo_skul.bdae',
+        'icon':'plant_staff.png','hideParts':[]},
+    'trainingGreatsword': {'entry':200496,'modelId':2031,'slot':'mainHand',
+        'path':'model/item/weapon/15_great_sword/oc2_greatsword_45_plants/oc2_greatsword_45_plants.bdae',
+        'icon':'plant_greatsword.png','hideParts':[]},
     'trainingSword': {'entry': 200230, 'modelId': 253, 'slot': 'mainHand',
         'path': 'model/item/weapon/1_sword/oc2_sword_10_august_spatha/oc2_sword_10_august_spatha.bdae',
         'icon': 'august_spatha.png', 'hideParts': []},
@@ -103,7 +109,7 @@ def merge_piece(result, source, source_skin=None, *, item=None, attachment=None,
     return indices
 
 
-def convert_equipment_character(extract):
+def convert_equipment_character(extract, extra_actions=None):
     """extract(path)->verified Path/bytes; return one reusable character dictionary."""
     with tempfile.TemporaryDirectory(prefix='oc2-equipment-reader-') as temporary:
         cache, paths = {}, {}
@@ -123,7 +129,7 @@ def convert_equipment_character(extract):
             tables[key] = {row[identifier]: row for row in parsed['rows']}
             table_verification[path] = parsed['verification']
         references = validate_equipment_references(tables)
-        result = convert_character(load(BASE_MODEL), load(ANIMATION), load(BASE_MODEL), profile='player')
+        result = convert_character(load(BASE_MODEL), load(ANIMATION), load(BASE_MODEL), profile='player', extra_actions=extra_actions)
         result['source'] = BASE_MODEL
         for material in result['materials']:material['sourceModel']=BASE_MODEL
         result['animationBinding'].update(source=ANIMATION, restSource=BASE_MODEL)
@@ -145,7 +151,7 @@ def convert_equipment_character(extract):
         for key, selection in SELECTED.items():
             mesh_indices = []
             for record in references[key]:
-                if key != 'trainingSword':
+                if selection['slot'] != 'mainHand':
                     mesh_indices.extend(garment(record['path'], key)); continue
                 reader = BDAE(load(record['path'])); model = reader.parse()
                 if reader.section(188)[0] != 0: raise ValueError('Selected weapon unexpectedly has skin data')

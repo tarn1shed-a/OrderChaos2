@@ -1,6 +1,6 @@
 // Only decoded art and embedded glyphs are loaded. Original SWF scripts never run.
 export async function loadOriginalUI(profile) {
-  if (profile.format !== 'oc2-original-ui-v9' || profile.controls?.format!=='oc2-original-controls-v1' || profile.fonts?.requiredTextStatus !== 'complete' ||
+  if (profile.format !== 'oc2-original-ui-v10' || profile.gameplay?.format!=='oc2-native-gameplay-v1'||profile.controls?.format!=='oc2-original-controls-v1' || profile.fonts?.requiredTextStatus !== 'complete' ||
       !['chineseText','chineseDisplay'].every(key=>profile.fonts.faces?.[key]?.conversion==='lossless-full-sfnt-to-woff') ||
       profile.skillIcons?.format !== 'oc2-skill-icons-v1'||profile.hud?.format!=='oc2-original-hud-v1'||profile.hud?.nativeControls?.format!=='oc2-original-mobile-controls-v2'||
       profile.portraits?.format!=='oc2-character-portraits-v1'||profile.inventory?.format!=='oc2-original-inventory-v1'||
@@ -21,7 +21,7 @@ export async function loadOriginalUI(profile) {
     if(image.naturalWidth!==entry.width||image.naturalHeight!==entry.height)throw new Error('原状态栏图集尺寸不匹配');
     document.documentElement.style.setProperty(`--hud-${key}`,`url("${url}")`);
   }));
-  await Promise.all(Object.values(profile.controls.icons).map(async entry=>{
+  await Promise.all([...Object.values(profile.controls.icons),...Object.values(profile.gameplay.icons)].map(async entry=>{
     const image=new Image();image.src=localURL(entry.url);await image.decode();
     if(image.naturalWidth!==entry.width||image.naturalHeight!==entry.height)throw new Error('原版操作图标尺寸不匹配');
   }));
@@ -46,7 +46,7 @@ export async function loadOriginalUI(profile) {
     const image=new Image();image.src=localURL(entry.url);await image.decode();
     if(image.naturalWidth!==entry.width||image.naturalHeight!==entry.height)throw new Error('原技能面板图标尺寸不匹配');
   }));
-  await Promise.all(['trainingSword','linenArmor','travelerBoots','wolfPelt'].map(async key=>{
+  await Promise.all(['trainingSword','trainingStaff','trainingGreatsword','linenArmor','travelerBoots','wolfPelt'].map(async key=>{
     const entry=profile.itemIcons.icons[key],image=new Image();image.src=localURL(entry?.url);await image.decode();
     if(image.naturalWidth!==96||image.naturalHeight!==96)throw new Error('原物品图标尺寸不匹配');
   }));

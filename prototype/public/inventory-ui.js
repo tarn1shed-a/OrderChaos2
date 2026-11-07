@@ -1,5 +1,6 @@
 import { EQUIPMENT_SLOTS, itemById, bagEntries } from './items.js';
 import { HAIR_STYLES, HAIR_COLORS, SKIN_COLORS, validLook, lookKey } from './character-look.js';
+import {PROFESSIONS} from './professions.js';
 
 export function inventorySelection(character, selection) {
   if (selection?.slot && character?.equipment?.[selection.slot]) return { ...selection, item: itemById(character.equipment[selection.slot]), equipped: true };
@@ -41,7 +42,7 @@ export function createInventoryUI(profile, { send, stop, focusGame, previewLook 
     text.textContent = item.description; content.append(image(item.id), kind, title, text);
     if (item.slot) {
       $('item-action').hidden = false; $('item-action').textContent = selected.equipped ? '卸下装备' : '穿戴装备';
-      $('item-action').disabled = pending || pendingLook || character.hp <= 0;
+      $('item-action').disabled = pending || pendingLook || character.hp <= 0 || (!selected.equipped&&item.professions&&!item.professions.includes(character.profession));
     }
   }
   function render() {
@@ -49,7 +50,7 @@ export function createInventoryUI(profile, { send, stop, focusGame, previewLook 
     const entries = bagEntries(character), visible = entries.filter(item => filter === 'all' || Boolean(item.slot) === (filter === 'equipment'));
     $('bag-count').textContent = `${entries.length} / 40 格`;
     $('inventory-gold').textContent = character.gold;
-    $('equipment-name').textContent = `${character.name} · Lv.${character.level}`;
+    $('equipment-name').textContent = `${character.name} · ${PROFESSIONS[character.profession]||''} · Lv.${character.level}`;
     $('equipment-attack').textContent = character.stats.attack;
     $('equipment-armor').textContent = character.stats.armor;
     $('equipment-life').textContent = `${character.hp} / ${character.maxHp}`;

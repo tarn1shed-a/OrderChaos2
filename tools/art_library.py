@@ -28,8 +28,8 @@ BUNDLE_FORMAT = 'oc2-local-assets-bundle-v1'
 BUNDLE_MANIFEST = 'bundle-manifest.json'
 LIBRARY_FILES = {'library/catalog.json', 'library/index.html', 'library/style.css'}
 GROUPS = [('ui','界面美术'),('skillIcons','技能图标'),('fonts','字体'),('textures','贴图'),
-          ('models','模型'),('maps','地图'),('effects','特效'),('rendering','光影配置'),('indexes','资源清单')]
-SOURCE_DIRS = {'ui','textures','models','maps','effects','rendering'}
+          ('models','模型'),('maps','地图'),('effects','特效'),('rendering','光影配置'),('gameplay','动作与普攻配置'),('indexes','资源清单')]
+SOURCE_DIRS = {'ui','textures','models','maps','effects','rendering','gameplay'}
 SOURCE_SUFFIXES = {'.json','.png','.woff','.woff2'}
 FONT_SAMPLE = '冒险者在微光试炼中施放火球术与冰霜爆破。0123456789'
 
@@ -147,7 +147,7 @@ def _formats(read):
     if not isinstance(manifest,dict) or not isinstance(manifest.get('format'),str) or not manifest['format']:
         raise ValueError('缺少网页资源清单版本')
     result={'web':manifest['format']}
-    for key in ('effects','rendering','ui'):
+    for key in ('effects','rendering','ui',*(['gameplay'] if 'gameplay' in manifest else [])):
         record=manifest.get(key)
         if not isinstance(record,dict) or not isinstance(record.get('format'),str) or not record['format']:
             raise ValueError('缺少资源版本：'+key)

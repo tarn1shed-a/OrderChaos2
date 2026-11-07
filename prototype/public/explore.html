@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="/recovered-hud.css">
   <link rel="stylesheet" href="/inventory.css">
   <link rel="stylesheet" href="/desktop-game.css">
+  <link rel="stylesheet" href="/hotbar.css">
   <script type="module" src="/explore.js"></script>
 </head>
 <body class="desktop-game">
@@ -17,6 +18,7 @@
     <button id="session-open" class="glass-tool" type="button">进入营地</button>
     <button id="field-inventory" class="glass-tool" type="button" disabled>背包 <kbd>B</kbd></button>
     <button id="field-attack" class="field-attack" hidden disabled aria-label="普通攻击 · 空格 / F"><span class="attack-art" aria-hidden="true"><svg class="attack-symbol" viewBox="0 0 24 24"><path d="m5 19 3-3m-2-4 6 6M8 14 17 3l4-1-1 4L10 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="attack-label">普通攻击</span><span class="attack-key">F</span></span></button>
+    <button id="hotbar-settings" class="glass-tool" type="button" aria-controls="hotbar-editor" aria-expanded="false" disabled>技能栏</button>
     <button id="camp-toggle" class="glass-tool" type="button" aria-controls="camp-panel" aria-expanded="false">营地 <kbd>H</kbd></button>
   </header>
   <main class="explore-layout">
@@ -32,11 +34,11 @@
       <div id="field-actions" class="field-actions desktop-hotbar" hidden aria-label="键盘技能快捷栏">
         <span class="desktop-shortcuts">WASD 移动 · F 普攻 · B 背包 · H 营地</span>
         <div class="hotbar-bank hotbar-left">
-          <button id="field-fireball" class="field-skill fire" aria-label="火球术 · 1" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">1</span></span><kbd class="slot-key">1</kbd><span class="skill-label">火球术</span></button>
-          <button id="field-frost_blast" class="field-skill frost" aria-label="冰霜爆破 · 2" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">2</span></span><kbd class="slot-key">2</kbd><span class="skill-label">冰霜爆破</span></button>
-          <span id="hud-empty-slot3" class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">3</kbd></span>
-          <span id="hud-empty-slot4" class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">4</kbd></span>
-          <span id="hud-empty-slot5" class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">5</kbd></span>
+          <div class="hotbar-slot" data-slot="0"><kbd class="slot-key">1</kbd><button id="field-fireball" class="field-skill fire" aria-label="火球术 · 1" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">1</span></span><span class="skill-label">火球术</span></button></div>
+          <div class="hotbar-slot" data-slot="1"><kbd class="slot-key">2</kbd><button id="field-frost_blast" class="field-skill frost" aria-label="冰霜爆破 · 2" disabled><span class="skill-art" aria-hidden="true"><img class="skill-icon" alt="" width="96" height="96" hidden><span class="skill-status">2</span></span><span class="skill-label">冰霜爆破</span></button></div>
+          <div class="hotbar-slot" data-slot="2"><kbd class="slot-key">3</kbd></div>
+          <div class="hotbar-slot" data-slot="3"><kbd class="slot-key">4</kbd></div>
+          <div class="hotbar-slot" data-slot="4"><kbd class="slot-key">5</kbd></div>
         </div>
         <div class="hotbar-core">
           <div id="minimap" class="hotbar-minimap" role="img" aria-label="小地图，等待进入营地" title="北向固定 · 你居中；绿色是自己，蓝色是队友，红色是怪物；边缘点表示范围外">
@@ -46,17 +48,25 @@
           <span class="minimap-north" aria-hidden="true">N</span><span class="minimap-scale" aria-hidden="true">72 m</span>
         </div>
         <div class="hotbar-bank hotbar-right">
-          <span class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">6</kbd></span>
-          <span class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">7</kbd></span>
-          <span class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">8</kbd></span>
-          <span class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">9</kbd></span>
-          <span class="hud-empty-slot" aria-hidden="true"><kbd class="slot-key">0</kbd></span>
+          <div class="hotbar-slot" data-slot="5"><kbd class="slot-key">6</kbd></div>
+          <div class="hotbar-slot" data-slot="6"><kbd class="slot-key">7</kbd></div>
+          <div class="hotbar-slot" data-slot="7"><kbd class="slot-key">8</kbd></div>
+          <div class="hotbar-slot" data-slot="8"><kbd class="slot-key">9</kbd></div>
+          <div class="hotbar-slot" data-slot="9"><kbd class="slot-key">0</kbd></div>
         </div>
       </div>
       <div id="field-experience" class="field-experience" hidden><span id="field-xp-text">经验 0 / 60</span><progress id="field-xp" value="0" max="60" aria-label="地图内角色经验"></progress><div class="hud-xp-track" aria-hidden="true"><i id="field-xp-fill"></i><i id="field-xp-glow"></i></div></div>
       <div id="combat-feedback" aria-live="polite"></div>
       <div class="scene-notice" id="load-note" role="status">正在读取本地转换后的地形与模型…</div>
       <div class="scene-bottom"><span id="position">等待探索</span><button id="reset-view">⌖ 回到角色视角</button></div>
+    </section>
+    <section id="hotbar-editor" class="hotbar-editor" hidden aria-labelledby="hotbar-editor-title">
+      <button id="hotbar-close" class="panel-close" type="button" aria-label="关闭技能栏设置">×</button>
+      <h2 id="hotbar-editor-title">技能栏设置</h2>
+      <p class="hotbar-help">拖拽底部图标，或点选两格换位。<br>快捷键跟随格子，点击下方按键修改。</p>
+      <p id="hotbar-status" class="hotbar-status" role="status">设置按角色保存在当前浏览器。</p>
+      <div id="hotbar-bindings" class="hotbar-bindings" aria-label="十个技能格的快捷键"></div>
+      <button id="hotbar-reset" class="hotbar-reset" type="button">恢复默认</button>
     </section>
     <aside id="camp-panel" hidden aria-label="营地面板">
       <button id="camp-close" class="panel-close" type="button" aria-label="收起营地面板">×</button>
@@ -80,7 +90,7 @@
       <section class="party"><div class="section-title"><h3>同行者</h3><span id="count">0 / 8</span></div><ul id="players"><li class="empty">等待冒险者进入。</li></ul></section>
       <div class="invite-actions"><button id="invite" disabled>⌁ 复制邀请链接</button><button id="second" disabled>↗ 打开第二个玩家窗口</button></div>
       <div class="controls"><h3>探索指南</h3><p>WASD / 方向键：相对视角移动</p><p>点击野狼选中 · 空格 / F：攻击</p><p>B / C：背包与装备 · Esc：关闭</p><p>右键拖动：旋转镜头 · 滚轮：缩放</p><p>点击地面：直线移动 · B：背包与外观</p></div>
-      <p class="skill-hint">1：火球术 · 2：冰霜爆破<br>施法时短暂停步，倒地或目标失效会中断。</p>
+      <p id="skill-hint" class="skill-hint">1：火球术 · 2：冰霜爆破<br>施法时短暂停步，倒地或目标失效会中断。</p>
       <section class="recovery"><h3>资源与玩法</h3><p id="asset-detail">正在核对资源…</p><p>原版生命弧、经验条与技能图标已接入，技能栏按电脑键鼠操作横排。头像由原模型渲染，取景为网页适配；玩法数值由本地服务器判定并保存。</p><a class="asset-library-link" href="/assets/library/index.html" target="_blank" rel="noopener">浏览本地美术素材库 ↗</a></section>
       <button id="leave" class="leave" hidden>离开营地</button><a class="back-link" href="/">← 返回营地原型</a>
     </aside>
@@ -91,7 +101,7 @@
     <p class="intro">填入名字与营地编号，和朋友在同一张地图碰面。</p>
       <form id="join-form"><label for="name">你的冒险者名字</label><input id="name" placeholder="例如：林间旅人" maxlength="16" required autocomplete="nickname"><label for="room">营地编号</label><input id="room" value="EXPLORE-01" pattern="[A-Za-z0-9\-]{3,16}" minlength="3" maxlength="16" required spellcheck="false"><button id="join" class="primary" disabled><span>等待资源就绪</span><span>↗</span></button></form>
       <p id="message" class="message" role="status">地形与模型载入后即可进入。</p>
-    <p class="session-shortcuts">WASD 移动 · 1 / 2 技能 · F 普攻 · B 背包</p>
+    <p class="session-shortcuts">WASD 移动 · F 普攻 · B 背包 · 技能键可自定义</p>
   </dialog>
   <dialog id="inventory-dialog" class="inventory-dialog" aria-labelledby="inventory-title">
     <div class="inventory-window">

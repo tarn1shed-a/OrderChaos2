@@ -1,0 +1,22 @@
+.desktop-game.recovered-hud .desktop-hotbar .hotbar-slot>.field-skill{position:absolute;inset:0;width:100%;height:100%;min-height:0;margin:0;padding:0;background:none;border:0;box-shadow:none;pointer-events:auto}
+.hotbar-slot{user-select:none;-webkit-user-select:none;pointer-events:auto}
+.desktop-game.recovered-hud .desktop-hotbar .hotbar-slot.empty{opacity:.65}
+.hotbar-slot.long-key .slot-key{font-size:8px;left:5px}
+.desktop-game.recovered-hud .hotbar-slot:has(.casting){border-color:#d9fff4;box-shadow:0 0 18px #a4e9da6b,inset 0 1px #fff5}
+.desktop-game.recovered-hud .hotbar-editing .hotbar-slot{pointer-events:auto;cursor:grab;touch-action:none;opacity:1;border-style:dashed;border-color:#c2eee67a}
+.desktop-game.recovered-hud .hotbar-editing .hotbar-slot>.field-skill{pointer-events:none}
+.desktop-game.recovered-hud .hotbar-editing .hotbar-slot.picked,.desktop-game.recovered-hud .hotbar-editing .hotbar-slot.drop-target{border-style:solid;border-color:#d4fff1;background:#afeedb38;box-shadow:0 0 0 3px #b9f1dd26}
+.desktop-game.recovered-hud .hotbar-editing .hotbar-slot.dragging{opacity:.3}
+.hotbar-editing .hotbar-slot:focus-visible{outline:2px solid #c1ffed;outline-offset:4px}
+.hotbar-drag-ghost{position:fixed;z-index:100;pointer-events:none;width:60px;height:60px;padding:4px;border-radius:20px;border:1px solid #e4fff3a6;background:#c7ece744;box-shadow:0 10px 30px #0008;transform:translate(-50%,-50%)}
+.hotbar-drag-ghost img{display:block;width:100%;height:100%;border-radius:16px}
+.hotbar-editor{position:absolute;z-index:24;right:18px;top:77px;width:min(330px,calc(100% - 36px));max-height:calc(100dvh - 215px);overflow-y:auto;padding:22px;border:1px solid #d4eced40;border-radius:24px;background:#162831ed;box-shadow:0 18px 60px #0006;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
+.hotbar-editor h2{margin:0 38px 10px 0;font-size:21px;letter-spacing:1px}
+.hotbar-help{font-size:10px;line-height:1.8;color:#b0c8c5;margin:0 0 13px}
+.hotbar-bindings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 12px}
+.binding-row{display:grid;gap:3px;min-width:0;font-size:10px;color:#d4e4dc}
+.binding-key{width:100%;min-height:27px;padding:4px 8px;background:#d8efff0b;border:1px solid #c7e6e732;border-radius:10px;color:#e7f4ef;font:11px var(--oc2-text)}
+.binding-key.listening{color:#d2ffef;border-color:#b1eed1;background:#a7eadb1f}
+.hotbar-reset{width:100%;margin-top:14px;min-height:32px;border:1px solid #d1ebdf33;border-radius:11px;background:#d8efff0b;color:#c8dfd5;font-size:10px}
+.hotbar-status{font-size:10px;line-height:1.7;color:#b7e3ce;min-height:32px;margin:0 0 13px;padding-left:9px;border-left:2px solid #b2e4cf55}
+@media(max-height:650px){.hotbar-editor{top:64px;max-height:calc(100dvh - 190px);padding:16px}.hotbar-help{font-size:9px}.binding-key{min-height:26px}.hotbar-bindings{gap:3px}}

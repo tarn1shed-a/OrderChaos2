@@ -16,6 +16,7 @@ import { createRecoveredHUD } from './recovered-hud.js';
 import { renderCharacterPortrait } from './character-portraits.js';
 import { createInventoryUI } from './inventory-ui.js';
 import { createMinimap } from './minimap.js';
+import { createHotbarUI } from './hotbar-ui.js';
 import { restoreCredentials, rememberCharacter, lastCharacterName, characterSessionWarning } from './character-session.js';
 
 const $ = id => document.getElementById(id);
@@ -30,6 +31,7 @@ let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset =
 let combatEffects, environment, hdrRenderer, hud, inventoryUI, minimap, nextSkillRequestAt = 0;
 let renderEquipmentPreview, equipmentPreviewKey;
 let playerLookProfile;
+let hotbar;
 const monsterViews = new Map();
 let target = null, keys = new Set(), avatars = new Map(), rosterSignature = '', generation = 0, retryTimer, manualExit = false;
 let azimuth = .65, elevation = .58, distance = 24, previous = performance.now(), pointer = null;
@@ -101,6 +103,7 @@ function updateTarget() {
   $('field-attack').disabled=$('attack').disabled;
 }
 function attack() {
+  if(hotbar?.isEditing)return;
   if (!connected || !character || character.hp <= 0 || Date.now() < nextAttackAt) return;
   const enemy = chosenMonster(); if (!enemy) return;
   selectedMonsterId = enemy.id; target = null;
@@ -112,6 +115,7 @@ function attack() {
   setTimeout(() => { $('attack').firstChild.textContent = '攻击野狼 '; },cooldownMs);
 }
 function useSkill(id) {
+  if(hotbar?.isEditing)return;
   const skill=skillById(id), me=snapshot.find(p=>p.id===selfId), now=Date.now()+serverOffset;
   if(!skill||!connected||!me||me.hp<=0||me.cast||Date.now()<nextSkillRequestAt||now<(me.skillReadyAt?.[id]||0))return;
   const enemy=chosenMonster();if(!enemy)return;
@@ -123,13 +127,14 @@ function updateSkills() {
   const casting=me?.cast&&now<me.cast.impactAt;
   for(const skill of Object.values(SKILLS)) {
     const remaining=Math.max(0,(me?.skillReadyAt?.[skill.id]||0)-now);
-    const text=`${skill.name}${remaining>0?` · ${(remaining/1000).toFixed(1)}s`: ` · ${skill.hotkey}`}`;
+    const hotkey=hotbar?.keyForSkill(skill.id)||skill.hotkey;
+    const text=`${skill.name}${remaining>0?` · ${(remaining/1000).toFixed(1)}s`: ` · ${hotkey}`}`;
     for(const id of [`skill-${skill.id}`,`field-${skill.id}`]) {
-      const button=$(id);button.disabled=!connected||!chosenMonster()||!me||me.hp<=0||Boolean(casting)||remaining>0;
+      const button=$(id);button.disabled=Boolean(hotbar?.isEditing)||!connected||!chosenMonster()||!me||me.hp<=0||Boolean(casting)||remaining>0;
       // Preserve the original icon and frame while updating the server cooldown.
       const label=button.querySelector('.skill-label'),state=button.querySelector('.skill-status');
       if(label&&state){
-        const value=remaining>0?`${(remaining/1000).toFixed(1)}s`:skill.hotkey;
+        const value=remaining>0?`${(remaining/1000).toFixed(1)}s`:hotkey;
         if(state.textContent!==value)state.textContent=value;
         button.classList.toggle('cooling',remaining>0);
         button.setAttribute('aria-label',text);
@@ -270,6 +275,16 @@ async function init() {
     inventoryUI=createInventoryUI(uiProfile,{send,stop,focusGame:()=>canvas.focus({preventScroll:true}),previewLook:look=>{
       if(character&&renderEquipmentPreview)inventoryUI.setModel(renderEquipmentPreview(character.equipment,look).model.url);
     }});
+    hotbar=createHotbarUI({root:$('field-actions'),panel:$('hotbar-editor'),toggle:$('hotbar-settings'),closeButton:$('hotbar-close'),
+      rows:$('hotbar-bindings'),status:$('hotbar-status'),reset:$('hotbar-reset'),
+      onEditingChange:open=>{
+        if(open){setCampPanel(false);inventoryUI?.close();stop();pointer=null;}
+        else if(connected)canvas.focus({preventScroll:true});
+      },
+      onChange:()=>{
+        updateSkills();
+        $('skill-hint').firstChild.textContent=Object.values(SKILLS).map(skill=>(hotbar?.keyForSkill(skill.id)||skill.hotkey)+'：'+skill.name).join(' · ');
+      }});
     terrainData = await json(assets.map.url);
     mapBounds = [terrainData.bounds.min, terrainData.bounds.max];
     origin = new THREE.Vector3((mapBounds[0][0] + mapBounds[1][0]) / 2, mapBounds[0][1], (mapBounds[0][2] + mapBounds[1][2]) / 2);
@@ -409,6 +424,7 @@ function syncMonsters(serverTime = Date.now()) {
 }
 
 function resetConnection() {
+  hotbar?.close();$('hotbar-settings').disabled=true;
   $('field-hud').hidden=true;$('field-attack').hidden=true;$('field-actions').hidden=true;combatEffects?.clear();
   hud?.clear();
   inventoryUI?.update(null);
@@ -432,9 +448,10 @@ function connect(name, room, retry = false) {
       monsterCooldownMs = msg.combat?.monsterCooldownMs ?? 1000;
       selfId = msg.id; world = msg.world; connected = true; status(`营地 ${msg.room}`, true);
       rememberCharacter(msg.character,msg.resumeToken); updateCharacter(msg.character,msg.savedAt);
+      hotbar.setCharacter(msg.character.id);
       $('session-dialog').close();$('session-open').hidden=true;setCampPanel(false);
       $('join').firstElementChild.textContent = '已进入试炼'; $('invite').disabled = $('second').disabled = false;
-      $('load-note').textContent = '空格 / F 攻击 · 1 火球术 · 2 冰霜爆破 · 施法时短暂停步';
+      $('load-note').textContent = '空格 / F 普攻 · 可在右上技能栏中自定义技能键位';
       const restored = msg.restored ? '已恢复角色进度。' : '已创建角色，开始第一次试炼。';
       message(characterSessionWarning() || restored); logEvent(restored);
       const url = new URL(location.href); url.searchParams.set('room', msg.room); history.replaceState(null, '', url); canvas.focus({ preventScroll: true });
@@ -470,11 +487,13 @@ $('second').addEventListener('click', () => window.open(inviteURL(), '_blank', '
 $('reset-view').addEventListener('click', () => { azimuth = .65; elevation = .58; distance = 12; });
 function stop() { keys.clear(); target = null; if (connected) send({ type: 'input', x: 0, y: 0 }); }
 function setCampPanel(open) {
+  if(open)hotbar?.close();
   stop();pointer=null;$('camp-panel').hidden=!open;
   $('camp-toggle').setAttribute('aria-expanded',String(open));
   if(open)$('camp-close').focus();else if(connected)canvas.focus({preventScroll:true});
 }
 function openSession() {
+  hotbar?.close();
   setCampPanel(false);stop();
   if(!$('session-dialog').open)$('session-dialog').showModal();
 }
@@ -482,12 +501,12 @@ $('camp-toggle').addEventListener('click',()=>setCampPanel($('camp-panel').hidde
 $('camp-close').addEventListener('click',()=>setCampPanel(false));
 $('session-open').addEventListener('click',openSession);
 $('session-close').addEventListener('click',()=>$('session-dialog').close());
-$('field-inventory').addEventListener('click',()=>{setCampPanel(false);inventoryUI?.open();});
+$('field-inventory').addEventListener('click',()=>{hotbar?.close();setCampPanel(false);inventoryUI?.open();});
 window.addEventListener('blur', stop); window.addEventListener('pagehide', () => socket?.close());
 document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
 const codes = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 window.addEventListener('keydown', e => {
-  if($('session-dialog').open||['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;
+  if(hotbar?.isEditing||$('session-dialog').open||e.isComposing||e.ctrlKey||e.metaKey||e.altKey||['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;
   if(e.code==='KeyH'&&!inventoryUI?.isOpen){e.preventDefault();if(!e.repeat)setCampPanel($('camp-panel').hidden);return;}
   if(e.code==='Escape'&&!$('camp-panel').hidden){e.preventDefault();setCampPanel(false);return;}
   if(!connected)return;
@@ -495,13 +514,13 @@ window.addEventListener('keydown', e => {
   if(!$('camp-panel').hidden)return;
   if(inventoryUI?.isOpen||['BUTTON','SELECT'].includes(document.activeElement?.tagName))return;
   if(e.code==='Space'||e.code==='KeyF'){e.preventDefault();if(!e.repeat)attack();return;}
-  const skill=Object.values(SKILLS).find(skill=>skill.key===e.code);
-  if(skill){e.preventDefault();if(!e.repeat)useSkill(skill.id);return;}
+  const skillId=hotbar?.skillForEvent(e);
+  if(skillId){e.preventDefault();useSkill(skillId);return;}
   if(codes.has(e.code)){e.preventDefault();keys.add(e.code);target=null;}
 });
 window.addEventListener('keyup', e => keys.delete(e.code));
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-canvas.addEventListener('pointerdown', e => { if(!$('camp-panel').hidden)setCampPanel(false);canvas.focus({ preventScroll: true }); pointer = { x: e.clientX, y: e.clientY, button: e.button, moved: false }; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointerdown', e => { if(hotbar?.isEditing)return;if(!$('camp-panel').hidden)setCampPanel(false);canvas.focus({ preventScroll: true }); pointer = { x: e.clientX, y: e.clientY, button: e.button, moved: false }; canvas.setPointerCapture(e.pointerId); });
 canvas.addEventListener('pointermove', e => {
   if (!pointer) return; const dx = e.clientX - pointer.x, dy = e.clientY - pointer.y;
   if (Math.hypot(dx, dy) > 2) pointer.moved = true;
@@ -523,7 +542,7 @@ canvas.addEventListener('pointercancel', () => { pointer = null; });
 canvas.addEventListener('wheel', e => { e.preventDefault(); distance = THREE.MathUtils.clamp(distance * Math.exp(e.deltaY * .001), 4, 160); }, { passive: false });
 setInterval(() => {
   if (!connected || document.hidden) return;
-  if(inventoryUI?.isOpen||!$('camp-panel').hidden||$('session-dialog').open){send({type:'input',x:0,y:0});return;}
+  if(hotbar?.isEditing||inventoryUI?.isOpen||!$('camp-panel').hidden||$('session-dialog').open){send({type:'input',x:0,y:0});return;}
   const right = Number(keys.has('KeyD')||keys.has('ArrowRight')) - Number(keys.has('KeyA')||keys.has('ArrowLeft'));
   const back = Number(keys.has('KeyS')||keys.has('ArrowDown')) - Number(keys.has('KeyW')||keys.has('ArrowUp'));
   let x = right*Math.cos(azimuth)+back*Math.sin(azimuth), y = -right*Math.sin(azimuth)+back*Math.cos(azimuth);
@@ -573,6 +592,7 @@ function draw(now) {
   if(Date.now()>feedbackUntil)$('combat-feedback').classList.remove('combat-flash');
   hud?.combat({me:snapshot.find(player=>player.id===selfId),enemy:chosenMonster()||monsterSnapshot.find(monster=>!monster.alive),connected,now:Date.now()+serverOffset,attackCooldownMs:cooldownMs});
   minimap?.draw({players:snapshot,monsters:monsterSnapshot,selfId,azimuth},now);
+  if(hotbar?.isEditing){$('field-attack').disabled=true;$('attack').disabled=true;}
   combatEffects?.update(Date.now()+serverOffset);
   if(combatEffects)canvas.dataset.effects=combatEffects.state().types.join(',');
   if(combatEffects)canvas.dataset.particles=String(combatEffects.particleCount());

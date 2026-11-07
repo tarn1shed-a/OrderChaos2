@@ -76,6 +76,21 @@ const player = (state, id) => state.players.find(p => p.id === id);
 const wolf = state => state.monsters.find(m => m.kind === 'wolf');
 const monster = (state, id) => state.monsters.find(m => m.id === id);
 
+test('quest/object states stay recipient-scoped for two peers, late join and reconnect; forged rewards are rejected',async t=>{
+ const gameplay={weapons:{},skills:{},comboRows:[],quests:{format:'oc2-source-quests-v1',objects:[{id:'source-static-3064',spawnId:3064,entry:621,sourceState:0}]}};
+ const f=await fixture(t,{gameplay}),a=await enter(f,'任务甲',{scene:'resources'}),b=await enter(f,'任务乙',{scene:'resources'});
+ const initial=await stateAfter(a,a.mark(),s=>s.players.length===2);assert.equal(initial.questState.objects[0].state.canLoot,null);assert.deepEqual(initial.questState.active,[]);
+ const room=[...f.game.combatRooms.values()][0];room.questState.applySourceState(a.id,'source-static-3064',{canLoot:false,questStatus:0,interactives:[]});
+ const updated=await stateAfter(a,a.mark(),s=>s.questState.objects[0].revision===1),peer=await stateAfter(b,b.mark(),s=>s.tick===updated.tick);assert.equal(peer.questState.objects[0].revision,0);assert.equal(peer.questState.objects[0].state.canLoot,null);
+ const late=await enter(f,'任务迟到',{scene:'resources'}),seen=await stateAfter(late,late.mark());assert.equal(seen.questState.objects[0].state.canLoot,null);
+ const creds={characterId:a.id,resumeToken:a.welcome.resumeToken};await a.close();const resumed=await enter(f,'任务甲',{scene:'resources',...creds});assert.deepEqual((await stateAfter(resumed,resumed.mark())).questState,updated.questState);
+ const mark=late.mark();late.send({type:'quest-state',questId:632,status:1,canLoot:true,rewards:{xp:11725,gold:68}});await late.wait(m=>m.type==='error',{after:mark});
+ assert.equal(room.clients.get(a.id).character.xp,0);assert.equal(room.clients.get(b.id).character.gold,0);
+ resumed.send({type:'save'});await resumed.wait(m=>m.type==='notice'&&m.message.includes('保存'));
+ const disk=await readFile(f.saveFile,'utf8');assert(!disk.includes('questStatus'));assert(!disk.includes('source-static-3064'));assert.equal(JSON.parse(disk).version,6);
+ publicStateHasNoCredentials(b,[a.welcome.resumeToken,b.welcome.resumeToken]);
+});
+
 test('contextual corpse loot is personal, authoritative, idempotent and saved across reconnect/restart',async t=>{
   const gameplay={weapons:{},skills:{},comboRows:[],interaction:{format:'oc2-source-interaction-v1'}};
   const f=await fixture(t,{gameplay,contextualLoot:true});

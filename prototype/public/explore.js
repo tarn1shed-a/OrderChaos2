@@ -1,3 +1,4 @@
+import {createQuestBook} from './quest-book.js';
 import {createContextControl} from './context-control.js';
 import {monsterStateText} from './monster-state.js';
 import {buffText} from './buff-presentation.js';
@@ -39,7 +40,7 @@ let renderer, scene, camera, terrainMeshes = [], terrainData, mapBounds, origin,
 let assets, modelTemplate, ready = false, world = RESOURCE_WORLD, snapshot = [], selfId, socket, connected = false;
 let wolfTemplate, monsterSnapshot = [], selectedMonsterId = null, character = null, nextAttackAt = 0, feedbackUntil = 0, saveAt = null;
 let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset = 0;
-let combatEffects, environment, hdrRenderer, hud, inventoryUI, skillBook, minimap, nextSkillRequestAt = 0;
+let combatEffects, environment, hdrRenderer, hud, inventoryUI, skillBook, questBook, minimap, nextSkillRequestAt = 0;
 let renderEquipmentPreview, equipmentPreviewKey;
 let playerLookProfile;
 let hotbar, mobileHUD, joystick, jumpControl, attackControl,controlProfile, gameplayProfile;
@@ -131,7 +132,7 @@ function updateTarget() {
   $('field-attack').disabled=$('attack').disabled;
 }
 function attack(pressed=false) {
-  if(skillBook?.isOpen||hotbar?.isEditing)return;
+  if(questBook?.isOpen||skillBook?.isOpen||hotbar?.isEditing)return;
   if (!connected || !character || character.hp <= 0 || Date.now() < nextAttackAt) return;
   const enemy = chosenMonster(); if (!enemy) return;
   selectedMonsterId = enemy.id; target = null;
@@ -143,7 +144,7 @@ function attack(pressed=false) {
   setTimeout(() => { $('attack').firstChild.textContent = '攻击野狼 '; },cooldownMs);
 }
 function useSkill(id) {
-  if(skillBook?.isOpen||hotbar?.isEditing)return;
+  if(questBook?.isOpen||skillBook?.isOpen||hotbar?.isEditing)return;
   const skill=skillById(id), me=snapshot.find(p=>p.id===selfId), now=Date.now()+serverOffset;
   if(!skill||!connected||!me||me.hp<=0||me.controls?.skill||castActive(me.cast)||Date.now()<nextSkillRequestAt||now<(me.skillReadyAt?.[id]||0)||now<(me.globalReadyAt||0))return;
   const enemy=chosenMonster();if(!enemy||enemy.ai?.state==='returning')return;
@@ -310,12 +311,14 @@ async function init() {
     inventoryUI=createInventoryUI(uiProfile,{send,stop,focusGame:()=>canvas.focus({preventScroll:true}),previewLook:look=>{
       if(character&&renderEquipmentPreview)inventoryUI.setModel(renderEquipmentPreview(character.equipment,look).model.url);
     }});
-    skillBook=createSkillBook(uiProfile,{stop,focusGame:()=>canvas.focus({preventScroll:true}),beforeOpen:()=>{hotbar?.close();inventoryUI?.close();setCampPanel(false);pointer=null;}});
+    skillBook=createSkillBook(uiProfile,{stop,focusGame:()=>canvas.focus({preventScroll:true}),beforeOpen:()=>{questBook?.close();hotbar?.close();inventoryUI?.close();setCampPanel(false);pointer=null;}});
+    questBook=createQuestBook(uiProfile,{stop,focusGame:()=>canvas.focus({preventScroll:true}),beforeOpen:()=>{skillBook?.close();hotbar?.close();inventoryUI?.close();setCampPanel(false);pointer=null;}});
+    $('field-quests').disabled=false;
     $('field-skills').disabled=false;
     hotbar=createHotbarUI({root:$('field-actions'),panel:$('hotbar-editor'),toggle:$('hotbar-settings'),closeButton:$('hotbar-close'),
       fixedLayout:true,rows:$('hotbar-bindings'),status:$('hotbar-status'),reset:$('hotbar-reset'),retryButton:$('hotbar-retry'),send,
       onEditingChange:open=>{
-        if(open){skillBook?.close();setCampPanel(false);inventoryUI?.close();stop();pointer=null;}
+        if(open){questBook?.close();skillBook?.close();setCampPanel(false);inventoryUI?.close();stop();pointer=null;}
         else if(connected)canvas.focus({preventScroll:true});
       },
       onChange:()=>{
@@ -495,7 +498,7 @@ function resetConnection() {
   $('recovery-copy').disabled=true;$('recovery-show').disabled=true;$('recovery-show').textContent='显示恢复码';$('recovery-status').textContent='';$('recovery-export').value='';$('recovery-export').hidden=true;
   $('recovery-code').disabled=false;$('recovery-join').disabled=!ready;
   $('field-hud').hidden=true;$('field-attack').hidden=true;$('field-actions').hidden=true;$('touch-controls').hidden=true;joystick?.reset();jumpControl?.reset();attackControl?.reset();$('field-interaction').disabled=true;combatEffects?.clear();
-  interactionSnapshot=null;jumpControl?.update(null);hud?.clear();
+  interactionSnapshot=null;jumpControl?.update(null);questBook?.update(null);hud?.clear();
   inventoryUI?.update(null);
   $('field-inventory').disabled=true;$('session-open').hidden=false;
   connected = false; snapshot = []; monsterSnapshot = [];dynamicSnapshot=[];syncDynamic(); selfId = null; keys.clear(); target = null; selectedMonsterId=null; updateRoster(); syncAvatars(); syncMonsters();
@@ -526,7 +529,7 @@ function connect(name, room, retry = false, importedCredentials=null) {
       const restored = msg.restored ? '已恢复角色进度。' : '已创建角色，开始第一次试炼。';
       message(characterSessionWarning() || restored); logEvent(restored);
       const url = new URL(location.href); url.searchParams.set('room', msg.room); history.replaceState(null, '', url); canvas.focus({ preventScroll: true });
-    } else if (msg.type === 'state') { snapshot = msg.players;monsterSnapshot=msg.monsters||[];interactionSnapshot=msg.interaction||null;dynamicSnapshot=msg.objects||[]; if(msg.serverTime)serverOffset=msg.serverTime-Date.now(); updateRoster(); syncAvatars(msg.serverTime || Date.now());syncMonsters(msg.serverTime || Date.now());syncDynamic();combatEffects?.sync(snapshot,monsterSnapshot,msg.serverTime||Date.now(),msg.projectiles||[]);updateSkills(); }
+    } else if (msg.type === 'state') { snapshot = msg.players;questBook?.update(msg.questState||null);monsterSnapshot=msg.monsters||[];interactionSnapshot=msg.interaction||null;dynamicSnapshot=msg.objects||[]; if(msg.serverTime)serverOffset=msg.serverTime-Date.now(); updateRoster(); syncAvatars(msg.serverTime || Date.now());syncMonsters(msg.serverTime || Date.now());syncDynamic();combatEffects?.sync(snapshot,monsterSnapshot,msg.serverTime||Date.now(),msg.projectiles||[]);updateSkills(); }
     else if (msg.type === 'progress') {
       const before=character; updateCharacter(msg.character,msg.savedAt);
       if(before&&msg.character.gold>before.gold){const gain=`获得 ${msg.character.xp-before.xp} 经验、${msg.character.gold-before.gold} 金币`;logEvent(gain,true);flash(gain);}
@@ -578,7 +581,7 @@ function inviteURL() { const url = new URL(location.href); url.search = ''; url.
 $('invite').addEventListener('click', async () => { const url = inviteURL(); try { await navigator.clipboard.writeText(url); message('已复制实验场邀请链接。'); } catch { message(`邀请地址：${url}`); } });
 $('second').addEventListener('click', () => window.open(inviteURL(), '_blank', 'noopener'));
 $('reset-view').addEventListener('click', () => { azimuth = .65; elevation = .58; distance = 12; });
-function inputBlocked(){return skillBook?.isOpen||hotbar?.isEditing||inventoryUI?.isOpen||!$('camp-panel').hidden||$('session-dialog').open;}
+function inputBlocked(){return questBook?.isOpen||skillBook?.isOpen||hotbar?.isEditing||inventoryUI?.isOpen||!$('camp-panel').hidden||$('session-dialog').open;}
 function stop() { attackControl?.reset();jumpControl?.reset();joystick?.reset();keys.clear(); target = null; if (connected) send({ type: 'input', x: 0, y: 0 }); }
 function setCampPanel(open) {
   if(open){hotbar?.close();skillBook?.close();}
@@ -587,7 +590,7 @@ function setCampPanel(open) {
   if(open)$('camp-close').focus();else if(connected)canvas.focus({preventScroll:true});
 }
 function openSession() {
-  skillBook?.close();inventoryUI?.close();hotbar?.close();
+  questBook?.close();skillBook?.close();inventoryUI?.close();hotbar?.close();
   setCampPanel(false);stop();
   if(!$('session-dialog').open)$('session-dialog').showModal();
 }
@@ -595,13 +598,14 @@ $('camp-toggle').addEventListener('click',()=>setCampPanel($('camp-panel').hidde
 $('camp-close').addEventListener('click',()=>setCampPanel(false));
 $('session-open').addEventListener('click',openSession);
 $('session-close').addEventListener('click',()=>$('session-dialog').close());
-$('field-skills').addEventListener('click',()=>skillBook?.open());
-$('field-inventory').addEventListener('click',()=>{skillBook?.close();hotbar?.close();setCampPanel(false);inventoryUI?.open();});
+$('field-quests').addEventListener('click',()=>questBook?.open());
+$('field-skills').addEventListener('click',()=>{questBook?.close();skillBook?.open();});
+$('field-inventory').addEventListener('click',()=>{questBook?.close();skillBook?.close();hotbar?.close();setCampPanel(false);inventoryUI?.open();});
 window.addEventListener('blur', stop); window.addEventListener('pagehide', () => socket?.close());
 document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
 const codes = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 window.addEventListener('keydown', e => {
-  if(skillBook?.isOpen||hotbar?.isEditing||$('session-dialog').open||e.isComposing||e.ctrlKey||e.metaKey||e.altKey||['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;
+  if(questBook?.isOpen||skillBook?.isOpen||hotbar?.isEditing||$('session-dialog').open||e.isComposing||e.ctrlKey||e.metaKey||e.altKey||['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;
   if(e.code==='KeyH'&&!inventoryUI?.isOpen){e.preventDefault();if(!e.repeat)setCampPanel($('camp-panel').hidden);return;}
   if(e.code==='Escape'&&!$('camp-panel').hidden){e.preventDefault();setCampPanel(false);return;}
   if(!connected)return;
@@ -617,7 +621,7 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => keys.delete(e.code));
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-canvas.addEventListener('pointerdown', e => { if(skillBook?.isOpen||hotbar?.isEditing)return;if(!$('camp-panel').hidden)setCampPanel(false);canvas.focus({ preventScroll: true }); if(pointer&&pointer.id!==e.pointerId)return;pointer = { id:e.pointerId,x: e.clientX, y: e.clientY, button: e.button, moved: false }; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointerdown', e => { if(questBook?.isOpen||skillBook?.isOpen||hotbar?.isEditing)return;if(!$('camp-panel').hidden)setCampPanel(false);canvas.focus({ preventScroll: true }); if(pointer&&pointer.id!==e.pointerId)return;pointer = { id:e.pointerId,x: e.clientX, y: e.clientY, button: e.button, moved: false }; canvas.setPointerCapture(e.pointerId); });
 canvas.addEventListener('pointermove', e => {
   if (!pointer||pointer.id!==e.pointerId) return; const dx = e.clientX - pointer.x, dy = e.clientY - pointer.y;
   if (Math.hypot(dx, dy) > 2) pointer.moved = true;

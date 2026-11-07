@@ -8,6 +8,7 @@ import {BuffRuntime} from './buffs.mjs';
 import {resolveDamage} from './damage.mjs';
 import {MonsterAI} from './monster-ai.mjs';
 import {CorpseLoot} from './corpse-loot.mjs';
+import {QuestState} from './quest-state.mjs';
 
 export const COMBAT = Object.freeze({ playerDamage: 20, playerCooldownMs: 700, monsterHp: 60, monsterDamage: 6,
   monsterCooldownMs: 1000, monsterRespawnMs: 8000, playerRespawnMs: 4000,
@@ -56,6 +57,7 @@ export class CombatRoom {
     if(lab){if(!this.motion)throw new Error('碰撞验证场需要本地资源');this.dynamic=new DynamicScene(this.motion,Date.now());}
     if(ai&&scene==='resources'&&this.motion&&navigation)this.brain=new MonsterAI(this,navigation);
     if(contextualLoot&&this.gameplay?.interaction?.format==='oc2-source-interaction-v1')this.loot=new CorpseLoot(this);
+    if(this.gameplay?.quests?.format==='oc2-source-quests-v1')this.questState=new QuestState(this.gameplay.quests);
   }
 
   snapshot() { return [{ ...this.monster, ...(this.loot?{loot:this.loot.view()}:{}),...(this.monster.ai?{ai:{...this.monster.ai}}:{}),buffs:structuredClone(this.monster.buffs||[]), animation: { ...this.monster.animation } }]; }

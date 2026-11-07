@@ -1,11 +1,12 @@
 // Only decoded art and embedded glyphs are loaded. Original SWF scripts never run.
 export async function loadOriginalUI(profile) {
-  if (profile.format !== 'oc2-original-ui-v16' || profile.gameplay?.format!=='oc2-native-gameplay-v7'||profile.controls?.format!=='oc2-original-controls-v1' || profile.fonts?.requiredTextStatus !== 'complete' ||
+  if (profile.format !== 'oc2-original-ui-v17' || profile.gameplay?.format!=='oc2-native-gameplay-v8'||profile.controls?.format!=='oc2-original-controls-v1' || profile.fonts?.requiredTextStatus !== 'complete' ||
       !['chineseText','chineseDisplay'].every(key=>profile.fonts.faces?.[key]?.conversion==='lossless-full-sfnt-to-woff') ||
       profile.skillIcons?.format !== 'oc2-skill-icons-v1'||profile.hud?.format!=='oc2-original-hud-v1'||profile.hud?.nativeControls?.format!=='oc2-original-mobile-controls-v2'||
       profile.portraits?.format!=='oc2-character-portraits-v1'||profile.inventory?.format!=='oc2-original-inventory-v1'||
       profile.itemIcons?.format!=='oc2-item-icons-v1'||profile.skillUI?.format!=='oc2-original-skill-ui-v1') throw new Error('原版界面资源需要更新，请重新构建本地资源');
   if(profile.gameplay.interaction?.format!=='oc2-source-interaction-v1'||!profile.controls.icons.loot)throw new Error('原版交互资源需要更新');
+  if(profile.questUI?.format!=='oc2-original-quest-ui-v1'||profile.gameplay.quests?.format!=='oc2-source-quests-v1')throw new Error('原版任务资源需要更新');
   const imageKeys = ['buttonGreen','buttonGray','skillOrb','skillFrame','healthRing','experienceRing','healthFill','manaFill','panelBlue'];
   const localURL = url => {
     if (typeof url !== 'string' || !/^\/assets\/ui\/[A-Za-z0-9_-]+\.(png|woff)$/.test(url)) throw new Error('原版界面资源路径无效');
@@ -48,6 +49,7 @@ export async function loadOriginalUI(profile) {
     if(image.naturalWidth!==entry.width||image.naturalHeight!==entry.height)throw new Error('原背包图集尺寸不匹配');
     document.documentElement.style.setProperty(`--inventory-${key}`,`url("${image.src}")`);
   }));
+  await Promise.all(Object.values(profile.questUI.assets).map(async entry=>{const image=new Image();image.src=localURL(entry.url);await image.decode();if(image.naturalWidth!==entry.width||image.naturalHeight!==entry.height)throw new Error('原任务图标尺寸不匹配');}));
   await Promise.all([...Object.values(profile.skillUI.assets), ...profile.skillUI.skills.flatMap(skill=>[skill.base,...skill.runes].map(entry=>entry.icon))].map(async entry=>{
     const image=new Image();image.src=localURL(entry.url);await image.decode();
     if(image.naturalWidth!==entry.width||image.naturalHeight!==entry.height)throw new Error('原技能面板图标尺寸不匹配');

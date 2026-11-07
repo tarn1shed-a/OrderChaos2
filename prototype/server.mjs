@@ -244,7 +244,7 @@ export function createGameServer({ saveFile, clock = Date.now, gameplay=loadGame
       const snapshot = { type: 'state', tick, serverTime: clock(), players: [...room.values()].map(ws => ({ ...ws.player, animation: { ...ws.player.animation },
         skillReadyAt: { ...ws.player.skillReadyAt }, cast: ws.player.cast ? structuredClone(ws.player.cast) : null })), monsters: encounter.snapshot(),
         objects:encounter.dynamic?.snapshot()||[],projectiles:encounter.runtime?.snapshot()||[] };
-      for (const ws of room.values()) send(ws, {...snapshot,interaction:encounter.loot?.context(ws,clock())||null});
+      for (const ws of room.values()) send(ws, {...snapshot,interaction:encounter.loot?.context(ws,clock())||null,questState:encounter.questState?.snapshot(ws.player.id)||null});
     }
     } catch (error) { storageFailure(error); }
   }, 50);

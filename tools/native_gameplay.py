@@ -15,6 +15,7 @@ from native_cast import recover_cast
 from native_combat import recover_combat,recover_protocol
 from native_ai import recover_ai,verify_ai_native,NATIVE_ROUTINES
 from native_interaction import recover_interactions,verify_interaction_native,NATIVE_ROUTINES as INTERACTION_ROUTINES
+from native_quest import recover_quest_data,verify_quest_native
 
 LIB_SHA256 = '77f449f2100a4717578e282bb04f1f8fff25d25c7bfa461d7d39ee49d1cb8ca4'
 ROUTINES = {
@@ -98,7 +99,7 @@ def verify_native(data):
     for address, expected in CONSTANTS.items():
         if image.read(address,4) != struct.pack('<f',expected):
             raise ValueError('Native motion constant changed')
-    return {'librarySHA256':LIB_SHA256,'combatDescriptors':recover_protocol(image),'npcProtocol':verify_ai_native(image),'interactionProtocol':verify_interaction_native(image),'routines':{hex(a):{'bytes':n,'sha256':h} for a,(n,h) in ROUTINES.items()},
+    return {'librarySHA256':LIB_SHA256,'combatDescriptors':recover_protocol(image),'npcProtocol':verify_ai_native(image),'interactionProtocol':verify_interaction_native(image),'questProtocol':verify_quest_native(image),'routines':{hex(a):{'bytes':n,'sha256':h} for a,(n,h) in ROUTINES.items()},
             'constants':{hex(a):struct.unpack('<f',struct.pack('<f',v))[0] for a,v in CONSTANTS.items()}}
 
 def recover_gameplay(extract, output, selected_items):
@@ -181,10 +182,11 @@ def recover_gameplay(extract, output, selected_items):
                       'word':second+(third<<16),'allowedProfessions':[i+1 for i,k in enumerate(fields) if r[k]],
                       'legacy':not any(r[k] for k in fields),'sourceTypeName':r['weapon_type']}
     casting,cast_actions=recover_cast(extract,animation);actions.update(cast_actions)
-    result={'format':'oc2-native-gameplay-v7','comboRows':rows,'skills':skills,'weapons':weapons,'icons':icons,'casting':casting,
+    result={'format':'oc2-native-gameplay-v8','comboRows':rows,'skills':skills,'weapons':weapons,'icons':icons,'casting':casting,
         'combat':recover_combat(extract,output),
         'npc':recover_ai(extract,output),
         'interaction':recover_interactions(extract),
+        'quests':recover_quest_data(extract),
         'jump':{'mode':'normal-on-foot','initialVelocity':10,'initialGravity':struct.unpack('<f',struct.pack('<f',-41.6))[0],
                 'gravityByNextVelocity':[[-13.1,-6.7],[-3.5,-75],[3.5,-20]],'predictPositionBeforeVelocity':True,
                 'velocityStepCapMs':100,'stationaryAnimationAvailable':'jump_in_place' in ranges,

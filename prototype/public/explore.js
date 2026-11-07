@@ -17,6 +17,7 @@ import { renderCharacterPortrait } from './character-portraits.js';
 import { createInventoryUI } from './inventory-ui.js';
 import { createMinimap } from './minimap.js';
 import { createHotbarUI } from './hotbar-ui.js';
+import { encodeCharacterRecovery, decodeCharacterRecovery } from './character-recovery.js';
 import { restoreCredentials, rememberCharacter, lastCharacterName, characterSessionWarning } from './character-session.js';
 
 const $ = id => document.getElementById(id);
@@ -32,6 +33,7 @@ let combatEffects, environment, hdrRenderer, hud, inventoryUI, minimap, nextSkil
 let renderEquipmentPreview, equipmentPreviewKey;
 let playerLookProfile;
 let hotbar;
+let activeCredentials=null;
 const monsterViews = new Map();
 let target = null, keys = new Set(), avatars = new Map(), rosterSignature = '', generation = 0, retryTimer, manualExit = false;
 let azimuth = .65, elevation = .58, distance = 24, previous = performance.now(), pointer = null;
@@ -39,7 +41,7 @@ const focus = new THREE.Vector3(), raycaster = new THREE.Raycaster(), pointerNDC
 const message = text => { $('message').textContent = text; $('camp-message').textContent = text; };
 const modelFactories = new WeakMap();
 const status = (text, online = false) => { $('status').textContent = text; $('lamp').classList.toggle('online', online); };
-const send = data => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(data)); };
+const send = data => { if(socket?.readyState!==WebSocket.OPEN)return false;socket.send(JSON.stringify(data));return true; };
 async function json(url) { const r = await fetch(url); if (!r.ok) throw new Error(`读取 ${url} 失败（${r.status}）`); return r.json(); }
 
 function logEvent(text, reward = false) {
@@ -67,6 +69,7 @@ function updateCharacter(data, savedAt = null) {
   $('save-status').textContent = warning || (saveAt ? `服务器已保存 · ${new Date(saveAt).toLocaleTimeString('zh-CN')}` : '恢复凭据已记住 · 进度由服务器保存');
   hud?.character(data);
   inventoryUI?.update(data);
+  hotbar?.syncCharacter(data);
   $('field-inventory').disabled=false;
   const previewKey=`${equipmentAppearanceKey(data.equipment)}:${lookKey(data.look)}`;
   if (renderEquipmentPreview && previewKey!==equipmentPreviewKey) {
@@ -276,7 +279,7 @@ async function init() {
       if(character&&renderEquipmentPreview)inventoryUI.setModel(renderEquipmentPreview(character.equipment,look).model.url);
     }});
     hotbar=createHotbarUI({root:$('field-actions'),panel:$('hotbar-editor'),toggle:$('hotbar-settings'),closeButton:$('hotbar-close'),
-      rows:$('hotbar-bindings'),status:$('hotbar-status'),reset:$('hotbar-reset'),
+      rows:$('hotbar-bindings'),status:$('hotbar-status'),reset:$('hotbar-reset'),retryButton:$('hotbar-retry'),send,
       onEditingChange:open=>{
         if(open){setCampPanel(false);inventoryUI?.close();stop();pointer=null;}
         else if(connected)canvas.focus({preventScroll:true});
@@ -347,7 +350,7 @@ async function init() {
     $('asset-detail').textContent = assets.summary;
     $('load-note').textContent = '进入营地 · 空格攻击 · 1 火球术 · 2 冰霜爆破';
     focus.copy(localPosition(world.spawn.x, world.spawn.y)).add(new THREE.Vector3(0, 1, 0));
-    ready = true; $('join').disabled = false; $('join').firstElementChild.textContent = '进入试炼'; status('资源已就绪'); message('同一浏览器填写原来的名字，可恢复服务器上的角色。');
+    ready = true; $('join').disabled = false; $('recovery-join').disabled=false; $('join').firstElementChild.textContent = '进入试炼'; status('资源已就绪'); message('同一浏览器填写原名字，或使用恢复码在新设备继续。');
     requestAnimationFrame(draw);
   } catch (error) {
     status('载入失败'); $('load-note').textContent = `${error.message}。请先运行资源转换步骤，详见项目说明。`;
@@ -424,7 +427,9 @@ function syncMonsters(serverTime = Date.now()) {
 }
 
 function resetConnection() {
-  hotbar?.close();$('hotbar-settings').disabled=true;
+  hotbar?.disconnect();$('hotbar-settings').disabled=true;
+  $('recovery-copy').disabled=true;$('recovery-show').disabled=true;$('recovery-show').textContent='显示恢复码';$('recovery-status').textContent='';$('recovery-export').value='';$('recovery-export').hidden=true;
+  $('recovery-code').disabled=false;$('recovery-join').disabled=!ready;
   $('field-hud').hidden=true;$('field-attack').hidden=true;$('field-actions').hidden=true;combatEffects?.clear();
   hud?.clear();
   inventoryUI?.update(null);
@@ -434,11 +439,11 @@ function resetConnection() {
   $('join').disabled = !ready; $('join').firstElementChild.textContent = '进入试炼'; $('invite').disabled = $('second').disabled = true; $('leave').hidden = true;
   updateSkills();
 }
-function connect(name, room, retry = false) {
+function connect(name, room, retry = false, importedCredentials=null) {
   clearTimeout(retryTimer); const gen = ++generation; socket?.close(); manualExit = false;
-  status(retry ? '正在重连' : '正在加入'); for (const id of ['name', 'room', 'join']) $(id).disabled = true; $('leave').hidden = false;
+  status(retry ? '正在重连' : '正在加入'); for (const id of ['name', 'room', 'join','recovery-code','recovery-join']) $(id).disabled = true; $('leave').hidden = false;
   const ws = new WebSocket(webSocketEndpoint()); socket = ws; let denied = false;
-  const credentials = restoreCredentials(name);
+  const credentials = importedCredentials || (retry&&activeCredentials?.name===name?{characterId:activeCredentials.characterId,resumeToken:activeCredentials.resumeToken}:restoreCredentials(name));
   ws.addEventListener('open', () => { if (generation === gen) send({ type: 'join', scene: 'resources', name, room, ...credentials }); });
   ws.addEventListener('message', event => {
     if (generation !== gen) return; const msg = JSON.parse(event.data);
@@ -448,7 +453,9 @@ function connect(name, room, retry = false) {
       monsterCooldownMs = msg.combat?.monsterCooldownMs ?? 1000;
       selfId = msg.id; world = msg.world; connected = true; status(`营地 ${msg.room}`, true);
       rememberCharacter(msg.character,msg.resumeToken); updateCharacter(msg.character,msg.savedAt);
-      hotbar.setCharacter(msg.character.id);
+      activeCredentials={characterId:msg.character.id,resumeToken:msg.resumeToken,name:msg.character.name};
+      $('recovery-code').value='';$('recovery-copy').disabled=false;$('recovery-show').disabled=false;$('name').value=msg.character.name;
+      hotbar.setCharacter(msg.character);
       $('session-dialog').close();$('session-open').hidden=true;setCampPanel(false);
       $('join').firstElementChild.textContent = '已进入试炼'; $('invite').disabled = $('second').disabled = false;
       $('load-note').textContent = '空格 / F 普攻 · 可在右上技能栏中自定义技能键位';
@@ -461,6 +468,7 @@ function connect(name, room, retry = false) {
       if(before&&msg.character.gold>before.gold){const gain=`获得 ${msg.character.xp-before.xp} 经验、${msg.character.gold-before.gold} 金币和狼皮`;logEvent(gain,true);flash(gain);}
       if(before&&msg.character.level>before.level){logEvent(`升级至 Lv.${msg.character.level}，生命已恢复。`,true);flash(`升级！Lv.${msg.character.level}`);}
     }
+    else if(msg.type==='hotbar-result'){hotbar?.receiveResult(msg);}
     else if (msg.type === 'notice') { message(msg.message); inventoryUI?.notice(msg.message); if(connected)flash(msg.message); }
     else if (msg.type === 'combat') handleCombat(msg);
     else if (msg.type === 'error') { denied = true; message(msg.message); }
@@ -469,13 +477,34 @@ function connect(name, room, retry = false) {
   ws.addEventListener('close', () => {
     if (generation !== gen) return; resetConnection();
     if (manualExit || denied) { status('已离开'); openSession(); return; }
-    status('连接中断'); message('3 秒后尝试重连并恢复角色进度。'); retryTimer = setTimeout(() => connect(name, room, true), 3000);
+    status('连接中断'); message('3 秒后尝试重连并恢复角色进度。'); retryTimer = setTimeout(() => connect(name, room, true, importedCredentials), 3000);
   });
   ws.addEventListener('error', () => { if (generation === gen) message('连接失败，请确认本地服务仍在运行。'); });
 }
 $('join-form').addEventListener('submit', event => {
   event.preventDefault(); if (!ready) return; const name = $('name').value.trim(), room = $('room').value.trim().toUpperCase();
   if (!name || !/^[A-Z0-9-]{3,16}$/.test(room)) return message('请输入名字和 3–16 位营地编号。'); connect(name, room);
+});
+$('recovery-join').addEventListener('click',()=>{
+  if(!ready)return;
+  try{
+    const recovery=decodeCharacterRecovery($('recovery-code').value),room=$('room').value.trim().toUpperCase();
+    if(!/^[A-Z0-9-]{3,16}$/.test(room))return message('请输入 3–16 位营地编号。');
+    $('name').value=recovery.name;
+    connect(recovery.name,room,false,{characterId:recovery.characterId,resumeToken:recovery.resumeToken});
+  }catch(error){message(error.message);}
+});
+$('recovery-copy').addEventListener('click',async()=>{
+  if(!connected||!activeCredentials)return;
+  const code=encodeCharacterRecovery({id:activeCredentials.characterId,name:activeCredentials.name},activeCredentials.resumeToken);
+  try{await navigator.clipboard.writeText(code);$('recovery-status').textContent='恢复码已复制。原窗口退出后，可在新设备使用。';}
+  catch{$('recovery-export').value=code;$('recovery-export').hidden=false;$('recovery-show').textContent='隐藏恢复码';$('recovery-export').select();$('recovery-status').textContent='请手动复制下方恢复码。';}
+});
+$('recovery-show').addEventListener('click',()=>{
+  if(!connected||!activeCredentials)return;
+  const show=$('recovery-export').hidden;
+  $('recovery-export').value=show?encodeCharacterRecovery({id:activeCredentials.characterId,name:activeCredentials.name},activeCredentials.resumeToken):'';
+  $('recovery-export').hidden=!show;$('recovery-show').textContent=show?'隐藏恢复码':'显示恢复码';
 });
 $('field-attack').addEventListener('click', attack);
 $('leave').addEventListener('click', () => { stop(); manualExit = true; generation++; clearTimeout(retryTimer); socket?.close(); resetConnection(); status('已离开'); message('已离开。使用相同浏览器和角色名字可恢复进度。'); openSession(); });

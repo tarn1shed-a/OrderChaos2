@@ -64,9 +64,10 @@
       <button id="hotbar-close" class="panel-close" type="button" aria-label="关闭技能栏设置">×</button>
       <h2 id="hotbar-editor-title">技能栏设置</h2>
       <p class="hotbar-help">拖拽底部图标，或点选两格换位。<br>快捷键跟随格子，点击下方按键修改。</p>
-      <p id="hotbar-status" class="hotbar-status" role="status">设置按角色保存在当前浏览器。</p>
+      <p id="hotbar-status" class="hotbar-status" role="status">进入角色后恢复服务器设置。</p>
       <div id="hotbar-bindings" class="hotbar-bindings" aria-label="十个技能格的快捷键"></div>
       <button id="hotbar-reset" class="hotbar-reset" type="button">恢复默认</button>
+      <button id="hotbar-retry" class="hotbar-reset" type="button" hidden>重试保存</button>
     </section>
     <aside id="camp-panel" hidden aria-label="营地面板">
       <button id="camp-close" class="panel-close" type="button" aria-label="收起营地面板">×</button>
@@ -89,6 +90,7 @@
       <section class="battle-log"><h3>冒险记录</h3><ol id="events"><li>完成第一次击杀，获得你的第一份奖励。</li></ol></section>
       <section class="party"><div class="section-title"><h3>同行者</h3><span id="count">0 / 8</span></div><ul id="players"><li class="empty">等待冒险者进入。</li></ul></section>
       <div class="invite-actions"><button id="invite" disabled>⌁ 复制邀请链接</button><button id="second" disabled>↗ 打开第二个玩家窗口</button></div>
+      <details class="recovery-transfer"><summary>换设备继续这个角色</summary><p>复制恢复码后退出原窗口，在新设备的进入窗口使用。恢复码可登录角色，请自己保管。</p><div class="recovery-actions"><button id="recovery-copy" class="glass-tool" type="button" disabled>复制角色恢复码</button><button id="recovery-show" class="glass-tool" type="button" disabled>显示恢复码</button></div><textarea id="recovery-export" aria-label="角色恢复码，请自己保管" readonly hidden></textarea><p id="recovery-status" role="status"></p></details>
       <div class="controls"><h3>探索指南</h3><p>WASD / 方向键：相对视角移动</p><p>点击野狼选中 · 空格 / F：攻击</p><p>B / C：背包与装备 · Esc：关闭</p><p>右键拖动：旋转镜头 · 滚轮：缩放</p><p>点击地面：直线移动 · B：背包与外观</p></div>
       <p id="skill-hint" class="skill-hint">1：火球术 · 2：冰霜爆破<br>施法时短暂停步，倒地或目标失效会中断。</p>
       <section class="recovery"><h3>资源与玩法</h3><p id="asset-detail">正在核对资源…</p><p>原版生命弧、经验条与技能图标已接入，技能栏按电脑键鼠操作横排。头像由原模型渲染，取景为网页适配；玩法数值由本地服务器判定并保存。</p><a class="asset-library-link" href="/assets/library/index.html" target="_blank" rel="noopener">浏览本地美术素材库 ↗</a></section>
@@ -101,6 +103,7 @@
     <p class="intro">填入名字与营地编号，和朋友在同一张地图碰面。</p>
       <form id="join-form"><label for="name">你的冒险者名字</label><input id="name" placeholder="例如：林间旅人" maxlength="16" required autocomplete="nickname"><label for="room">营地编号</label><input id="room" value="EXPLORE-01" pattern="[A-Za-z0-9\-]{3,16}" minlength="3" maxlength="16" required spellcheck="false"><button id="join" class="primary" disabled><span>等待资源就绪</span><span>↗</span></button></form>
       <p id="message" class="message" role="status">地形与模型载入后即可进入。</p>
+    <details class="recovery-transfer"><summary>已有角色？使用恢复码继续</summary><label for="recovery-code">原设备复制的角色恢复码</label><textarea id="recovery-code" rows="3" autocomplete="off" spellcheck="false"></textarea><button id="recovery-join" class="glass-tool" type="button" disabled>使用恢复码进入</button><p>请先退出原窗口。恢复码可登录角色，请自己保管。</p></details>
     <p class="session-shortcuts">WASD 移动 · F 普攻 · B 背包 · 技能键可自定义</p>
   </dialog>
   <dialog id="inventory-dialog" class="inventory-dialog" aria-labelledby="inventory-title">

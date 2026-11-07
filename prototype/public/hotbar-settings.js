@@ -22,7 +22,8 @@ export function validHotbar(value){
   if(!skillIds.every(id=>value.slots.filter(slot=>slot===id).length===1))return false;
   return value.bindings.every(validBinding)&&new Set(value.bindings.map(binding=>binding.code+':'+binding.shift)).size===SLOT_COUNT;
 }
-const copy=value=>({version:1,slots:[...value.slots],bindings:value.bindings.map(binding=>({...binding}))});
+export const cloneHotbar=value=>({version:1,slots:[...value.slots],bindings:value.bindings.map(binding=>({...binding}))});
+const copy=cloneHotbar;
 export function swapHotbarSlots(settings,from,to){
   if(!validHotbar(settings)||![from,to].every(i=>Number.isInteger(i)&&i>=0&&i<SLOT_COUNT))throw new Error('技能栏格子无效');
   const next=copy(settings);[next.slots[from],next.slots[to]]=[next.slots[to],next.slots[from]];return next;
@@ -42,11 +43,11 @@ export function hotbarSkillForEvent(settings,event){
 export function loadHotbar(storage,characterId){
   try{
     const raw=storage.getItem(HOTBAR_STORAGE_PREFIX+characterId);
-    if(raw===null)return {settings:defaultHotbar()};
+    if(raw===null)return {settings:defaultHotbar(),found:false};
     const value=JSON.parse(raw);
     if(!validHotbar(value))throw new Error('invalid settings');
-    return {settings:copy(value)};
-  }catch{return {settings:defaultHotbar(),warning:'无法读取本机技能栏设置，暂用默认；下次修改时会重新保存。'};}
+    return {settings:copy(value),found:true};
+  }catch{return {settings:defaultHotbar(),found:false,warning:'无法读取旧版本机技能栏设置，将使用服务器设置。'};}
 }
 export function saveHotbar(storage,characterId,settings){
   if(!characterId||!validHotbar(settings))return {error:'技能栏设置无效，未保存。'};

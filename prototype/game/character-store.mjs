@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ITEMS, EQUIPMENT_SLOTS, itemById, starterInventory, emptyEquipment, equipmentStats } from '../public/items.js';
 import { defaultLook, validLook } from '../public/character-look.js';
+import { validHotbar, cloneHotbar } from '../public/hotbar-settings.js';
 
 const hash = token => createHash('sha256').update(token).digest('hex');
 const integer = value => Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000_000;
@@ -11,10 +12,10 @@ export function characterView(record) {
   // Recovery credentials and saved positions are private; never spread a record into a room snapshot.
   return { id: record.id, name: record.name, level: record.level, xp: record.xp, gold: record.gold,
     kills: record.kills, hp: record.hp, maxHp: record.maxHp, inventory: { ...record.inventory },
-    equipment: { ...record.equipment }, look: { ...record.look }, stats: equipmentStats(record) };
+    equipment: { ...record.equipment }, look: { ...record.look }, hotbar:record.hotbar===null?null:cloneHotbar(record.hotbar), stats: equipmentStats(record) };
 }
 
-function validate(record, legacy = false, requireLook = true) {
+function validate(record, legacy = false, requireLook = true, requireHotbar = true) {
   if (!record || typeof record.id !== 'string' || !/^[0-9a-f-]{36}$/.test(record.id) ||
       typeof record.name !== 'string' || !record.name.trim() || record.name.length > 16 ||
       typeof record.tokenHash !== 'string' || !/^[0-9a-f]{64}$/.test(record.tokenHash) ||
@@ -24,6 +25,7 @@ function validate(record, legacy = false, requireLook = true) {
     throw new Error('角色存档结构无效');
   }
   if(requireLook && !validLook(record.look))throw new Error('角色外观存档无效');
+  if(requireHotbar && record.hotbar!==null && !validHotbar(record.hotbar))throw new Error('角色技能栏存档无效');
   if (legacy) {
     if (record.maxHp !== 100 + (record.level - 1) * 20) throw new Error('旧版角色生命存档无效');
   } else {
@@ -53,19 +55,20 @@ export class CharacterStore {
       let original;
       try { original = readFileSync(this.saveFile); data = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(original)); }
       catch (error) { throw new Error(`无法读取角色存档，原文件保留：${error.message}`); }
-      if (![1, 2, 3].includes(data.version) || !Array.isArray(data.characters)) throw new Error('不支持的角色存档版本，原文件保留');
+      if (![1, 2, 3, 4].includes(data.version) || !Array.isArray(data.characters)) throw new Error('不支持的角色存档版本，原文件保留');
       for (const record of data.characters) {
-        validate(record, data.version === 1, data.version === 3);
+        validate(record, data.version === 1, data.version >= 3, data.version === 4);
         if (this.records.has(record.id)) throw new Error('角色存档含重复 ID');
         if (data.version === 1) {
           record.inventory = { ...starterInventory(), wolfPelt: record.inventory.wolfPelt };
           record.equipment = emptyEquipment();
         }
         if(data.version<3)record.look=defaultLook();
+        if(data.version<4)record.hotbar=null;
         validate(record);
         this.records.set(record.id, record);
       }
-      if (data.version < 3) { this.legacySource = original; this.legacyVersion=data.version; this.dirty = true; }
+      if (data.version < 4) { this.legacySource = original; this.legacyVersion=data.version; this.dirty = true; }
       this.savedAt = data.savedAt || null;
     }
   }
@@ -79,7 +82,7 @@ export class CharacterStore {
     }
     const token = randomBytes(32).toString('hex');
     const record = { id: randomUUID(), name, tokenHash: hash(token), createdAt: Date.now(), updatedAt: Date.now(),
-      level: 1, xp: 0, gold: 0, kills: 0, hp: 100, maxHp: 100, inventory: starterInventory(), equipment: emptyEquipment(), look: defaultLook(), positions: {} };
+      level: 1, xp: 0, gold: 0, kills: 0, hp: 100, maxHp: 100, inventory: starterInventory(), equipment: emptyEquipment(), look: defaultLook(), hotbar:null, positions: {} };
     this.records.set(record.id, record); this.touch(record); this.flush();
     return { record, resumeToken: token, restored: false };
   }
@@ -107,7 +110,7 @@ export class CharacterStore {
         try { fsyncSync(backupFd); } finally { closeSync(backupFd); }
         this.legacySource = undefined;
       }
-      writeFileSync(temporary, JSON.stringify({ version: 3, savedAt: now, characters: [...this.records.values()] }, null, 2), { mode: 0o600, flag: 'wx' });
+      writeFileSync(temporary, JSON.stringify({ version: 4, savedAt: now, characters: [...this.records.values()] }, null, 2), { mode: 0o600, flag: 'wx' });
       const fd = openSync(temporary, 'r');
       try { fsyncSync(fd); } finally { closeSync(fd); }
       renameSync(temporary, this.saveFile);

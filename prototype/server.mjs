@@ -9,6 +9,7 @@ import { CombatRoom, COMBAT, syncPlayerStats } from './game/combat.mjs';
 import { SKILLS } from './public/skills.js';
 import { changeEquipment } from './game/equipment.mjs';
 import { validLook } from './public/character-look.js';
+import { validHotbar, cloneHotbar } from './public/hotbar-settings.js';
 
 const PUBLIC = fileURLToPath(new URL('./public/', import.meta.url));
 const CONVERTED = fileURLToPath(new URL('../game-data/converted/', import.meta.url));
@@ -137,6 +138,14 @@ export function createGameServer({ saveFile, clock = Date.now, allowedOrigins = 
         const result = changeEquipment(ws.character, msg);
         if (result.error) return notice(ws, result.error);
         syncPlayerStats(ws); changed(ws, true); notice(ws, result.message);
+      } else if (msg.type === 'hotbar' && ws.player) {
+        if(!Number.isSafeInteger(msg.requestId)||msg.requestId<1||msg.requestId>1_000_000_000)return notice(ws,'技能栏请求编号无效');
+        const result=(ok,message)=>send(ws,{type:'hotbar-result',requestId:msg.requestId,ok,message,
+          hotbar:ws.character.hotbar===null?null:cloneHotbar(ws.character.hotbar),savedAt:store.savedAt});
+        if(!validHotbar(msg.settings)||(msg.initializeOnly!==undefined&&typeof msg.initializeOnly!=='boolean'))return result(false,'技能栏设置无效，未修改角色存档');
+        if(msg.initializeOnly&&ws.character.hotbar!==null)return result(false,'已恢复服务器技能栏，未使用旧版本机设置');
+        ws.character.hotbar=cloneHotbar(msg.settings);changed(ws,true);
+        result(true,'技能栏已保存到服务器');
       } else if (msg.type === 'look' && ws.player) {
         if (!validLook(msg.look)) return notice(ws, '外观选项无效');
         if (ws.player.hp<=0 || combatRooms.get(ws.roomId).casts.has(ws.player.id)) return notice(ws, '倒地或施法时暂不能更换外观');

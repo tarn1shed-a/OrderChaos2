@@ -1,7 +1,8 @@
 import { SKILLS } from './skills.js';
 import {defaultHotbar,bindingLabel,swapHotbarSlots,rebindHotbarSlot,hotbarSkillForEvent,loadHotbar,saveHotbar} from './hotbar-settings.js';
+import {createHotbarSync} from './hotbar-sync.js';
 
-export function createHotbarUI({root,panel,toggle,closeButton,rows,status,reset,onEditingChange,onChange}){
+export function createHotbarUI({root,panel,toggle,closeButton,rows,status,reset,retryButton,send,onEditingChange,onChange}){
   const slots=[...root.querySelectorAll('.hotbar-slot')],buttons=new Map(Object.keys(SKILLS).map(id=>[id,document.getElementById('field-'+id)]));
   let settings=defaultHotbar(),characterId=null,editing=false,listening=null,picked=null,drag=null,ghost=null,suppressClickUntil=0,warning=null;
   function say(text){status.textContent=text;}
@@ -43,8 +44,7 @@ export function createHotbarUI({root,panel,toggle,closeButton,rows,status,reset,
   }
   function commit(next){
     settings=next;picked=null;listening=null;render();
-    const result=saveHotbar(storage(),characterId,settings);
-    warning=result.error||null;say(result.saved?'已保存到本机浏览器 · 刷新和换房间后仍保留。':result.error);
+    sync.change(settings);
   }
   function select(index){
     if(!settings.slots[index]&&picked===null){say('先点选一个技能，再点选要放入的格子。');return;}
@@ -57,11 +57,18 @@ export function createHotbarUI({root,panel,toggle,closeButton,rows,status,reset,
     clearDrag();editing=open;listening=null;picked=null;panel.hidden=!open;
     root.classList.toggle('hotbar-editing',open);toggle.setAttribute('aria-expanded',String(open));
     onEditingChange?.(open);render();
-    if(open){say(warning||'设置按角色保存在当前浏览器，修改后自动保存。');closeButton.focus();}
+    if(open){say(warning||'设置随角色保存到服务器，修改后自动同步。');closeButton.focus();}
   }
+  const sync=createHotbarSync({send,loadLegacy:id=>loadHotbar(storage(),id),cache:(id,value)=>saveHotbar(storage(),id,value),onState:state=>{
+    const changed=JSON.stringify(settings)!==JSON.stringify(state.settings);
+    settings=state.settings;warning=state.message;retryButton.hidden=!state.canRetry;
+    if(changed){picked=null;listening=null;render();}
+    say(state.message);
+  }});
   toggle.addEventListener('click',()=>setEditing(!editing));
   closeButton.addEventListener('click',()=>setEditing(false));
   reset.addEventListener('click',()=>commit(defaultHotbar()));
+  retryButton.addEventListener('click',()=>sync.retry());
   const indexOf=element=>{const slot=element?.closest?.('.hotbar-slot');return slot&&root.contains(slot)?slots.indexOf(slot):-1;};
   root.addEventListener('click',event=>{
     if(!editing)return;
@@ -125,13 +132,12 @@ export function createHotbarUI({root,panel,toggle,closeButton,rows,status,reset,
   render();
   return {
     get isEditing(){return editing;},
-    setCharacter(id){
-      setEditing(false);toggle.disabled=!id;
-      if(characterId===id)return;
-      characterId=id;
-      const loaded=id?loadHotbar(storage(),id):{settings:defaultHotbar()};settings=loaded.settings;warning=loaded.warning||null;render();
-      if(loaded.warning)say(loaded.warning);
+    setCharacter(character){
+      setEditing(false);characterId=character.id;toggle.disabled=false;sync.connect(character);render();
     },
+    syncCharacter(character){sync.progress(character);},
+    receiveResult(result){sync.result(result);},
+    disconnect(){sync.disconnect();setEditing(false);toggle.disabled=true;},
     close(){if(editing)setEditing(false);},
     keyForSkill(id){const index=settings.slots.indexOf(id);return index>=0?bindingLabel(settings.bindings[index]):'—';},
     skillForEvent(event){return editing?null:hotbarSkillForEvent(settings,event);},

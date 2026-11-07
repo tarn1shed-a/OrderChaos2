@@ -64,7 +64,7 @@ test('v1 saves migrate additively once with an exact backup; credentials, positi
   const reloaded=new CharacterStore(file).resolveCharacter('ignored',old.record.id,old.resumeToken).record;
   assert.equal(reloaded.inventory.trainingSword,0);assert.equal(reloaded.equipment.mainHand,'trainingSword');
   assert.equal(readdirSync(dir).filter(name=>name.includes('.v1-backup-')).length,1);
-  assert.equal(JSON.parse(readFileSync(file,'utf8')).version,3);
+  assert.equal(JSON.parse(readFileSync(file,'utf8')).version,4);
 });
 
 test('invalid equipment saves fail without replacing the file or creating a migration backup',t=>{

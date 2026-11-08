@@ -59,8 +59,5 @@ __pycache__/
 *.tar.gz
 *.tgz
 .vercel/
-prototype/dist-vercel/
-prototype/test-results/
 .env
 .env.*
-!.env.example

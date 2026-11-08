@@ -29,10 +29,4 @@ class PlayerSpellEffectsTests(unittest.TestCase):
   self.assertEqual(p['effects']['playerFireHit']['sourceReference'],0x90000023)
   self.assertEqual([r['effectId'] for r in p['effects']['playerFireHit']['groupRows']],[27,39])
   self.assertEqual([r['effectId'] for r in p['unresolvedReferences']],[39]);self.assertEqual(p['effects']['arcaneMissile']['missileType'],0x20001)
- @unittest.skipUnless((ROOT/'game-data/converted/effects/combat.json').is_file(),'Converted player effects remain local')
- def test_real_native_mesh_and_source_layers_are_complete_and_use_correct_materials(self):
-  d=json.loads((ROOT/'game-data/converted/effects/combat.json').read_text());f=d['effects']['playerFireMissile']
-  self.assertEqual(len(f['modelNodes']),2);self.assertTrue(f['verification']['completePayload']);self.assertEqual(f['verification']['bytesConsumed'],f['verification']['fileSize'])
-  self.assertEqual([n['material']['id'] for n in f['modelNodes']],[7,7]);self.assertEqual(d['attachments']['effects']['playerFireHit']['slot'],'targetGround')
-  self.assertEqual(d['attachments']['effects']['arcaneHit']['sourceStateIds'],[131])
 if __name__=='__main__':unittest.main()

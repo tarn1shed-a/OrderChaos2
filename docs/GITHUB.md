@@ -1,26 +1,16 @@
-# 上传 GitHub 前的项目约定
+# 仓库内容约定
 
-仓库只管理自编代码、依赖锁文件、配置示例和研究说明。游戏资源另行传输。
+当前仓库只保留离线研究工具、必要检查和证据说明。自写网页/游戏服务器、相关测试和发布入口已删除；历史原型可从审计基线提交1c77133或本地忽略备份追溯。
 
-| 上传 | 不上传 |
-|---|---|
-| `prototype/` 源码、测试、锁文件 | `node_modules/`、构建与部署产物 |
-| `tools/` Python 工具与依赖说明 | `.venv/`、`__pycache__/` |
-| README、`docs/`、分析文字 | `analysis/raw/`、分析截图 |
-| `.env.example`、启动脚本 | `.env`、数据库、日志、备份 |
-| GitHub 源码检查配置 | APK、原始/解包/转换资源，整个 `game-data/` |
+上传：研究脚本、依赖说明、测试、README、文档及CI配置。
 
-新仓库不要自动生成 README、许可证或 `.gitignore`，以免与本地已有文件冲突。将你自己的仓库 URL 配置为 `origin` 后再推送；代码许可证和仓库可见性由仓库所有者确定。
-
-检查待上传内容：
+不上传：APK、原生库、原始/解包/转换资源、完整表格、原生转储、截图、私有存档、凭据和备份。整个 `game-data/`、`analysis/raw/`、`runtime/`、`backups/` 保持忽略。
 
 ```sh
 git status --short
 git diff --cached --stat
 git ls-files
-git check-ignore game-data/converted/manifest.json
+git check-ignore game-data/extracted/world/tutorial.wld
 ```
 
-项目设置为 `private: true` 只防止意外发布到包仓库，并不决定 GitHub 仓库的可见性；GitHub 创建仓库时仍需选择 Private。
-
-首次提交前配置你自己的 Git 用户名与邮箱，然后提交。朋友克隆后的启动和资源迁移步骤见 [LOCAL_SERVER.md](LOCAL_SERVER.md)。GitHub 检查不依赖游戏资源；模型集成测试在无资源时会明确显示跳过。
+CI只验证仓库中的研究工具。缺少私有输入时源样本测试会跳过，不能代替原文件核验或原进程观察。当前没有朋友服务器启动、数据库迁移或网页部署步骤。

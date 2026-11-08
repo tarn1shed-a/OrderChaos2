@@ -2,7 +2,7 @@
 
 Static decoding only. Native readers a8674c/a85534/a86b3c confirm field order,
 axis conversion (x,z,-y), radian angles and four uint16 values per face.
-Original face/shape flags are retained; the web query policy is explicit.
+Original face/shape flags are retained; no browser query or demonstration scene is generated.
 """
 import hashlib
 import math
@@ -80,27 +80,3 @@ def decode_phy(raw):
         shapes.append(record)
     if at!=len(raw):raise ValueError('Trailing PHY data')
     return {'shapes':shapes,'sourceSHA256':hashlib.sha256(raw).hexdigest(),'bytesConsumed':at}
-
-def recover_collision(extract, scenery):
-    sources={};instances=[]
-    for entry in scenery:
-        path=entry['model'].removesuffix('.bdae')+'.phy'
-        value=extract(path);raw=bytes(value) if isinstance(value,(bytes,bytearray)) else Path(value).read_bytes()
-        parsed=decode_phy(raw);sources[path]=parsed
-        for instance in entry['instances']:
-            instances.append({**instance,'sourcePHY':path})
-    door_path='model/scene_generator_temple_000/god_door_01.phy'
-    value=extract(door_path);raw=bytes(value) if isinstance(value,(bytes,bytearray)) else Path(value).read_bytes()
-    sources[door_path]=decode_phy(raw)
-    return {'format':'oc2-scene-collision-v2','sources':sources,'instances':instances,
-        'dynamicLab':{'sourcePHY':door_path,'sourceModel':'/assets/models/dynamic-door.json',
-            'placement':'local validation fixture; not an original map placement or original door trajectory',
-            'logicalPosition':[920,360],'lift':9,'transitionMs':800,'interactDistance':4},
-        'query':{'forwardMargin':struct.unpack('<f',struct.pack('<f',.31))[0],
-                 'stepProbeCap':.5,'wallNormalYThreshold':.5,'stepProbeMultiplier':3.5},
-        'provenance':{'sourceAxes':'x,z,-y; boxes add native Y yaw; AITM instance TRS retained',
-            'nativeReaders':['0xa8674c','0xa85534','0xa86b3c'],
-            'nativeMotion':['0x90c610','0xa878c0','0xa883a4'],
-            'limitations':['Source boxes/cylinders/polyhedra and node bindings recovered. Browser ray/slide queries reimplement a bounded static subset, not the original complete engine.',
-                'Runtime-object registration, transform updates, self exclusion and disable-byte filtering are traced. Original actor registration, moving-platform carry, push/crush and vehicle policies are not restored.',
-                'Web queries use both face directions, finite ground support and a 0.5 step cap. Complete original slope, terrain contact and exceptional branches remain under study.']}}

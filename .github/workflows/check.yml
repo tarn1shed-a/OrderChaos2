@@ -8,18 +8,6 @@ permissions:
   contents: read
 
 jobs:
-  multiplayer:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-      - run: npm install --global pnpm@11.25.0
-      - run: pnpm install --frozen-lockfile
-        working-directory: prototype
-      - run: pnpm test
-        working-directory: prototype
   resource-tools:
     runs-on: ubuntu-latest
     steps:
@@ -35,12 +23,10 @@ jobs:
       - run: python tools/bdae_skin_tests.py
       - run: python tools/beff_effects_tests.py
       - run: python tools/skill_attachments_tests.py
-      - run: python tools/scene_render_tests.py
       - run: python tools/ui_assets_tests.py
       - run: python tools/chinese_fonts_tests.py
       - run: python tools/skill_icons_tests.py
       - run: python tools/skill_ui_assets_tests.py
-      - run: python tools/art_library_tests.py
       - run: python tools/hud_assets_tests.py
       - run: python tools/optimized_abc_tests.py
       - run: python tools/control_assets_tests.py
@@ -89,6 +75,7 @@ jobs:
       - run: python tools/navmesh_tests.py
       - run: python tools/player_spell_effects_tests.py
       - run: python tools/scene_collision_tests.py
+      - run: python tools/map_loading_evidence_tests.py
       - run: python tools/character_portraits_tests.py
       - run: python tools/inventory_assets_tests.py
       - run: python tools/item_icons_tests.py

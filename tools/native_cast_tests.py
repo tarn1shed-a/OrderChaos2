@@ -24,18 +24,4 @@ class NativeCastTests(unittest.TestCase):
         self.assertEqual(offsets['moveinterrupt'],0x48);self.assertEqual(offsets['chantTime'],0x5c);self.assertEqual(offsets['channelTime'],0x64)
         rows={r['id']:r for r in d['rows']};self.assertEqual(rows[2368]['chantTime'],2000);self.assertEqual(rows[376]['coolDownTime'],20000)
         self.assertEqual(rows[360]['channelTime'],1500);self.assertEqual(rows[360]['channelIntervalTime'],300)
-    @unittest.skipUnless((ROOT/'game-data/converted/gameplay/native.json').is_file(),'Converted spells remain local')
-    def test_recovered_stage_clips_and_cooldowns_match_actual_model_without_alias_loss(self):
-        p=json.loads((ROOT/'game-data/converted/gameplay/native.json').read_text());model=json.loads((ROOT/'game-data/converted/models/elf-female.json').read_text())
-        spells=p['casting']['spells'];clips={c['name']:c for c in model['clips']}
-        self.assertEqual(p['casting']['serverWaitExtraMs'],5000);self.assertEqual(spells['fireball']['sourceSkillId'],17)
-        self.assertEqual(spells['frost_blast']['visuals']['2']['pre']['clip'],'skill_frost_blast')
-        for s in spells.values():
-            for v in s['visuals'].values():
-                for k in ['pre','loop']:
-                    if k in v:
-                        c=clips[v[k]['clip']];self.assertEqual(c['sourceName'],v[k]['sourceRange'])
-                        self.assertAlmostEqual(c['duration']*1000,v[k]['durationMs'])
-                        self.assertGreater(v[k]['durationMs'],0)
-        self.assertIn('skill_fireball',clips);self.assertIn('skill_frost_blast',clips)
 if __name__=='__main__':unittest.main()

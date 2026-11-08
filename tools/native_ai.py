@@ -2,7 +2,7 @@
 import hashlib
 import json
 from pathlib import Path
-from navmesh import decode_nav,build_graph
+from navmesh import decode_nav
 from skill_attachments import decode_ftable
 from native_combat import descriptor_fields
 
@@ -54,14 +54,11 @@ def recover_ai(extract,output):
             path=f'world/tutorial/navmesh/{x:04d}_{z:04d}.nav';tile=decode_nav(raw(path))
             if tile['tile']!=[x,z]:raise ValueError('Navigation filename and header coordinates differ')
             tile['sourcePath']=path;tiles.append(tile)
-    navigation={'format':'oc2-source-navigation-v1','nodes':build_graph(tiles),
-        'tiles':[{'tile':t['tile'],'sourcePath':t['sourcePath'],'agent':t['agent'],'bounds':t['bounds'],'verification':t['verification']} for t in tiles],
-        'limitations':['DNAV v4 layout and explicit polygon neighbours are recovered. Web A* and portal-midpoint routing are independent implementations, not the original Detour query execution.',
-            'Only selected ground polygons with flags1/area0 and no off-mesh links are accepted; source boundary portals are stitched by overlap and height tolerance.',
-            'Physics owns contact and gravity; nav polygons choose routes. Dynamic obstacles are checked against current collision geometry, without claiming native tile-cache carving or avoidance.']}
-    out=Path(output);(out/'maps').mkdir(parents=True,exist_ok=True);(out/'maps/navigation.json').write_text(json.dumps(navigation,separators=(',',':')))
+    navigation={'format':'oc2-navigation-record-evidence-v1','tiles':tiles,
+        'limitations':['Raw decoded DNAV source records only. The local portal graph and web routing have been removed. This does not execute the original Detour query.']}
+    out=Path(output);out.mkdir(parents=True,exist_ok=True);(out/'navigation-evidence.json').write_text(json.dumps(navigation,separators=(',',':')))
     return {'format':'oc2-npc-evidence-v1','moveActions':MOVE_ACTIONS,
-        'navigation':{'url':'/assets/maps/navigation.json','format':navigation['format'],'tileCount':len(tiles),'polygonCount':len(navigation['nodes'])},
+        'navigation':{'evidenceFile':'navigation-evidence.json','format':navigation['format'],'tileCount':len(tiles),'polygonCount':sum(len(t['polygons']) for t in tiles)},
         'wolfModel':model,'wolfCandidates':wolves,'wolfSkills':[r for r in tables['creature_skill'] if r['creatureID'] in entries],
         'previewOriginalSpawns':spawns,'previewOriginalWolfSpawns':[r for r in spawns if r['entry'] in entries],
         'tableProofs':proofs,'nonzeroAIPlans':sum(r['aiplan']!=0 for r in tables['creature_proto']),

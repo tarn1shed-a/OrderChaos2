@@ -6,13 +6,12 @@ from pathlib import Path
 
 from terrain_lighting import (ROUTINES, STRINGS, FORMAT, final_water_flags, loaded_chunk_flags,
     rgb565, terrain_effect, terrain_vertex, terrain_fragment, terrain_texture_encoding,
-    lightmap_requests, recover_terrain_lighting, verify_native)
+    lightmap_requests, verify_native)
 from scene_lighting import f32
 from resource_packs import DEFAULT_SOURCE, index, normalize_resource_name, read_entry
 
 ROOT = Path(__file__).resolve().parents[1]
 NATIVE = ROOT/'analysis/raw/beff-native/library.so'
-MAP = ROOT/'game-data/converted/maps/tutorial-preview.json'
 
 
 class TerrainLightingTests(unittest.TestCase):
@@ -99,41 +98,8 @@ class TerrainLightingTests(unittest.TestCase):
                 def read(self, address, size): return bytes(size) if address == changed else image.read(address, size)
             with self.subTest(address=hex(changed)), self.assertRaises(ValueError): verify_native(Changed())
 
-    def source_profile(self, change=None):
-        entries = {}
-        for entry in index(DEFAULT_SOURCE): entries.setdefault(normalize_resource_name(entry['path']), []).append(entry)
-        def extract(path):
-            candidates = entries[normalize_resource_name(path)]; self.assertEqual(len(candidates), 1, path)
-            raw = read_entry(candidates[0], DEFAULT_SOURCE); return change(path, raw) if change else raw
-        terrain = json.loads(MAP.read_text())
-        return recover_terrain_lighting(extract, lambda p: normalize_resource_name(p) in entries, terrain, lambda p:'/assets/textures/'+p+'.png')
 
-    @unittest.skipUnless((DEFAULT_SOURCE/'tutorial.bin').is_file() and MAP.is_file(), 'Original terrain stays local')
-    def test_actual9_tiles_use8_original_pages_and_unique_world_fallback_with_water_cleared(self):
-        p = self.source_profile(); self.assertEqual(p['format'], FORMAT); self.assertEqual(len(p['tiles']), 9)
-        self.assertEqual(sum(t['lightmap']['fallback'] for t in p['tiles']), 1)
-        for row in p['tiles']:
-            self.assertEqual(set(row['runtimeFlags']), {0})
-            self.assertEqual(row['lightmap']['encoding'], 'ETC1')
-            if row['lightmap']['fallback']:
-                self.assertEqual(row['tile'], [-43, 3]); self.assertEqual(row['lightmap']['width'], 16)
-                self.assertEqual(row['lightmap']['sourcePath'], 'texture/terrain_lightmap_tutorial.tga')
-            else: self.assertEqual(row['lightmap']['width'], 128)
-        for profile in p['effect']['profiles']:
-            self.assertEqual(profile['techniques'][0]['vertex']['defines'], {'COLOR0': '', 'LIGHTMAP': ''})
-            self.assertEqual(profile['techniques'][0]['state']['depthFunctionGL'], 0x201)
 
-    @unittest.skipUnless((DEFAULT_SOURCE/'tutorial.bin').is_file() and MAP.is_file(), 'Original terrain stays local')
-    def test_changed_shader_nonwhite_vertex_and_viable_water_reject_unsupported_render_branches(self):
-        for kind in ('shader', 'color', 'water'):
-            def change(path, data):
-                if kind == 'shader' and path.endswith('.glsl'): return data+b'\n'
-                if path.endswith('.trn'):
-                    data = bytearray(data); version, = struct.unpack_from('<I', data, 4)
-                    if kind == 'color': struct.pack_into('<H', data, 24+64*(16 if version == 9 else 24)+8450, 0)
-                    if kind == 'water': struct.pack_into('<h', data, 28, 20000)
-                return data
-            with self.subTest(kind=kind), self.assertRaises(ValueError): self.source_profile(change)
 
 
 if __name__ == '__main__': unittest.main()

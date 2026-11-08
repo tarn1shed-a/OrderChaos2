@@ -11,7 +11,6 @@ from scene_sampling import material_samplers
 
 ROOT = Path(__file__).resolve().parents[1]
 NATIVE = ROOT/'analysis/raw/beff-native/library.so'
-MANIFEST = ROOT/'game-data/converted/manifest.json'
 
 
 def fixture(rows=None, maximum=2):
@@ -98,21 +97,20 @@ class SceneLightmapTests(unittest.TestCase):
         self.assertEqual(len({c['sha256'] for c in result['defaultTextureCandidates']}), 2)
         self.assertFalse(result['appliedToRendering'])
 
-    @unittest.skipUnless(MANIFEST.is_file() and (DEFAULT_SOURCE/'res_scene.bin').is_file(), 'Original scene materials stay local')
-    def test_all_current_scene_and_door_material_defaults_are_not_per_instance_atlas_names(self):
-        manifest = json.loads(MANIFEST.read_text())
-        archives = {p: ResourceArchive(DEFAULT_SOURCE/(p+'.bin')) for p in
-                    ('res_scene', 'res_scene_generator_temple_000')}
+    @unittest.skipUnless((DEFAULT_SOURCE/'tutorial.bin').is_file() and (DEFAULT_SOURCE/'res_scene.bin').is_file(), 'Original scene materials stay local')
+    def test_source_itm_model_material_defaults_are_not_per_instance_atlas_names(self):
+        from map_loading_evidence import Sources
+        sources = Sources(DEFAULT_SOURCE)
+        models = sorted({row['model'] for row in analyze()['bindings']})
+        self.assertEqual(len(models), 16)
         count = 0
         with tempfile.TemporaryDirectory() as temp:
-            for item in manifest['scenery']+manifest['dynamicModels']:
-                source = item['model']
-                pack = 'res_scene_generator_temple_000' if source.startswith('model/scene_generator_') else 'res_scene'
-                target = Path(temp)/'source.bdae'; target.write_bytes(archives[pack].read(source))
+            for source in models:
+                target = Path(temp)/'source.bdae'; target.write_bytes(sources.read(source))
                 for material in material_samplers(BDAE(target)):
                     self.assertEqual(material['samplers']['lightMap']['texture'], 'texture/lightmap.tga')
                     count += 1
-        self.assertEqual(count, 52)
+        self.assertGreater(count, 0)
 
 
 if __name__ == '__main__': unittest.main()

@@ -140,6 +140,7 @@ python3 -m venv .venv
 .venv/bin/python tools/scene_effect_techniques_tests.py
 .venv/bin/python tools/scene_effect_compiler_tests.py
 .venv/bin/python tools/scene_effect_registration_tests.py
+.venv/bin/python tools/scene_effect_remapping_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -255,3 +256,5 @@ python3 tools/art_library.py import /path/to/oc2-assets.zip
 `.venv/bin/python tools/scene_effect_compiler.py` 继续执行原1406e94读取已生成的技术链表、建立指针数组并调用原效果构造器，入口寄存器和数组均不替换；停在缓存登记之前。输入holder已被消耗，但公开输出尚未发布，不能把临时对象说成已登记的活动效果。程序编译仍是上轮夹具，完整编译/缓存/driver和GPU继续待恢复，游戏画面不变。
 
 `.venv/bin/python tools/scene_effect_registration.py` 接着执行原缓存未命中登记、命中复用、引用转移、临时对象析构及1406e94完整返回；用真实hash冲突名字核对hash命中后仍比较名称。当前限预留容量和空反射/绑定，锁、分配器、已有缓存身份及shader程序仍是夹具，不能等同原设备活动缓存或完整渲染恢复。素材、界面和存档不变。
+
+`.venv/bin/python tools/scene_effect_remapping.py` 核实registry+A8是技术重映射规则链，执行原1408860/140b78c生成缓存映射，再用原13ed140按明确profile/variation读取同一张表。规则、数量和driver输入仍是实验值；实际规则来源和driver+320生产尚未核实，不把此表应用到游戏画面。源数据和报告仅留忽略目录。

@@ -81,6 +81,7 @@ jobs:
       - run: python tools/device_instance_evidence_tests.py
       - run: python tools/entity_model_evidence_tests.py
       - run: python tools/model_completion_evidence_tests.py
+      - run: python tools/bres_world_bounds_evidence_tests.py
       - run: python tools/character_portraits_tests.py
       - run: python tools/inventory_assets_tests.py
       - run: python tools/item_icons_tests.py

@@ -77,6 +77,7 @@ jobs:
       - run: python tools/scene_collision_tests.py
       - run: python tools/map_loading_evidence_tests.py
       - run: python tools/map_streaming_evidence_tests.py
+      - run: python tools/map_selection_evidence_tests.py
       - run: python tools/character_portraits_tests.py
       - run: python tools/inventory_assets_tests.py
       - run: python tools/item_icons_tests.py

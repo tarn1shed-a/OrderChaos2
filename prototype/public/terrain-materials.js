@@ -1,4 +1,6 @@
-// Source ATIL albedo only. Native lightmaps/lighting and quality are pending.
+import {createLitTerrainMaterial,validateTerrainLighting} from './terrain-lighting.js';
+import {guardSceneOrientation} from './scene-culling.js';
+// The legacy albedo bridge remains available for isolated conversion tests.
 export function sourceUV(x,z){return {base:[x/8,z/8],mask:[x/64,z/64]};}
 export function sourceLayerColor(colors,mask,indices){
   let color=colors[0].slice(0,3);
@@ -44,22 +46,26 @@ export function sourceTerrainMaterial(THREE,layers,textures,mask){
   material.customProgramCacheKey=()=>`source-terrain-albedo-v1:${layers.map(v=>Number(v>=0)).join('')}`;
   return material;
 }
-export async function createSourceTerrain(THREE,terrain,profile,origin,loadTexture){
+export async function createSourceTerrain(THREE,terrain,profile,origin,loadTexture,sourceLighting=null){
   if(profile?.format!=='oc2-terrain-materials-v1'||profile.world!==terrain.world||profile.tiles.length!==terrain.tileCount[0]*terrain.tileCount[1])throw new Error('原地形分层资源需要更新，请重建本地资源');
   if(new Set(profile.tiles.map(t=>t.tile.join(','))).size!==profile.tiles.length)throw new Error('原地形材质分区重复');
   if(!terrain.sourceVertexColorSummary?.white16)throw new Error('此地形的原顶点颜色尚未接入');
   const samplers=new Map(),meshes=[];
+  const lightingTiles=sourceLighting?validateTerrainLighting(terrain,profile,sourceLighting.profile):null;
   async function sampler(url,repeat){
     const key=`${Number(repeat)}:${url}`;
     if(!samplers.has(key))samplers.set(key,loadTexture(url,THREE.NoColorSpace).then(source=>{
       const t=source.clone();t.colorSpace=THREE.NoColorSpace;t.flipY=false;t.wrapS=t.wrapT=repeat?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping;t.repeat.set(1,1);t.needsUpdate=true;return t;
     }));return samplers.get(key);
   }
-  const empty=new THREE.DataTexture(new Uint8Array(4),1,1);empty.needsUpdate=true;
+  const empty=new THREE.DataTexture(new Uint8Array(4),1,1);empty.flipY=false;empty.needsUpdate=true;
   for(const tile of profile.tiles){
     const mask=tile.mask?await sampler(tile.mask.url,false):empty,{geometry,layers}=tileGeometry(THREE,terrain,tile,origin),materials=[];
-    for(const indices of layers){const textures=await Promise.all(indices.map(index=>sampler(index>=0?tile.textures[index].url:profile.fallback,true)));materials.push(sourceTerrainMaterial(THREE,indices,textures,mask));}
+    const light=lightingTiles?.get(tile.tile.join(',')),lightmap=light?await sampler(light.lightmap.url,true):null;
+    if(lightmap&&(lightmap.image.width!==light.lightmap.width||lightmap.image.height!==light.lightmap.height))throw new Error('原地形光照图尺寸不匹配');
+    for(const indices of layers){const textures=await Promise.all(indices.map(index=>sampler(index>=0?tile.textures[index].url:profile.fallback,true)));materials.push(sourceLighting?createLitTerrainMaterial(THREE,indices,textures,mask,lightmap,sourceLighting.context):sourceTerrainMaterial(THREE,indices,textures,mask));}
     const mesh=new THREE.Mesh(geometry,materials);mesh.receiveShadow=true;mesh.userData.sourceTile=tile.tile;meshes.push(mesh);
+    if(sourceLighting){mesh.userData.terrainLighting={sourcePath:light.lightmap.sourcePath,fallback:light.lightmap.fallback};guardSceneOrientation(mesh);}
   }
   return meshes;
 }

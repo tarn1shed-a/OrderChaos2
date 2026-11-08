@@ -1,5 +1,6 @@
 import {createQuestBook} from './quest-book.js';
 import {createSourceTerrain} from './terrain-materials.js';
+import {TERRAIN_LIGHTING_FORMAT} from './terrain-lighting.js';
 import {sceneDiffuseTexture} from './scene-sampling.js';
 import {createSceneMaterial} from './scene-alpha.js';
 import {applySceneCulling,guardSceneOrientation} from './scene-culling.js';
@@ -383,7 +384,11 @@ async function init() {
     hdrRenderer=createRecoveredHDR(THREE,renderer,renderProfile,await texture(renderProfile.lut.url));
     if(assets.map.materials?.format!=='oc2-terrain-materials-v1')throw new Error('原地形分层资源需要更新，请重建本地资源');
     const terrainMaterials=await json(assets.map.materials.url);
-    terrainMeshes=await createSourceTerrain(THREE,terrainData,terrainMaterials,origin,texture);
+    if(assets.terrainLighting?.format!==TERRAIN_LIGHTING_FORMAT)throw new Error('原地形光照资源缺失，请更新本地素材包');
+    const terrainLighting=await json(assets.terrainLighting.url);
+    terrainMeshes=await createSourceTerrain(THREE,terrainData,terrainMaterials,origin,texture,{profile:terrainLighting,context:bakedLighting});
+    for(const mesh of terrainMeshes)for(const material of mesh.material)material.onBeforeCompile=()=>{canvas.dataset.terrainLightShader='encoded-lightmap-tone-generic';};
+    canvas.dataset.terrainLighting=TERRAIN_LIGHTING_FORMAT;canvas.dataset.terrainLightmapTiles=String(terrainMeshes.length);canvas.dataset.terrainLightmapFallbacks=String(terrainLighting.tiles.filter(t=>t.lightmap.fallback).length);
     scene.add(...terrainMeshes);canvas.dataset.terrainMaterials=terrainMaterials.format;canvas.dataset.terrainTiles=String(terrainMeshes.length);
     modelTemplate = await loadModel(assets.player);
     // The wolf uses server state; only the bear remains a passive asset exhibit.

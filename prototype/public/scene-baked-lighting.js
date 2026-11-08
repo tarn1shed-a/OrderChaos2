@@ -26,6 +26,7 @@ export function createBakedLighting(THREE,profile,fogUniforms){
   if(new Set(zones.map(z=>z.id)).size!==zones.length||zones.some(z=>!finite(z.bounds,4)||!Number.isSafeInteger(z.priority)||z.priority<0||z.priority>0xffffffff))throw new Error('原场景光照区域不匹配');
   const initialLight=modelLight([1,1,1],[1,1,1],f(1.33),config.rgbAdds);
   const uniforms={...fogUniforms,sourceModelLight:{value:new THREE.Vector3(...initialLight)},
+    sourceTerrainLight:{value:new THREE.Vector3(...initialLight)},sourceToneOffsetNear:{value:new THREE.Vector3()},sourceToneOffsetFar:{value:new THREE.Vector3()},
     sourceToneDistance:{value:new THREE.Vector2(0,f(-1/50))},sourceToneNear:{value:new THREE.Vector3(1,1,1)},sourceToneFar:{value:new THREE.Vector3(1,1,1)}};
   let elapsed=1000,pair='',selected=null,rawDistance=[0,50];
   function choose(rows,x,z){let best=null;for(const row of rows){const b=row.bounds;if(b[0]<=x&&x<=b[2]&&b[1]<=z&&z<=b[3]&&(!best||row.priority>best.priority))best=row;}return best;}
@@ -42,12 +43,15 @@ export function createBakedLighting(THREE,profile,fogUniforms){
       if(!base)return selected; // Original no-base path retains current values.
       const t=(overlay||base).targets,tone=t.tone;
       uniforms.sourceModelLight.value.fromArray(modelLight(t.colors.light_ambient,t.colors.light_diffuse,t.intensities.model_intensity_lightMap,config.rgbAdds));
+      uniforms.sourceTerrainLight.value.fromArray(modelLight(t.colors.light_ambient,t.colors.light_diffuse,t.intensities.intensity_lightMap,config.rgbAdds));
+      if(!finite(tone.offsetTargets,3))throw new Error('Invalid source tone offsets');
+      uniforms.sourceToneOffsetNear.value.fromArray(tone.offsetTargets);uniforms.sourceToneOffsetFar.value.fromArray(tone.offsetTargets);
       if(tone.rawDistance!==null){if(!finite(tone.rawDistance,2)||tone.rawDistance[1]<=0)throw new Error('Invalid source tone target');rawDistance=tone.rawDistance.map(f);}
       uniforms.sourceToneDistance.value.set(rawDistance[0],f(-1/Math.max(rawDistance[1],f(.1))));
       for(const [key,value]of [['sourceToneNear',tone.gainNear],['sourceToneFar',tone.gainFar]])if(value!==null){if(!finite(value,3))throw new Error('Invalid source tone gain');uniforms[key].value.fromArray(value);}
       return selected;
     },
-    state:()=>({pair:selected,modelLight:uniforms.sourceModelLight.value.toArray(),toneDistance:uniforms.sourceToneDistance.value.toArray(),mode:0,slot:0}),
+    state:()=>({pair:selected,modelLight:uniforms.sourceModelLight.value.toArray(),terrainLight:uniforms.sourceTerrainLight.value.toArray(),toneDistance:uniforms.sourceToneDistance.value.toArray(),mode:0,slot:0}),
   };
 }
 

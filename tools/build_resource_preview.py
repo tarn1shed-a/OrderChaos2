@@ -34,6 +34,7 @@ from terrain_convert import convert as terrain_convert
 from terrain_materials import recover_materials as recover_terrain_materials
 from scene_texture_sampling import recover_scene_sampling
 from scene_baked_lighting import recover_model_lighting, recover_baked_lighting
+from terrain_lighting import recover_terrain_lighting
 from texture_decode import convert as texture_convert
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -198,6 +199,8 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     render_output=output/'rendering/tutorial.json';render_output.parent.mkdir(parents=True,exist_ok=True)
     render_output.write_text(json.dumps(rendering,ensure_ascii=False,indent=2))
     terrain_materials=recover_terrain_materials(extract,lambda p:normalize_resource_name(p) in by_name,output,terrain,texture)
+    terrain_lighting=recover_terrain_lighting(extract,lambda p:normalize_resource_name(p) in by_name,terrain,texture)
+    (output/'rendering/terrain-lighting.json').write_text(json.dumps(terrain_lighting,ensure_ascii=False,indent=2,allow_nan=False))
     ui = recover_ui_assets(extract, output)
     ui['skillUI'] = recover_skill_ui(extract, output)
     ui['questUI'] = recover_quest_ui(extract, output, gameplay['quests'])
@@ -242,6 +245,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
                 'effects': {'url':'/assets/effects/combat.json','format':'oc2-combat-effects-v4'},
                 'rendering':{'url':'/assets/rendering/tutorial.json','format':'oc2-scene-render-v1'},
                 'sceneBakedLighting':{'url':'/assets/rendering/baked-lighting.json','format':baked_lighting['format']},
+                'terrainLighting':{'url':'/assets/rendering/terrain-lighting.json','format':terrain_lighting['format']},
                 'ui':{'url':'/assets/ui/profile.json','format':ui['format']},
                 'gameplay':{'url':'/assets/gameplay/native.json','format':gameplay['format']},
                 'navigation':gameplay['npc']['navigation'],

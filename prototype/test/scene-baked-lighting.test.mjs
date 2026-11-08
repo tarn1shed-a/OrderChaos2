@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import {BAKED_FORMAT,BAKED_VERTEX,BAKED_FRAGMENT,modelLight,sourceVertexLight,createBakedLighting,createBakedSceneMaterial,bindInstanceLightmap} from '../public/scene-baked-lighting.js';
 import {createSceneEnvironment} from '../public/scene-environment.js';
 
-const target=(gain=1,distance=[0,17])=>({colors:{light_ambient:[1,1,1],light_diffuse:[1,.5,.25]},intensities:{model_intensity_lightMap:1.33},tone:{rawDistance:distance,gainNear:[gain,gain,gain],gainFar:[.5,.5,.5]}});
+const target=(gain=1,distance=[0,17])=>({colors:{light_ambient:[1,1,1],light_diffuse:[1,.5,.25]},intensities:{model_intensity_lightMap:1.33,intensity_lightMap:.75},tone:{rawDistance:distance,gainNear:[gain,gain,gain],gainFar:[.5,.5,.5],offsetTargets:[0,0,0]}});
 function fixture(){
  const instance={id:8,model:'synthetic',tile:[-41,2]},atlas=new THREE.Texture({width:256,height:256});atlas.colorSpace=THREE.NoColorSpace;atlas.flipY=false;
  const profile={format:BAKED_FORMAT,world:'tutorial',configuration:{modelSlot:0,forceSingleSlot:true,environmentMode:0,rgbAdds:[0,0],observedOriginalDevice:false},

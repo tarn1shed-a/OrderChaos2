@@ -147,7 +147,7 @@ def _formats(read):
     if not isinstance(manifest,dict) or not isinstance(manifest.get('format'),str) or not manifest['format']:
         raise ValueError('缺少网页资源清单版本')
     result={'web':manifest['format']}
-    for key in ('effects','rendering','ui',*(key for key in ('gameplay','collision','navigation','sceneBakedLighting') if key in manifest)):
+    for key in ('effects','rendering','ui',*(key for key in ('gameplay','collision','navigation','sceneBakedLighting','terrainLighting') if key in manifest)):
         record=manifest.get(key)
         if not isinstance(record,dict) or not isinstance(record.get('format'),str) or not record['format']:
             raise ValueError('缺少资源版本：'+key)

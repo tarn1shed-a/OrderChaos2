@@ -79,18 +79,23 @@ def rewrite(source,target,changes=None,extra=None,update_manifest=False):
 
 
 class ArtLibraryTests(unittest.TestCase):
-    def test_optional_scene_baked_profile_is_version_checked_and_exported(self):
+    def test_optional_lighting_profiles_are_version_checked_and_exported(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=fixture(Path(tmp)/'game-data/converted')
             manifest=json.loads((root/'manifest.json').read_text())
-            manifest['sceneBakedLighting']={'url':'/assets/rendering/baked-lighting.json','format':'oc2-scene-baked-lighting-v1'}
+            profiles=[('sceneBakedLighting','baked-lighting','oc2-scene-baked-lighting-v1'),
+                      ('terrainLighting','terrain-lighting','oc2-terrain-lighting-v1')]
+            for key,name,version in profiles:
+                manifest[key]={'url':f'/assets/rendering/{name}.json','format':version}
+                (root/f'rendering/{name}.json').write_text(json.dumps({'format':version}))
             (root/'manifest.json').write_text(json.dumps(manifest))
-            profile=root/'rendering/baked-lighting.json'
-            profile.write_text(json.dumps({'format':'oc2-scene-baked-lighting-v1'}))
             bundle=export_bundle(root)
-            self.assertEqual(verify_bundle(bundle['path'])['sourceFormats']['sceneBakedLighting'],'oc2-scene-baked-lighting-v1')
-            profile.write_text(json.dumps({'format':'old'}))
-            with self.assertRaisesRegex(ValueError,'不一致'):build_catalog(root)
+            formats=verify_bundle(bundle['path'])['sourceFormats']
+            for key,name,version in profiles:
+                self.assertEqual(formats[key],version)
+                profile=root/f'rendering/{name}.json';profile.write_text(json.dumps({'format':'old'}))
+                with self.assertRaisesRegex(ValueError,'不一致'):build_catalog(root)
+                profile.write_text(json.dumps({'format':version}))
 
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='oc2-art-test-')

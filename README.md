@@ -130,6 +130,7 @@ python3 -m venv .venv
 .venv/bin/python tools/scene_sky_material_tests.py
 .venv/bin/python tools/scene_sky_queue_tests.py
 .venv/bin/python tools/scene_material_cache_tests.py
+.venv/bin/python tools/scene_sky_binding_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -225,3 +226,5 @@ python3 tools/art_library.py import /path/to/oc2-assets.zip
 `.venv/bin/python tools/scene_sky_queue.py` 核对原technique索引解析、队列3/8分流和16/32字节记录写入/扩容。运行时材质标志生产者、40字节距离记录及最终排序/消费仍待恢复；源FX声明没有被当作运行时队列标志，网页天空仍未启用。
 
 `.venv/bin/python tools/scene_material_cache.py` 核对材质选择缓存的初始化/重置/复制、按名字查找与通用属性入口写入。基础技术的分组序号与完整表序号分开；Base Technique等通用字段不冒充BDAE的CurrentTechnique加载链。原修饰位/设备映射和队列标志的生产者仍待追，工具不改变网页或素材。
+
+`.venv/bin/python tools/scene_sky_binding.py` 核对BDAE类型28沿value+8名字查完整技术表后写入缓存的真实分支，使用预载effect、零普通参数表的隔离实验执行原包装/创建/遍历指令。原天空solid在声明顺序下得到2仅为显式实验结果；编译后的效果表、活动profile、队列标志和天空画面仍待恢复。

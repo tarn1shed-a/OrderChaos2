@@ -63,6 +63,7 @@ jobs:
       - run: python tools/scene_zone_selection_tests.py
       - run: python tools/scene_active_lighting_tests.py
       - run: python tools/scene_rgb_offsets_tests.py
+      - run: python tools/scene_model_slots_tests.py
       - run: python tools/navmesh_tests.py
       - run: python tools/player_spell_effects_tests.py
       - run: python tools/scene_collision_tests.py

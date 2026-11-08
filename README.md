@@ -137,6 +137,7 @@ python3 -m venv .venv
 .venv/bin/python tools/scene_shader_preprocess_tests.py
 .venv/bin/python tools/scene_shader_rewrite_tests.py
 .venv/bin/python tools/scene_effect_modifiers_tests.py
+.venv/bin/python tools/scene_effect_techniques_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -246,3 +247,5 @@ python3 tools/art_library.py import /path/to/oc2-assets.zip
 `.venv/bin/python tools/scene_shader_rewrite.py` 将原14836bc重写器接回148c160，核对专用标记状态表、semantic/texcoord属性名宏、原48字节插入记录、源码段重建与清理。两份原天空源码在该重写器中无插入，不会仅因gl_FragColor赋值而自动补alpha调用；原UnlitTexturedFP的属性标记则生成带语义后缀的名字宏。其他属性键、块展开、UBO和原设备输入仍待核对，不据此指定活动HasDiscard或更换游戏着色器。完整源码和输出仅留忽略目录。
 
 `.venv/bin/python tools/scene_effect_modifiers.py` 核对源modifier接口及天空两份描述区的零modifier输入，执行原接口、构建准入前沿、零mask的源pass委托，再把实际接口接到原效果对象构造。原源pass加载callback只记录参数，程序/反射仍是实验边界；两份profile分别核对，未指定活动设备选择，也未声称执行完整1406e94编译器。游戏画面和素材不变。
+
+`.venv/bin/python tools/scene_effect_techniques.py` 执行原零modifier的pass入列、状态复制、技术表收束和节点回收，再把生成的中间记录直接交给原效果构造器。中间单pass标志与最终表的程序标志来源分别核对；程序编译返回值、空反射、预热内存池和已选名称是明确夹具，不代表已恢复活动天空编译或GPU画面。完整源输入和实验报告仅留忽略目录。

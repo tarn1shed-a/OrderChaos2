@@ -6,6 +6,7 @@ from pathlib import Path
 from resource_packs import index, ResourceArchive, normalize_resource_name, safe_output, DEFAULT_SOURCE
 from bdae_convert import BDAE
 from scene_alpha import recover_scene_alpha
+from scene_culling import recover_scene_culling
 from bdae_character import convert_character
 from beff_effects import recover_effect, EFFECT_SOURCES
 from beff_particles import recover_materials
@@ -119,6 +120,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
                 apply_scene_transforms(reader,result)
                 result['sceneSampling']=recover_scene_sampling(extract,reader,result)
                 result['sceneAlpha']=recover_scene_alpha(extract,reader,result)
+                result['sceneCulling']=recover_scene_culling(extract,reader,result)
         result['source'] = path
         if not result['meshes']:
             raise ValueError('Model has no supported meshes')

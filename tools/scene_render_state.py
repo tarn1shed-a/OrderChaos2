@@ -1,8 +1,8 @@
 """Inspect the three observed scene FX passes, without changing web materials.
 
 Source FX state is not a complete live GPU-state capture. In particular the
-native front-face selection XORs a render-target flag; its current value and
-the browser coordinate mapping must be proved before enabling scene culling.
+native front-face selection XORs a render-target flag. The separate
+scene_culling reader follows the matching projection update before applying it.
 This independently written reader does not include original shader code.
 """
 import argparse
@@ -132,9 +132,9 @@ def analyze(archive, image):
             'conditionalShaderRule': {'define': 'ALPHA_TEST', 'reference': 0.5,
                                       'discardComparison': 'less-than-or-equal'},
             'appliedAsLiveState': False,
-            'limits': ['Front-face table is indexed by source winding XOR native render-target flag. Current target and browser coordinate mapping are pending.',
-                       'Shader defines and FX pass states are source declarations. Full technique/override/attribute binding and original lightmap evaluation remain pending.',
-                       'Existing web DoubleSide, alphaTest 0.35 and Standard lighting remain unverified adapters. No rendering change is made by this audit.']}
+            'limits': ['Front-face table is indexed by source winding XOR native render-target flag. This audit alone does not apply the corresponding projection mapping.',
+                       'Shader defines and FX pass states here are source declarations. Dedicated alpha/culling readers separately validate the observed bindings; original lightmap evaluation remains pending.',
+                       'No rendering change is made by this declaration audit; see the bounded sceneAlpha and sceneCulling runtime profiles for applied behavior.']}
 
 
 def main():

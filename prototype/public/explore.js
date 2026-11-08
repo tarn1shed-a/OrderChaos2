@@ -2,6 +2,7 @@ import {createQuestBook} from './quest-book.js';
 import {createSourceTerrain} from './terrain-materials.js';
 import {sceneDiffuseTexture} from './scene-sampling.js';
 import {createSceneMaterial} from './scene-alpha.js';
+import {applySceneCulling,guardSceneOrientation} from './scene-culling.js';
 import {createContextControl} from './context-control.js';
 import {monsterStateText} from './monster-state.js';
 import {buffText} from './buff-presentation.js';
@@ -241,6 +242,7 @@ async function loadModel(entry) {
   if(assets.scenery?.includes(entry)&&data.sceneSampling?.format!=='oc2-scene-sampling-v1')throw new Error('原场景采样资源缺失，请更新本地素材包');
   if(assets.scenery?.includes(entry)&&data.sourceIndexing?.format!=='oc2-primitive-index-windows-v1')throw new Error('原场景顶点索引资源缺失，请更新本地素材包');
   if((assets.scenery?.includes(entry)||assets.dynamicModels?.includes(entry))&&data.sceneAlpha?.format!=='oc2-scene-alpha-v1')throw new Error('原场景透明裁切资源缺失，请更新本地素材包');
+  if((assets.scenery?.includes(entry)||assets.dynamicModels?.includes(entry))&&data.sceneCulling?.format!=='oc2-scene-culling-v1')throw new Error('原场景剔除资源缺失，请更新本地素材包');
   if(data.characterMaterials){
     const profile=data.characterMaterials,textures=new Map();
     await Promise.all([...new Set(profile.materials.flatMap(mat=>Object.values(mat.samplers)))].map(async url=>{
@@ -260,7 +262,7 @@ async function loadModel(entry) {
         const compile=material.onBeforeCompile;
         material.onBeforeCompile=(shader,renderer)=>{compile(shader,renderer);canvas.dataset.sceneCutoutShader='discard-less-equal:0.5';};
       }
-      return material;
+      return applySceneCulling(THREE,material,mat,index,data.sceneCulling);
     }
     return new THREE.MeshStandardMaterial({ map: tex, color: tex ? 0xffffff : 0xa7bda1, roughness: .93, metalness: 0, side: THREE.DoubleSide, alphaTest: .35 });
   }));
@@ -288,6 +290,8 @@ async function loadModel(entry) {
   const root = new THREE.Group(); root.add(group); root.userData.height = size.y;
   if(data.sceneSampling)root.userData.sceneSampling={format:data.sceneSampling.format,diffuseMaterials:materials.length};
   if(data.sceneAlpha)root.userData.sceneAlpha={format:data.sceneAlpha.format,cutoutMaterials:data.sceneAlpha.materials.filter(m=>m.rule==='discard-less-equal').length};
+  if(data.sceneCulling)root.userData.sceneCulling={format:data.sceneCulling.format,cullMaterials:data.sceneCulling.materials.filter(m=>m.cullEnabled).length};
+  guardSceneOrientation(root,()=>{canvas.dataset.sceneCullDraw='positive-transform-checked';});
   return root;
 }
 
@@ -403,7 +407,7 @@ async function init() {
     for (const item of assets.scenery || []) {
       if (!staticModels.has(item.model)) staticModels.set(item.model, await loadModel(item));
       for (const inst of item.instances) {
-        const model = staticModels.get(item.model).clone(true);
+        const model = guardSceneOrientation(staticModels.get(item.model).clone(true),()=>{canvas.dataset.sceneCullDraw='positive-transform-checked';});
         // Scene meshes use original local-space transforms, not the avatar centering wrapper.
         const child = model.children[0]; child.position.set(0, 0, 0);
         model.position.set(inst.position[0] - origin.x, inst.position[1] - origin.y, inst.position[2] - origin.z);
@@ -414,6 +418,8 @@ async function init() {
     canvas.dataset.sceneDiffuseMaterials=String([...staticModels.values()].reduce((n,model)=>n+(model.userData.sceneSampling?.diffuseMaterials||0),0));
     canvas.dataset.sceneAlpha='oc2-scene-alpha-v1';
     canvas.dataset.sceneCutoutMaterials=String([...staticModels.values()].reduce((n,model)=>n+(model.userData.sceneAlpha?.cutoutMaterials||0),0));
+    canvas.dataset.sceneCulling='oc2-scene-culling-v1';
+    canvas.dataset.sceneCullMaterials=String([...staticModels.values()].reduce((n,model)=>n+(model.userData.sceneCulling?.cullMaterials||0),0));
     for(const item of assets.dynamicModels||[])dynamicTemplates.set(item.url,await loadModel(item));
     $('map-title').textContent = assets.map.label; $('scene-subtitle').textContent = assets.map.subtitle;
     $('asset-detail').textContent = assets.summary;
@@ -446,7 +452,7 @@ function syncDynamic(){
   for(const [id,view]of dynamicViews)if(!ids.has(id)){scene.remove(view);dynamicViews.delete(id);}
   for(const object of dynamicSnapshot){
     let view=dynamicViews.get(object.id);
-    if(!view){const template=dynamicTemplates.get(object.sourceModel);if(!template)continue;view=template.clone(true);view.children[0].position.set(0,0,0);scene.add(view);dynamicViews.set(object.id,view);}
+    if(!view){const template=dynamicTemplates.get(object.sourceModel);if(!template)continue;view=guardSceneOrientation(template.clone(true),()=>{canvas.dataset.sceneCullDraw='positive-transform-checked';});view.children[0].position.set(0,0,0);scene.add(view);dynamicViews.set(object.id,view);}
     view.position.set(object.position[0]-origin.x,object.position[1]-origin.y,object.position[2]-origin.z);
     view.quaternion.fromArray(object.quaternion);view.scale.fromArray(object.scale);
   }

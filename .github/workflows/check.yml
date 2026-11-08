@@ -55,6 +55,7 @@ jobs:
       - run: python tools/scene_texture_sampling_tests.py
       - run: python tools/scene_render_state_tests.py
       - run: python tools/scene_alpha_tests.py
+      - run: python tools/scene_culling_tests.py
       - run: python tools/navmesh_tests.py
       - run: python tools/player_spell_effects_tests.py
       - run: python tools/scene_collision_tests.py

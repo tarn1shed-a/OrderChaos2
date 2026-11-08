@@ -126,6 +126,7 @@ python3 -m venv .venv
 .venv/bin/python tools/scene_sky_frame_tests.py
 .venv/bin/python tools/scene_sky_draw_tests.py
 .venv/bin/python tools/scene_sky_collection_tests.py
+.venv/bin/python tools/scene_sky_mesh_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -212,4 +213,6 @@ python3 tools/art_library.py import /path/to/oc2-assets.zip
 
 `.venv/bin/python tools/scene_sky_draw.py` 核对默认引擎工厂创建的实际scene类型、节点挂接与两个绘制入口的阶段调度。工具固定具体虚函数目标，验证容器追加/扩容和回调参数；未观察设备自定义工厂，也没有把阶段回调记录当作GPU绘制或HDR还原。
 
-`.venv/bin/python tools/scene_sky_collection.py` 核对默认收集器和访问者的许可/裁剪门控，区分根节点列表与单根引用。普通访问者返回1不代表已经提交几何；实际天空网格类型、渲染队列、完整树遍历、矩阵及HDR仍待恢复。
+`.venv/bin/python tools/scene_sky_collection.py` 核对默认收集器和访问者的许可/裁剪门控，区分根节点列表与单根引用。普通访问者返回1不代表已经提交几何；具体网格节点由后续scene_sky_mesh继续核对，完整树遍历、渲染队列、矩阵及HDR仍待恢复。
+
+`.venv/bin/python tools/scene_sky_mesh.py` 沿原启动工厂和BDAE几何附件核对具体天空网格节点：默认提交委托是节点自身，进入原网格提交函数。隔离验证构造、门控与提交参数；材质分类生产者、最终队列/绘制顺序、矩阵和HDR仍待恢复，未启用网页天空。

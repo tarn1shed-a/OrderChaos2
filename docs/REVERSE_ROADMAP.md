@@ -27,7 +27,7 @@
 | 编号 | 系统与检查内容 | 当前范围 / 状态 | 后续核对 |
 | --- | --- | --- | --- |
 | R00 | APK启动、DLC与资源查找 | 已接入：索引、解压、CRC、按需转换 | 原挂载优先级、失效在线服务边界 |
-| R01 | 地形、建筑、场景节点 | 当前主线：3×3地块、39实例；B1.3c实例图集/B2地形光照已接；B3.2b2b2b1队列3/8条件分流与16/32字节记录核查完成，尚未接天空画面 | 下一M01 B3.2b2b2b2运行时材质标志/索引生产者、40字节距离记录与排序/消费，再续调用标志/世界矩阵/HDR和天空参数；其余原质量/LOD/fade/阴影、水面、其他RGB别名/slot1缺页保留 |
+| R01 | 地形、建筑、场景节点 | 当前主线：3×3地块、39实例；B1.3c实例图集/B2地形光照已接；B3.2b2b2b2a材质缓存写入及两种名字查找已核查，尚未接天空画面 | 下一B3.2b2b2b2b：源CurrentTechnique到材质header装配、effect packed/driver映射及队列运行时标志生产者；再续40字节记录、排序/消费、矩阵/HDR和天空参数；原质量/LOD/fade/阴影、水面等缺口保持 |
 | R02 | 骨骼、动画、挂点、换装 | 已接入：玩家精灵女、野狼、装备/发型/材质 | 其他种族、缺失片段、原部位与染色语义 |
 | R03 | 手机输入、相机、HUD | 已接入：源摇杆及手机槽位、字体/原图标 | 原相机完整分区、缩放及情境交互 |
 | R04 | 移动、跳跃、静态碰撞 | 已接入：源垂直参数、138静态形状、有界射线/滑动 | 完整坡度/落地状态、介质、骑乘/飞行 |
@@ -510,3 +510,16 @@ M01 A2素材包：308文件、48,098,254字节；SHA256 bddc1cebec29cd5bb3d4fb1a
 - 核查：Node198/Python369全部通过；无原资源源码副本Node165通过/33跳过、Python233通过/136跳过。新增7项定向检查及额外uint32乘加回绕/变量移位掩码原指令核查通过；真实双WebSocket、迟加入/重连、角色隔离及存档回归包含在Node全量检查中。无画面/运行变化，保留B2实际双浏览器验收记录，不冒称本轮新增视觉验收；CI缺原样本的用例已在本地执行。
 - 322转换文件与主私有存档全字节保持；653处JSON引用、原ZIP完整校验、临时导入逐文件SHA、旧converted备份和私有哨兵通过。继续使用game-data/transfers/oc2-assets-20261108T032354Z-56266585.zip，322文件、48,864,102字节，SHA256 c1cb726d473e1e7884e08c2a4212f327f1b483d5b9fc85f4d23401e0fc1a66dc。未变素材不重打，源数据、完整报告、转储、截图与私有存档不上Git。
 - 下一入口M01 B3.2b2b2b2：优先追material+0x10/+0x18、effect+0x1c和driver+0x320/管理器映射行的生产者，以及队列读取的technique+6/对象+0xe2运行时字段到原named solid的绑定；再闭合40字节距离记录1341548/相关增长，及12f5770/12f55a4的排序/消费。随后续34ed98的0xe/0xc/0xa、世界矩阵、4dc648目标/HDR、天空参数/bounds/采样，再有证据地接画面。本轮条件分流/16与32字节插入不重做，不扩任务/UI或当前3×3；自动任务ID2继续每2分钟，本地仍有证据链，无新增外部材料阻塞。
+
+## M01 B3.2b2b2b2a：材质选择缓存写入与分组/完整名字查找
+
+- 基线3564ede，进场Git干净。新增scene_material_cache.py、native_material_cache_probe.py和7项测试/CI步骤，oc2-material-selector-cache-evidence-v1。本轮只研究源代码行为，不改游戏运行、画面、UI、输入、地图范围或素材。原生转储、候选写入盘点、源报告、日志及主存档备份只留analysis/raw/sky-runtime-material/。
+- 13ecc24从X3传入的14字节header分别拷贝uint16[0]到material+0x10、uint8[8]到+0x18，其他已观察字段按原宽度拷贝，两个间隙字节保持旧内存；并保存effect、增加其引用计数。附加数组在无源material时清零，有源时拷贝并将+0x1a置ffff。header的上游来源仍未闭合，不能把原BDAE的CurrentTechnique第一词直接塞成这里的字节。
+- 13ed094重置时将+0x18清0、+0x1a至+0x1d置ffffffff，+0x10按base & ((1 << (effect.byte1c & 31)) + 0xff)保留低位，最终按字节存储。13ed1fc同对象直接return1不改写，不同effect直接return0；同effect才复制+0x10/+0x18并处理属性/附加数组。两者说明队列读取的缓存不一定等于构造初值。本轮构造/重置/复制使用零property count，未执行完整属性清理/fixup；附加数组则真实执行原调用分支，memcpy/memset体为明确内存夹具。
+- 140025c按effect+0x1c的低字节位数，以1<<bits跨过24字节表项，比较interned名字指针，返回分组序号；1400310按effect+0x1d遍历每个24字节表项，返回完整表序号。两者均先拒绝null名字指针，缺失返回255，重复指针取首项。不是字符串strcmp，也不能在有修饰位时混用两种序号。表布局/名字指针由实验明确提供，尚未证明原sky当前活动effect的内存值。
+- 13eda68读取通用provider virtual+0x208的Base Technique，沿interned指针和分组表找基础序号，以保留低位/左移序号写+0x10；Technique Modifiers段逐项读取virtual+0x1d8的低bit置/清各位。Group返回非空字符串才调用13edca0并把结果低8位写+0x18；空字符串保留旧变化字节。随后打开Parameters并调用13eafc0。本轮执行完整568字节入口体，但strlen、intern、Group解析及Parameters应用是显式stub；保留临时intern引用100→99的原指令核查，没有执行其归零释放分支。
+- 关键边界：Base Technique/Technique Modifiers/Group/Parameters这四个原字段名与模型CurrentTechnique不同，本轮没有证明此通用provider就是BDAE加载器。源tutorial天空仍按CRC/SHA确认named solid，独立报告providerBindingRecovered=false；不因此给真实天空指定某个缓存字节/队列，也不把源GL状态映射成technique+6或对象+0xe2标志。原13feedc中effect packed字节的初始写入和manager复制入口1408f78仅存候选转储，未当已执行恢复。
+- 隔离ARM64核查96组构造、96组重置、96组同/异对象effect复制、79次分组/完整表查找，以及144组provider输入。覆盖空字段/null intern结果/未匹配名字、低bit与高bit区别、Group空值保留/uint32低字节截取、零修饰位、重复首项、ARM变量移位掩码和未覆盖内存保持；与独立数值模型逐项一致。固定新增6段原例程和4个字段字符串，变化拒绝核查通过。分组表仅限0..5修饰位、总表项<=255，工具拒绝回绕/越界实验输入，不宣称原函数有这种校验。
+- 核查：Node198/Python376通过；无原资源源码副本Node165通过/33跳过、Python235通过/141跳过。新增7项中5项依赖本地原样本，CI保留明确跳过；真实双WebSocket、迟加入/重连、角色隔离及存档回归包含在Node全量检查中。本轮无画面/运行改动，沿用B2实际双浏览器记录，不冒称新增视觉验收。
+- 322转换文件和主私有存档逐字节保持；653处JSON引用、原ZIP完整校验、临时导入全部文件SHA、旧converted备份及私有哨兵均通过。继续使用game-data/transfers/oc2-assets-20261108T032354Z-56266585.zip，322文件、48,864,102字节，SHA256 c1cb726d473e1e7884e08c2a4212f327f1b483d5b9fc85f4d23401e0fc1a66dc。素材未变，不重打包，不上传原资源/完整报告/转储/私有数据。
+- 下一入口M01 B3.2b2b2b2b：沿原BDAE type28/CurrentTechnique装配到material header及effect表，不沿通用provider字段名猜二者同一；继续13feedc的effect+0x1c/+0x1d生产与technique+6/对象+0xe2、driver+0x320/manager映射行。随后续40字节距离记录1341548/增长、12f5770/12f55a4排序消费、34ed98调用标志、矩阵/HDR及天空参数/bounds/采样。已核查缓存写入、通用provider和两类查找不重做，不扩任务/UI或当前3×3；自动任务ID2继续每2分钟，本地仍有证据可推进，无新增外部材料阻塞。

@@ -133,6 +133,7 @@ python3 -m venv .venv
 .venv/bin/python tools/scene_sky_binding_tests.py
 .venv/bin/python tools/scene_sky_assembly_tests.py
 .venv/bin/python tools/scene_sky_object_flags_tests.py
+.venv/bin/python tools/scene_shader_metadata_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -233,4 +234,6 @@ python3 tools/art_library.py import /path/to/oc2-assets.zip
 
 `.venv/bin/python tools/scene_sky_assembly.py` 核对24字节技术表项、72字节pass数组及原效果构造，沿原状态转换闭合源混合开关到首pass.byte6.bit0。隔离原指令再把构造结果送入真实队列；反射/绑定数组为空、底层对象标志及modifier输入为显式实验值，上游编译/活动profile、底层标志生产者和天空画面仍待恢复。
 
-`.venv/bin/python tools/scene_sky_object_flags.py` 核对E2.bit6的原字段名HasDiscard、原构造/属性入口和图形后端的写入，并将原构造对象直接接到效果表和队列核查。后端从第二着色器槽byte18.bit4追加HasDiscard；该着色器位的原生产者、真实编译/链接和活动缓存尚未恢复，不能仅凭GLSL文本推定天空当前队列。
+`.venv/bin/python tools/scene_sky_object_flags.py` 核对E2.bit6的原字段名HasDiscard、原构造/属性入口和图形后端的写入，并将原构造对象直接接到效果表和队列核查。后端从第二着色器槽byte18.bit4追加HasDiscard；本工具将该位作为显式输入，生产者的后续核对见下方scene_shader_metadata。真实编译/链接和活动缓存仍待恢复，不能仅凭GLSL文本推定天空当前队列。
+
+`.venv/bin/python tools/scene_shader_metadata.py` 继续核对该着色器位的生产链：原客户端读取`%s/file.map`，原地转换两个字符为布尔头字节，工厂读取key前的头字节，再由原着色器构造写入bit4。隔离执行原解析器、工厂和构造器；流、树插入、预处理输出及GL体为显式实验输入。可用`--apk /绝对路径/原客户端.apk`追加清单文件名盘点。当前本地APK与资源索引未找到file.map，实际天空标志、预处理/注入文本和活动队列仍待恢复，不凭源GLSL关键词补值。此工具不修改游戏画面或素材。

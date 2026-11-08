@@ -64,6 +64,7 @@ jobs:
       - run: python tools/scene_sky_assembly_tests.py
       - run: python tools/scene_sky_object_flags_tests.py
       - run: python tools/scene_shader_metadata_tests.py
+      - run: python tools/scene_shader_preprocess_tests.py
       - run: python tools/scene_sampling_tests.py
       - run: python tools/scene_texture_sampling_tests.py
       - run: python tools/scene_render_state_tests.py

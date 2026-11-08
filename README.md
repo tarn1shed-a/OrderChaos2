@@ -134,6 +134,7 @@ python3 -m venv .venv
 .venv/bin/python tools/scene_sky_assembly_tests.py
 .venv/bin/python tools/scene_sky_object_flags_tests.py
 .venv/bin/python tools/scene_shader_metadata_tests.py
+.venv/bin/python tools/scene_shader_preprocess_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -237,3 +238,5 @@ python3 tools/art_library.py import /path/to/oc2-assets.zip
 `.venv/bin/python tools/scene_sky_object_flags.py` 核对E2.bit6的原字段名HasDiscard、原构造/属性入口和图形后端的写入，并将原构造对象直接接到效果表和队列核查。后端从第二着色器槽byte18.bit4追加HasDiscard；本工具将该位作为显式输入，生产者的后续核对见下方scene_shader_metadata。真实编译/链接和活动缓存仍待恢复，不能仅凭GLSL文本推定天空当前队列。
 
 `.venv/bin/python tools/scene_shader_metadata.py` 继续核对该着色器位的生产链：原客户端读取`%s/file.map`，原地转换两个字符为布尔头字节，工厂读取key前的头字节，再由原着色器构造写入bit4。隔离执行原解析器、工厂和构造器；流、树插入、预处理输出及GL体为显式实验输入。可用`--apk /绝对路径/原客户端.apk`追加清单文件名盘点。当前本地APK与资源索引未找到file.map，实际天空标志、预处理/注入文本和活动队列仍待恢复，不凭源GLSL关键词补值。此工具不修改游戏画面或素材。
+
+`.venv/bin/python tools/scene_shader_preprocess.py --execute` 继续核对原GLITCH_ALPHA_TEST前缀的条件、AlphaFunc丢弃谓词、声明顺序及源码临时修改的清理还原。执行原148c160/141de74/148ca60，当前限基础能力位和100/120版本，token重写开关明确为0；能力、独立alpha许可参数、AlphaFunc和额外前缀均为实验输入。清单第一标志控制entrySP+0x18的token重写，alpha许可来自另一个entrySP+8参数，两者分开。原天空源码用于逐字节核查，完整前缀和输出只写忽略目录。定义丢弃宏不证明实际调用、GPU行为或原设备活动值，尚未改变游戏画面。

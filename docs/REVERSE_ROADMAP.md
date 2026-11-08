@@ -1,6 +1,8 @@
 # 逆向目录与执行记录
 
-最新有界交接（2026-11-09）：[配置、phase与区块遮罩](MAP_CONFIG_PHASE_MASK.md)。APK内Android GameOptions.json已取得：默认R=2，GPU_0M覆盖1；不再仅以iOS条目说明来源。原phasing_area的15行没有tutorial map 5，在已核对表选择分支中phase=0；原0x357b2c写入20条mask，全属map 1的phase 0/2。补齐已知生产者和限定原指令核查，未穷尽其他运行时写入或观测雷电活动配置。全tutorial索引251TRN/57ITM，ITM原静态记录1354条/176模型；这是资料总量，不是实际同时加载/显示清单。旧251TRN“包含LOD”描述已按文件名核对撤回。下一研究入口可追0xc5b854条件解释、0xc49834档位调整、实际虚文件配置来源及动态字段写入；当前不恢复游戏、不自选profile/出生点/最终对象集合，自动任务2仍PAUSED。
+最新有界交接（2026-11-09，基线108338e）：[设备档位与实例过滤](DEVICE_AND_INSTANCE_FILTERING.md)。执行原0xc5b854条件、0xc48524选择、0xc49834调整及默认后覆盖的限定实验；APK基线未列GPU由GPU_6后备匹配，实际雷电档位不代选。补齐ModelDetailLevel→config+0xc→0x2532f08，DeviceLayer→config+0x54及原5以上限为4的消费。原XML等级查询先实例覆盖、后模型；全tutorial记录在明确Layer0/1/2/3/4时有404/513/1171/1316/1327条通过创建前入口；不是实际驻留/成功模型数。中心(-42,3)条件例：GPU_0M的R1/Layer1为30/39，GPU_0的R2/Layer1为82/217。下一入口0x4c975c的EntityConfig字段与对象/裁剪消费者；12显式ID和6模型键全部关联得上，消费尚未闭合，不自行解释device=6。参数存储/JSON/XML解析、真实设备采集与完整进程未执行；完整原清单留本地忽略目录。没有恢复原型或游戏功能，自动任务2保持PAUSED。
+
+上一有界交接（2026-11-09）：[配置、phase与区块遮罩](MAP_CONFIG_PHASE_MASK.md)。APK内Android GameOptions.json已取得：默认R=2，GPU_0M覆盖1；不再仅以iOS条目说明来源。原phasing_area的15行没有tutorial map 5，在已核对表选择分支中phase=0；原0x357b2c写入20条mask，全属map 1的phase 0/2。补齐已知生产者和限定原指令核查，未穷尽其他运行时写入或观测雷电活动配置。全tutorial索引251TRN/57ITM，ITM原静态记录1354条/176模型；这是资料总量，不是实际同时加载/显示清单。旧251TRN“包含LOD”描述已按文件名核对撤回。当时下一入口是条件解释、档位调整和实例过滤，现见上条最新结果；实际配置来源及动态写入仍未闭合。
 
 上一有界交接：[地图请求与区块加载/卸载证据](MAP_REQUEST_AND_STREAMING.md)。请求路径生产分支和原区块管理核心已找到；消息分派、完整worker竞争等仍未闭合。
 

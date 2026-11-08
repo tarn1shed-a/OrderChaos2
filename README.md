@@ -124,6 +124,7 @@ python3 -m venv .venv
 .venv/bin/python tools/terrain_materials_tests.py
 .venv/bin/python tools/scene_sky_tests.py
 .venv/bin/python tools/scene_sky_frame_tests.py
+.venv/bin/python tools/scene_sky_draw_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -207,3 +208,5 @@ python3 tools/art_library.py import /path/to/oc2-assets.zip
 原天空声明可用 `.venv/bin/python tools/scene_sky.py` 只读核查，报告写入忽略目录。已核实tutorial专用网格/贴图、按名字选择的solid分支、源深度状态、色调/高度雾与饱和度计算，以及有界原指令的缩放/参数缓存；没有把静态参数当作原设备实态。相机/节点最终世界矩阵、实际绘制顺序、环境参数生产者和最终采样仍待恢复，本工具暂不改网页或素材包。
 
 `.venv/bin/python tools/scene_sky_frame.py` 另核对天空帧更新：原渲染器直接更新天空，再推进场景动画；无漩涡分支把相机位置传给主天空/远山模型。原指令隔离执行核查了空模型、位置不变及更新顺序，但场景最终世界矩阵、绘制队列和HDR顺序尚未恢复，网页天空仍未启用。
+
+`.venv/bin/python tools/scene_sky_draw.py` 核对默认引擎工厂创建的实际scene类型、节点挂接与两个绘制入口的阶段调度。工具固定具体虚函数目标，验证容器追加/扩容和回调参数；未观察设备自定义工厂，也没有把阶段回调记录当作GPU绘制或HDR还原。

@@ -54,6 +54,7 @@ jobs:
       - run: python tools/terrain_lighting_tests.py
       - run: python tools/scene_sky_tests.py
       - run: python tools/scene_sky_frame_tests.py
+      - run: python tools/scene_sky_draw_tests.py
       - run: python tools/scene_sampling_tests.py
       - run: python tools/scene_texture_sampling_tests.py
       - run: python tools/scene_render_state_tests.py

@@ -129,16 +129,18 @@ def zone_targets(row, fallback=None):
     intensities['model_intensity_lightMap'] = (
         intensities['intensity_lightMap'] if near_zero(value) else f32(value))
     interval_owner = chosen('tone_half', lambda v: f32(v) <= 0)
-    interval = None
+    interval = raw_interval = None
     if f32(interval_owner['tone_half']) > 0:
-        interval = tone_distance_uniform(interval_owner['tone_near'], interval_owner['tone_half'])
+        raw_interval = [f32(interval_owner['tone_near']), f32(interval_owner['tone_half'])]
+        interval = tone_distance_uniform(*raw_interval)
     gains = {}
     for name in ('tone_color_near', 'tone_color_far'):
         value = chosen(name, lambda v: v == 0)[name]
         gains[name] = color_vector(value) if value else None
     return {'sourceZoneId': row['ID'], 'suppliedFallbackZoneId': fallback['ID'] if fallback else None,
             'colors': colors, 'intensities': intensities,
-            'tone': {'distanceUniform': interval, 'distanceWrite': 'set' if interval else 'retain-previous',
+            'tone': {'rawDistance': raw_interval, 'distanceUniform': interval,
+                     'distanceWrite': 'set' if interval else 'retain-previous',
                      'gainNear': gains['tone_color_near'], 'gainFar': gains['tone_color_far'],
                      'gainWriteWhenNull': 'retain-previous', 'offsetTargets': [0.0, 0.0, 0.0]}}
 

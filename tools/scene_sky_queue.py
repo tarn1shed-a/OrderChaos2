@@ -59,6 +59,11 @@ def technique_selection(base, variation, packed, profile, stride, remap):
 
 def queue_route(code, material=False, technique_flags=0, pass_byte_e2=0,
                 scene_byte_2a8=0, node_word_210=0, node_word_200=0):
+    """Legacy technique_flags argument is firstPass.byte6, not table-entry flags.
+
+    Effect table entry+8 points to72-byte passes (verified by scene_sky_assembly).
+    The numeric API is retained so previous bounded routing probes stay usable.
+    """
     if code not in (3, 8) or type(code) is not int or type(material) is not bool:
         raise ValueError('Only source queue codes3/8 are covered')
     for v in (technique_flags, pass_byte_e2, scene_byte_2a8): word(v, 8)
@@ -84,6 +89,10 @@ def analyze_queue(image, extract):
     return {'format': FORMAT, 'native': verify_native(image),
             'sourceDeclaration': {'sources': sky['sources'], 'techniqueByName': sky['material']['technique'],
                                   'state': solid['state'], 'usedAsRuntimeQueueFlags': False},
+            'selectedRecordIdentity': {'tableEntryBytes': 24, 'entryPlus8': '72-byte pass array',
+                                       'legacyTechniqueFlags': 'firstPass.byte6; not table header',
+                                       'passByteE2': 'firstPass+0x20 -> compiled program.byteE2',
+                                       'producerEvidence': 'scene_sky_assembly; this older report does not derive source flags'},
             'techniqueSelector': {'target': '0x13ed140', 'baseByte': 'material+0x10',
                                   'variationByte': 'material+0x18', 'packedWord': 'effect+0x1c',
                                   'profileWord': 'driver+0x320', 'manager': 'driver+0x2f8',

@@ -131,6 +131,7 @@ python3 -m venv .venv
 .venv/bin/python tools/scene_sky_queue_tests.py
 .venv/bin/python tools/scene_material_cache_tests.py
 .venv/bin/python tools/scene_sky_binding_tests.py
+.venv/bin/python tools/scene_sky_assembly_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -223,8 +224,10 @@ python3 tools/art_library.py import /path/to/oc2-assets.zip
 
 `.venv/bin/python tools/scene_sky_material.py` 核实静态网格分类函数返回16、原天空父子挂接与场景上下文传递，并验证64位上下文参数。常量分类不代表材质已被忽略；具体队列内部的材质/technique分流、排序和HDR仍待恢复，未启用网页天空。
 
-`.venv/bin/python tools/scene_sky_queue.py` 核对原technique索引解析、队列3/8分流和16/32字节记录写入/扩容。运行时材质标志生产者、40字节距离记录及最终排序/消费仍待恢复；源FX声明没有被当作运行时队列标志，网页天空仍未启用。
+`.venv/bin/python tools/scene_sky_queue.py` 核对原technique索引解析、队列3/8分流和16/32字节记录写入/扩容。旧参数technique_flags实际指所选技术首个pass的byte6，身份和混合位来源见scene_sky_assembly；底层对象标志、40字节距离记录及排序/消费仍待恢复，网页天空仍未启用。
 
 `.venv/bin/python tools/scene_material_cache.py` 核对材质选择缓存的初始化/重置/复制、按名字查找与通用属性入口写入。基础技术的分组序号与完整表序号分开；Base Technique等通用字段不冒充BDAE的CurrentTechnique加载链。原修饰位/设备映射和队列标志的生产者仍待追，工具不改变网页或素材。
 
 `.venv/bin/python tools/scene_sky_binding.py` 核对BDAE类型28沿value+8名字查完整技术表后写入缓存的真实分支，使用预载effect、零普通参数表的隔离实验执行原包装/创建/遍历指令。原天空solid在声明顺序下得到2仅为显式实验结果；编译后的效果表、活动profile、队列标志和天空画面仍待恢复。
+
+`.venv/bin/python tools/scene_sky_assembly.py` 核对24字节技术表项、72字节pass数组及原效果构造，沿原状态转换闭合源混合开关到首pass.byte6.bit0。隔离原指令再把构造结果送入真实队列；反射/绑定数组为空、底层对象标志及modifier输入为显式实验值，上游编译/活动profile、底层标志生产者和天空画面仍待恢复。

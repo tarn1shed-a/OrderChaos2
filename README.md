@@ -132,6 +132,7 @@ python3 -m venv .venv
 .venv/bin/python tools/scene_material_cache_tests.py
 .venv/bin/python tools/scene_sky_binding_tests.py
 .venv/bin/python tools/scene_sky_assembly_tests.py
+.venv/bin/python tools/scene_sky_object_flags_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -231,3 +232,5 @@ python3 tools/art_library.py import /path/to/oc2-assets.zip
 `.venv/bin/python tools/scene_sky_binding.py` 核对BDAE类型28沿value+8名字查完整技术表后写入缓存的真实分支，使用预载effect、零普通参数表的隔离实验执行原包装/创建/遍历指令。原天空solid在声明顺序下得到2仅为显式实验结果；编译后的效果表、活动profile、队列标志和天空画面仍待恢复。
 
 `.venv/bin/python tools/scene_sky_assembly.py` 核对24字节技术表项、72字节pass数组及原效果构造，沿原状态转换闭合源混合开关到首pass.byte6.bit0。隔离原指令再把构造结果送入真实队列；反射/绑定数组为空、底层对象标志及modifier输入为显式实验值，上游编译/活动profile、底层标志生产者和天空画面仍待恢复。
+
+`.venv/bin/python tools/scene_sky_object_flags.py` 核对E2.bit6的原字段名HasDiscard、原构造/属性入口和图形后端的写入，并将原构造对象直接接到效果表和队列核查。后端从第二着色器槽byte18.bit4追加HasDiscard；该着色器位的原生产者、真实编译/链接和活动缓存尚未恢复，不能仅凭GLSL文本推定天空当前队列。

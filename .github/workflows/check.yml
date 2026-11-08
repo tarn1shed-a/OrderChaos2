@@ -71,6 +71,7 @@ jobs:
       - run: python tools/scene_effect_compiler_tests.py
       - run: python tools/scene_effect_registration_tests.py
       - run: python tools/scene_effect_remapping_tests.py
+      - run: python tools/scene_profile_inputs_tests.py
       - run: python tools/scene_sampling_tests.py
       - run: python tools/scene_texture_sampling_tests.py
       - run: python tools/scene_render_state_tests.py

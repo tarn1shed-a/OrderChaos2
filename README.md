@@ -141,6 +141,7 @@ python3 -m venv .venv
 .venv/bin/python tools/scene_effect_compiler_tests.py
 .venv/bin/python tools/scene_effect_registration_tests.py
 .venv/bin/python tools/scene_effect_remapping_tests.py
+.venv/bin/python tools/scene_profile_inputs_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -258,3 +259,5 @@ python3 tools/art_library.py import /path/to/oc2-assets.zip
 `.venv/bin/python tools/scene_effect_registration.py` 接着执行原缓存未命中登记、命中复用、引用转移、临时对象析构及1406e94完整返回；用真实hash冲突名字核对hash命中后仍比较名称。当前限预留容量和空反射/绑定，锁、分配器、已有缓存身份及shader程序仍是夹具，不能等同原设备活动缓存或完整渲染恢复。素材、界面和存档不变。
 
 `.venv/bin/python tools/scene_effect_remapping.py` 核实registry+A8是技术重映射规则链，执行原1408860/140b78c生成缓存映射，再用原13ed140按明确profile/variation读取同一张表。规则、数量和driver输入仍是实验值；实际规则来源和driver+320生产尚未核实，不把此表应用到游戏画面。源数据和报告仅留忽略目录。
+
+`.venv/bin/python tools/scene_profile_inputs.py` 核对GLITCHTECHNIQUEMAPS/0.0.2头部准入、原driver重置包装和两种场景节点的profile保存/切换/恢复。头部接收不等于完整加载成功；包装中的加载/清理委托仍为明确返回值夹具。原selector可直接读取节点写出的driver词，但实际场景值/配置生产和shader请求仍待恢复，画面不变。

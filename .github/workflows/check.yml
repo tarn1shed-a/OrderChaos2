@@ -58,6 +58,7 @@ jobs:
       - run: python tools/scene_sky_collection_tests.py
       - run: python tools/scene_sky_mesh_tests.py
       - run: python tools/scene_sky_material_tests.py
+      - run: python tools/scene_sky_queue_tests.py
       - run: python tools/scene_sampling_tests.py
       - run: python tools/scene_texture_sampling_tests.py
       - run: python tools/scene_render_state_tests.py

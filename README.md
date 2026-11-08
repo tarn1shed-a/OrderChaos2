@@ -128,6 +128,7 @@ python3 -m venv .venv
 .venv/bin/python tools/scene_sky_collection_tests.py
 .venv/bin/python tools/scene_sky_mesh_tests.py
 .venv/bin/python tools/scene_sky_material_tests.py
+.venv/bin/python tools/scene_sky_queue_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -219,3 +220,5 @@ python3 tools/art_library.py import /path/to/oc2-assets.zip
 `.venv/bin/python tools/scene_sky_mesh.py` 沿原启动工厂和BDAE几何附件核对具体天空网格节点：默认提交委托是节点自身，进入原网格提交函数。隔离验证构造、门控与提交参数；材质分类生产者、最终队列/绘制顺序、矩阵和HDR仍待恢复，未启用网页天空。
 
 `.venv/bin/python tools/scene_sky_material.py` 核实静态网格分类函数返回16、原天空父子挂接与场景上下文传递，并验证64位上下文参数。常量分类不代表材质已被忽略；具体队列内部的材质/technique分流、排序和HDR仍待恢复，未启用网页天空。
+
+`.venv/bin/python tools/scene_sky_queue.py` 核对原technique索引解析、队列3/8分流和16/32字节记录写入/扩容。运行时材质标志生产者、40字节距离记录及最终排序/消费仍待恢复；源FX声明没有被当作运行时队列标志，网页天空仍未启用。

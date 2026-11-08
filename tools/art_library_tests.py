@@ -79,6 +79,19 @@ def rewrite(source,target,changes=None,extra=None,update_manifest=False):
 
 
 class ArtLibraryTests(unittest.TestCase):
+    def test_optional_scene_baked_profile_is_version_checked_and_exported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=fixture(Path(tmp)/'game-data/converted')
+            manifest=json.loads((root/'manifest.json').read_text())
+            manifest['sceneBakedLighting']={'url':'/assets/rendering/baked-lighting.json','format':'oc2-scene-baked-lighting-v1'}
+            (root/'manifest.json').write_text(json.dumps(manifest))
+            profile=root/'rendering/baked-lighting.json'
+            profile.write_text(json.dumps({'format':'oc2-scene-baked-lighting-v1'}))
+            bundle=export_bundle(root)
+            self.assertEqual(verify_bundle(bundle['path'])['sourceFormats']['sceneBakedLighting'],'oc2-scene-baked-lighting-v1')
+            profile.write_text(json.dumps({'format':'old'}))
+            with self.assertRaisesRegex(ValueError,'不一致'):build_catalog(root)
+
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='oc2-art-test-')
         self.root=Path(self.temp.name)

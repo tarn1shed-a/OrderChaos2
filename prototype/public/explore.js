@@ -3,6 +3,7 @@ import {createSourceTerrain} from './terrain-materials.js';
 import {sceneDiffuseTexture} from './scene-sampling.js';
 import {createSceneMaterial} from './scene-alpha.js';
 import {applySceneCulling,guardSceneOrientation} from './scene-culling.js';
+import {BAKED_FORMAT,createBakedLighting,createBakedSceneMaterial,bindInstanceLightmap} from './scene-baked-lighting.js';
 import {createContextControl} from './context-control.js';
 import {monsterStateText} from './monster-state.js';
 import {buffText} from './buff-presentation.js';
@@ -45,6 +46,8 @@ let assets, modelTemplate, ready = false, world = RESOURCE_WORLD, snapshot = [],
 let wolfTemplate, monsterSnapshot = [], selectedMonsterId = null, character = null, nextAttackAt = 0, feedbackUntil = 0, saveAt = null;
 let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset = 0;
 let combatEffects, environment, hdrRenderer, hud, inventoryUI, skillBook, questBook, minimap, nextSkillRequestAt = 0;
+let bakedLighting;
+const bakedAtlases=new Map();
 let renderEquipmentPreview, equipmentPreviewKey;
 let playerLookProfile;
 let hotbar, mobileHUD, joystick, jumpControl, attackControl,controlProfile, gameplayProfile;
@@ -222,6 +225,7 @@ function geometry(data) {
   g.setAttribute('position', new THREE.Float32BufferAttribute(data.positions, 3));
   if (data.normals?.length) g.setAttribute('normal', new THREE.Float32BufferAttribute(data.normals, 3));
   if (data.uvs?.length) g.setAttribute('uv', new THREE.Float32BufferAttribute(data.uvs, 2));
+  if (data.sourceUV1?.length) g.setAttribute('sourceUV1', new THREE.Float32BufferAttribute(data.sourceUV1, 2));
   if (data.colors?.length) g.setAttribute('color', new THREE.Float32BufferAttribute(data.colors, 3));
   if (data.indices?.length) g.setIndex(data.indices);
   if (!data.normals?.length) g.computeVertexNormals();
@@ -240,6 +244,7 @@ async function loadModel(entry) {
   if (entry===assets.player && (data.appearance?.hair?.format!=='oc2-character-hair-v1'||data.characterMaterials?.format!=='oc2-character-materials-v1')) throw new Error('原发型和角色材质资源缺失，请重新构建本地资源');
   let materials;
   if(assets.scenery?.includes(entry)&&data.sceneSampling?.format!=='oc2-scene-sampling-v1')throw new Error('原场景采样资源缺失，请更新本地素材包');
+  if(assets.scenery?.includes(entry)&&data.sceneBakedLighting?.format!==BAKED_FORMAT)throw new Error('原场景光照资源缺失，请更新本地素材包');
   if(assets.scenery?.includes(entry)&&data.sourceIndexing?.format!=='oc2-primitive-index-windows-v1')throw new Error('原场景顶点索引资源缺失，请更新本地素材包');
   if((assets.scenery?.includes(entry)||assets.dynamicModels?.includes(entry))&&data.sceneAlpha?.format!=='oc2-scene-alpha-v1')throw new Error('原场景透明裁切资源缺失，请更新本地素材包');
   if((assets.scenery?.includes(entry)||assets.dynamicModels?.includes(entry))&&data.sceneCulling?.format!=='oc2-scene-culling-v1')throw new Error('原场景剔除资源缺失，请更新本地素材包');
@@ -254,8 +259,12 @@ async function loadModel(entry) {
     materials=profile.materials.map(entry=>createCharacterMaterial(THREE,entry,textures,profile.colors));
     if(entry===assets.player)playerLookProfile={hair:data.appearance.hair,materials:profile};
   }else materials = await Promise.all(data.materials.map(async (mat,index) => {
-    const cached = await texture(assets.textures[mat.diffuse]);
+    const cached = await texture(assets.textures[mat.diffuse],data.sceneBakedLighting?THREE.NoColorSpace:THREE.SRGBColorSpace);
     const tex = data.sceneSampling ? sceneDiffuseTexture(THREE,cached,mat,index,data.sceneSampling) : cached;
+    if(data.sceneBakedLighting){
+      tex.flipY=false;tex.needsUpdate=true;
+      return applySceneCulling(THREE,createBakedSceneMaterial(THREE,tex,mat,index,data,bakedLighting),mat,index,data.sceneCulling);
+    }
     if(data.sceneAlpha){
       const material=createSceneMaterial(THREE,tex,mat,index,data.sceneAlpha);
       if(material.userData.sceneAlpha.rule==='discard-less-equal'){
@@ -363,6 +372,13 @@ async function init() {
     heightGrid = terrainData.grid ? { width: terrainData.grid.width, depth: terrainData.grid.height, values: terrainData.grid.heights } : gridFromPositions(terrainData.positions);
     minimap=createMinimap({canvas:$('minimap-terrain'),markers:$('minimap-markers'),heading:$('minimap-heading'),label:$('minimap')},terrainData,assets.scenery,world);
     const renderProfile=await json(assets.rendering.url);environment=createSceneEnvironment(THREE,renderProfile);
+    if(assets.sceneBakedLighting?.format!==BAKED_FORMAT)throw new Error('原场景光照资源缺失，请更新本地素材包');
+    bakedLighting=createBakedLighting(THREE,await json(assets.sceneBakedLighting.url),environment.fogUniforms);
+    for(const atlas of bakedLighting.profile.atlases){
+      const source=await texture(atlas.url,THREE.NoColorSpace);
+      if(atlas.encoding!=='ETC1'||atlas.typeId!==1||source.image.width!==atlas.width||source.image.height!==atlas.height)throw new Error('原场景光照图集不匹配');
+      const tex=source.clone();tex.flipY=false;tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.needsUpdate=true;bakedAtlases.set(atlas.sourcePath,tex);
+    }
     const spawn=localPosition(world.spawn.x,world.spawn.y);environment.update(spawn.x+origin.x,spawn.z+origin.z,scene);
     hdrRenderer=createRecoveredHDR(THREE,renderer,renderProfile,await texture(renderProfile.lut.url));
     if(assets.map.materials?.format!=='oc2-terrain-materials-v1')throw new Error('原地形分层资源需要更新，请重建本地资源');
@@ -408,6 +424,10 @@ async function init() {
       if (!staticModels.has(item.model)) staticModels.set(item.model, await loadModel(item));
       for (const inst of item.instances) {
         const model = guardSceneOrientation(staticModels.get(item.model).clone(true),()=>{canvas.dataset.sceneCullDraw='positive-transform-checked';});
+        bindInstanceLightmap(THREE,model,inst,bakedLighting,bakedAtlases);
+        model.traverse(object=>{if(object.isMesh)for(const material of Array.isArray(object.material)?object.material:[object.material]){
+          material.onBeforeCompile=()=>{canvas.dataset.sceneBakedShader='encoded-atlas-vertex-light';if(material.defines.SOURCE_CUTOUT)canvas.dataset.sceneCutoutShader='discard-less-equal:0.5';};
+        }});
         // Scene meshes use original local-space transforms, not the avatar centering wrapper.
         const child = model.children[0]; child.position.set(0, 0, 0);
         model.position.set(inst.position[0] - origin.x, inst.position[1] - origin.y, inst.position[2] - origin.z);
@@ -415,6 +435,7 @@ async function init() {
       }
     }
     canvas.dataset.sceneSampling='oc2-scene-sampling-v1';
+    canvas.dataset.sceneBakedLighting=BAKED_FORMAT;canvas.dataset.sceneLightmapInstances=String(bakedLighting.profile.instances.length);canvas.dataset.sceneLightmapAtlases=String(bakedAtlases.size);
     canvas.dataset.sceneDiffuseMaterials=String([...staticModels.values()].reduce((n,model)=>n+(model.userData.sceneSampling?.diffuseMaterials||0),0));
     canvas.dataset.sceneAlpha='oc2-scene-alpha-v1';
     canvas.dataset.sceneCutoutMaterials=String([...staticModels.values()].reduce((n,model)=>n+(model.userData.sceneAlpha?.cutoutMaterials||0),0));
@@ -729,6 +750,8 @@ function draw(now) {
   if(combatEffects)canvas.dataset.sockets=combatEffects.attachmentState();
   const me=avatars.get(selfId),point=me?.root.position||localPosition(world.spawn.x,world.spawn.y);
   const zone=environment.update(point.x+origin.x,point.z+origin.z,scene);environment.prepare(scene);
+  bakedLighting.update(point.x+origin.x,point.z+origin.z,Math.max(0,Math.floor(dt*1000)));
+  canvas.dataset.sceneLightState=JSON.stringify(bakedLighting.state());
   canvas.dataset.renderZone=String(zone.id);canvas.dataset.hdr='source-reinhardt-bloom';
   hdrRenderer.render(scene,camera,zone); requestAnimationFrame(draw);
 }

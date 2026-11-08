@@ -5,7 +5,7 @@ const EFFECT_RULES={
   'ut_lightmap_solid.bdae':'none',
   'ut_lightmap_trans.bdae':'discard-less-equal',
 };
-export function createSceneMaterial(THREE,map,source,index,profile){
+export function validateSceneAlpha(map,source,index,profile){
   const entry=profile?.materials?.[index],alpha=entry?.sourceAlpha;
   if(profile?.format!==FORMAT||entry?.index!==index||entry.name!==source.name||entry.texture!==source.diffuse||!map||
     !Object.hasOwn(EFFECT_RULES,entry.effectPath)||entry.rule!==EFFECT_RULES[entry.effectPath]||
@@ -16,6 +16,10 @@ export function createSceneMaterial(THREE,map,source,index,profile){
     throw new Error('原场景透明裁切资源不匹配，请更新本地素材包');
   const cutout=entry.rule==='discard-less-equal';
   if(entry.reference!==(cutout ? 0.5 : null))throw new Error('原场景透明裁切分支尚未恢复');
+  return {format:FORMAT,rule:entry.rule,reference:entry.reference};
+}
+export function createSceneMaterial(THREE,map,source,index,profile){
+  const alpha=validateSceneAlpha(map,source,index,profile),cutout=alpha.rule==='discard-less-equal';
   const material=new THREE.MeshStandardMaterial({map,color:0xffffff,roughness:.93,metalness:0,
     side:THREE.DoubleSide,alphaTest:cutout ? 0.5 : 0});
   if(cutout){
@@ -27,6 +31,6 @@ export function createSceneMaterial(THREE,map,source,index,profile){
     };
     material.customProgramCacheKey=()=>FORMAT+':discard-less-equal:0.5';
   }
-  material.userData.sceneAlpha={format:FORMAT,rule:entry.rule,reference:entry.reference};
+  material.userData.sceneAlpha=alpha;
   return material;
 }

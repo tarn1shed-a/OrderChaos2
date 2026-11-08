@@ -46,6 +46,6 @@ export function createSceneEnvironment(THREE,profile) {
     };
     material.customProgramCacheKey=()=>`${previousKey()}:recovered-fog-gamma-v1:${Number(additive)}`;material.needsUpdate=true;
   }
-  return {update,prepare(scene){scene.traverse(object=>{if(object.isMesh)for(const material of Array.isArray(object.material)?object.material:[object.material])if(material)apply(material);});},
+  return {fogUniforms:uniforms,update,prepare(scene){scene.traverse(object=>{if(object.isMesh)for(const material of Array.isArray(object.material)?object.material:[object.material])if(material)apply(material);});},
     zone:()=>current,uniforms};
 }

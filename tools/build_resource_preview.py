@@ -33,6 +33,7 @@ from character_materials import recover_character_materials
 from terrain_convert import convert as terrain_convert
 from terrain_materials import recover_materials as recover_terrain_materials
 from scene_texture_sampling import recover_scene_sampling
+from scene_baked_lighting import recover_model_lighting, recover_baked_lighting
 from texture_decode import convert as texture_convert
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -121,6 +122,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
                 result['sceneSampling']=recover_scene_sampling(extract,reader,result)
                 result['sceneAlpha']=recover_scene_alpha(extract,reader,result)
                 result['sceneCulling']=recover_scene_culling(extract,reader,result)
+                if key != 'dynamic-door': result['sceneBakedLighting']=recover_model_lighting(reader,result)
         result['source'] = path
         if not result['meshes']:
             raise ValueError('Model has no supported meshes')
@@ -161,6 +163,8 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
             obj = model(path,f'scene-{i:02d}',scene_model=True);obj['instances']=instances;scenery.append(obj)
         except Exception as e:warnings.append({'model':path,'error':str(e)})
     collision=recover_collision(extract,scenery)
+    if sum(len(item['instances']) for item in scenery) != len(terrain['instances']):
+        raise ValueError('Required source scene models failed conversion; refusing partial lighting package')
     dynamic_door=model('model/scene_generator_temple_000/god_door_01.bdae','dynamic-door',scene_model=True)
     (output/'maps/collision.json').write_text(json.dumps(collision,ensure_ascii=False,indent=2))
     surface = texture('texture/tiles/textures/cliffside/cliffside_rock05.tga')
@@ -184,6 +188,9 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
     effect_output.write_text(json.dumps({'format':'oc2-combat-effects-v4','effects':effects,'attachments':attachments,'playerSpells':player_effects,
         'adaptation':'Recovered particle parameters, materials and source skill slots. The modular elf female uses its native hand/chest dummies. Deterministic random seeds and overall skill flight path remain web adaptations.'}, ensure_ascii=False, indent=2))
     rendering=build_scene_profile(extract)
+    baked_lighting=recover_baked_lighting(extract,scenery,texture)
+    (output/'rendering').mkdir(parents=True,exist_ok=True)
+    (output/'rendering/baked-lighting.json').write_text(json.dumps(baked_lighting,ensure_ascii=False,indent=2,allow_nan=False))
     rendering['format']='oc2-scene-render-v1'
     rendering['defaultZoneId']=min(rendering['zones'],key=lambda zone:zone['priority'])['id']
     rendering['lut']['url']=texture(rendering['lutPath'])
@@ -234,6 +241,7 @@ def build(source=DEFAULT_SOURCE, extracted=EXTRACTED, output=OUT):
                 'player':player,'exhibits':exhibits,'scenery':scenery,'textures':textures,
                 'effects': {'url':'/assets/effects/combat.json','format':'oc2-combat-effects-v4'},
                 'rendering':{'url':'/assets/rendering/tutorial.json','format':'oc2-scene-render-v1'},
+                'sceneBakedLighting':{'url':'/assets/rendering/baked-lighting.json','format':baked_lighting['format']},
                 'ui':{'url':'/assets/ui/profile.json','format':ui['format']},
                 'gameplay':{'url':'/assets/gameplay/native.json','format':gameplay['format']},
                 'navigation':gameplay['npc']['navigation'],

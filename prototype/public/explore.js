@@ -1,5 +1,4 @@
 import {createQuestBook} from './quest-book.js';
-import {createOrbitCameraCollision} from './orbit-camera.js';
 import {createSourceTerrain} from './terrain-materials.js';
 import {TERRAIN_LIGHTING_FORMAT} from './terrain-lighting.js';
 import {sceneDiffuseTexture} from './scene-sampling.js';
@@ -49,8 +48,6 @@ let wolfTemplate, monsterSnapshot = [], selectedMonsterId = null, character = nu
 let attackRange = 32, cooldownMs = 700, monsterCooldownMs = 1000, serverOffset = 0;
 let combatEffects, environment, hdrRenderer, hud, inventoryUI, skillBook, questBook, minimap, nextSkillRequestAt = 0;
 let bakedLighting;
-let cameraCollision;
-const cameraObstacles=[];
 const bakedAtlases=new Map();
 let renderEquipmentPreview, equipmentPreviewKey;
 let playerLookProfile;
@@ -439,10 +436,9 @@ async function init() {
         // Scene meshes use original local-space transforms, not the avatar centering wrapper.
         const child = model.children[0]; child.position.set(0, 0, 0);
         model.position.set(inst.position[0] - origin.x, inst.position[1] - origin.y, inst.position[2] - origin.z);
-        model.quaternion.fromArray(inst.quaternion); model.scale.fromArray(inst.scale); scene.add(model);cameraObstacles.push(model);
+        model.quaternion.fromArray(inst.quaternion); model.scale.fromArray(inst.scale); scene.add(model);
       }
     }
-    cameraCollision=createOrbitCameraCollision(THREE,[...terrainMeshes,...cameraObstacles]);
     canvas.dataset.sceneSampling='oc2-scene-sampling-v1';
     canvas.dataset.sceneBakedLighting=BAKED_FORMAT;canvas.dataset.sceneLightmapInstances=String(bakedLighting.profile.instances.length);canvas.dataset.sceneLightmapAtlases=String(bakedAtlases.size);
     canvas.dataset.sceneDiffuseMaterials=String([...staticModels.values()].reduce((n,model)=>n+(model.userData.sceneSampling?.diffuseMaterials||0),0));
@@ -739,12 +735,6 @@ function draw(now) {
   // Keep the camera above the heightfield when orbiting hills.
   const surface=heightAt(camera.position.x+origin.x,camera.position.z+origin.z)-origin.y;
   if(camera.position.y<surface+1.5){camera.position.y=surface+1.5;camera.lookAt(focus);}
-  const cameraContact=cameraCollision?.resolve(focus,camera.position,camera,{
-    minDistance:Math.max(1,modelTemplate?.userData.height||1)/(Math.sin(camera.fov*Math.PI/360)),
-  });
-  camera.lookAt(focus);camera.updateMatrixWorld(true);
-  canvas.dataset.cameraOccluded=String(cameraContact?.blocked??false);
-  canvas.dataset.cameraDistance=String(cameraContact?.distance??distance);
   for(const a of avatars.values()){
     const projected=a.root.position.clone().add(new THREE.Vector3(0,modelTemplate.userData.height+.4+a.body.position.y,0)).project(camera);
     a.label.hidden=projected.z>1||projected.z< -1;

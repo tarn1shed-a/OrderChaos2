@@ -88,28 +88,12 @@ export function createCollision(profile,terrain,world=RESOURCE_WORLD) {
     if(hit&&hit.point.y<=top+1e-4&&hit.point.y>height)height=hit.point.y;
     return height;
   }
-  // The old point foot fell between stair lips while the forward clearance
-  // ray stopped the centre before it could reach the next tread. Use the
-  // existing actor radius for a small support footprint; source PHY geometry
-  // and the maximum step query remain unchanged.
-  const radiusX=Math.max(margin,world.radius/world.width*(max[0]-min[0])),radiusZ=Math.max(margin,world.radius/world.height*(max[2]-min[2]));
-  const footprint=[[0,0],[1,0],[-1,0],[0,1],[0,-1],...[[-1,-1],[-1,1],[1,-1],[1,1]].map(([x,z])=>[x*Math.SQRT1_2,z*Math.SQRT1_2])];
-  function footSupport(x,z,ceiling,options={}){
-    return Math.max(...footprint.map(([dx,dz])=>support(x+dx*radiusX,z+dz*radiusZ,ceiling,options)));
-  }
-  function place(entity){const p=point(entity.x,entity.y);entity.worldY=Math.fround(footSupport(p.x,p.z,terrainHeight(p.x,p.z)+step));entity.grounded=true;}
+  function place(entity){const p=point(entity.x,entity.y);entity.worldY=Math.fround(support(p.x,p.z,terrainHeight(p.x,p.z)+step));entity.grounded=true;}
   function move(entity,input,dt,selectedWorld=world){
     if(!Number.isFinite(entity.worldY))place(entity);
     const proposal={x:entity.x,y:entity.y};advance(proposal,input,dt,selectedWorld);
     const from=point(entity.x,entity.y),to=point(proposal.x,proposal.y),delta=to.clone().sub(from),length=delta.length();
     if(length<1e-9)return;
-    if(entity.grounded){
-      const floor=footSupport(from.x,from.z,entity.worldY+step,{excludeOwner:entity.id??null});
-      if(floor>entity.worldY&&floor-entity.worldY<=step){
-        const overhead=raycast(new Vector3(from.x,entity.worldY+step,from.z),new Vector3(from.x,floor+step,from.z),{excludeOwner:entity.id??null});
-        if(!overhead||overhead.normal.y>=-.5)entity.worldY=Math.fround(floor);
-      }
-    }
     const lift=Math.min(length*profile.query.stepProbeMultiplier,step);
     from.y=to.y=entity.worldY+lift;
     const hit=raycast(from,to,{extension:margin,excludeOwner:entity.id??null});
@@ -126,10 +110,10 @@ export function createCollision(profile,terrain,world=RESOURCE_WORLD) {
     const xy=logical(destination);
     if(walkable(xy.x,xy.y,selectedWorld)){entity.x=xy.x;entity.y=xy.y;}
     if(entity.grounded){
-      const p=point(entity.x,entity.y),floor=footSupport(p.x,p.z,entity.worldY+step,{excludeOwner:entity.id??null});
+      const p=point(entity.x,entity.y),floor=support(p.x,p.z,entity.worldY+step,{excludeOwner:entity.id??null});
       // An unsupported edge becomes a fall; a walking entity never snaps down
       // an arbitrary cliff. The source full landing state machine is separate.
-      if(Math.abs(entity.worldY-floor)<=step)entity.worldY=Math.fround(floor);else entity.grounded=false;
+      if(entity.worldY-floor<=step)entity.worldY=Math.fround(floor);else entity.grounded=false;
     }
   }
   function vertical(entity,nextY){
@@ -138,7 +122,7 @@ export function createCollision(profile,terrain,world=RESOURCE_WORLD) {
       const hit=raycast(new Vector3(p.x,old+step,p.z),new Vector3(p.x,nextY+step,p.z),{extension:margin,excludeOwner:entity.id??null});
       if(hit&&hit.normal.y<-.5)return {y:Math.fround(Math.max(old,hit.point.y-step-margin)),ceiling:true,grounded:false};
     }
-    const floor=footSupport(p.x,p.z,Math.max(old,nextY)+1e-4,{excludeOwner:entity.id??null});
+    const floor=support(p.x,p.z,Math.max(old,nextY)+1e-4,{excludeOwner:entity.id??null});
     return nextY<=floor+1e-5?{y:Math.fround(floor),grounded:true}:{y:nextY,grounded:false};
   }
   function settle(entity){
@@ -148,7 +132,7 @@ export function createCollision(profile,terrain,world=RESOURCE_WORLD) {
     const contact=vertical(entity,state.height);entity.worldY=contact.y;entity.grounded=contact.grounded;
     entity.fallVelocity=contact.grounded?0:state.velocity;entity.fallAcceleration=state.acceleration;
   }
-  return {point,logical,terrainHeight,support,footSupport,raycast,place,move,vertical,settle,colliders,margin,step,
+  return {point,logical,terrainHeight,support,raycast,place,move,vertical,settle,colliders,margin,step,
     updateDynamic,removeDynamic:id=>dynamic.delete(id),dynamicIds:()=>[...dynamic.keys()],
     fork:()=>createCollision(profile,terrain,world),profile};
 }

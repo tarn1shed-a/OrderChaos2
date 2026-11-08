@@ -57,17 +57,6 @@ test('actual preview contains original compound collision and saved spawn has fi
  {skip:!existsSync(new URL('../../game-data/converted/maps/collision.json',import.meta.url))},()=>{
  const c=loadCollision(),p={x:900,y:360};assert.equal(c.colliders.length,138);c.place(p);assert(Number.isFinite(p.worldY));assert(p.grounded);
 });
-test('original temple stairs can be climbed and descended at full and slow movement without sticking at the tread seam',
- {skip:!existsSync(new URL('../../game-data/converted/maps/collision.json',import.meta.url))},()=>{
- const c=loadCollision(),xy=c.logical(new Vector3(-2617,141.76,162));
- for(const speed of [1,.2]){
-   const p={...xy,worldY:141.75902843475342,grounded:true};
-   for(let i=0;i<Math.ceil(32/speed);i++){c.move(p,{x:0,y:speed},.05);c.settle(p);}
-   assert(c.point(p.x,p.y).z>168,'Must pass the original seam at z=166.402');assert(p.worldY>143.6&&p.worldY<143.8);assert(p.grounded);
-   for(let i=0;i<Math.ceil(32/speed);i++){c.move(p,{x:0,y:-speed},.05);c.settle(p);}
-   assert(c.point(p.x,p.y).z<163);assert(Math.abs(p.worldY-141.75902843475342)<.01);assert(p.grounded);
- }
-});
 test('real temple lab anchors source door to actor ground, blocks while closed and permits passage after lifting',
  {skip:!existsSync(new URL('../../game-data/converted/maps/collision.json',import.meta.url))},()=>{
  const c=loadCollision(),lab=new DynamicScene(c,1000),p={id:'tester',x:900,y:360,hp:100};c.place(p);

@@ -195,6 +195,7 @@ class NativeEntityModelProbe(NativeDeviceSelectionProbe):
         return {'incomingSlot': incoming} | self.initial(config, incoming)
 
     def fresh(self, model, slot, force, exists):
+        """Return one task's candidate list; the worker chooses a candidate."""
         from scene_lightmap_binding import fresh_model_requests
         fresh_model_requests(model, slot, force, False)  # validate scope, discard oracle result
         self.registers()

@@ -4,7 +4,7 @@
 
 **自写网页客户端、本地游戏服务器、玩法规则及启动/部署入口已从当前版本删除。** 旧原型及转换预览保存在忽略的本地备份和Git历史中；不再作为当前实现。原始资源、研究证据和私有存档保留，自动续跑保持暂停。
 
-当前研究入口：[EntityConfig、模型槽与距离选择](docs/ENTITY_MODEL_LOADING.md)，接续[设备档位与实例过滤](docs/DEVICE_AND_INSTANCE_FILTERING.md)、[配置、phase与区块遮罩](docs/MAP_CONFIG_PHASE_MASK.md)及[地图请求与区块加载/卸载](docs/MAP_REQUEST_AND_STREAMING.md)；文件关联基线见[新手地图原始加载链与缺口](docs/ORIGINAL_MAP_LOADING.md)。全仓历史归因见[审计报告](docs/PROJECT_AUDIT.md)及[318文件基线清单](docs/PROJECT_AUDIT_FILES.json)。历史目录只供追溯，不自动触发后续实现。
+当前研究入口：[模型任务结果、显示槽与包围盒](docs/MODEL_COMPLETION_AND_BOUNDS.md)，接续[EntityConfig、模型槽与距离选择](docs/ENTITY_MODEL_LOADING.md)、[设备档位与实例过滤](docs/DEVICE_AND_INSTANCE_FILTERING.md)、[配置、phase与区块遮罩](docs/MAP_CONFIG_PHASE_MASK.md)及[地图请求与区块加载/卸载](docs/MAP_REQUEST_AND_STREAMING.md)；文件关联基线见[新手地图原始加载链与缺口](docs/ORIGINAL_MAP_LOADING.md)。全仓历史归因见[审计报告](docs/PROJECT_AUDIT.md)及[318文件基线清单](docs/PROJECT_AUDIT_FILES.json)。历史目录只供追溯，不自动触发后续实现。
 
 ## 保留内容
 
@@ -27,6 +27,8 @@
 .venv/bin/python tools/device_instance_evidence_tests.py
 .venv/bin/python tools/entity_model_evidence.py --probe
 .venv/bin/python tools/entity_model_evidence_tests.py
+.venv/bin/python tools/model_completion_evidence.py
+.venv/bin/python tools/model_completion_evidence_tests.py
 .venv/bin/python tools/scene_lightmaps.py --output analysis/raw/map-original-loader-20261108/lightmap-bindings.json
 ```
 

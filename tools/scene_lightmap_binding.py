@@ -88,10 +88,12 @@ def initial_model_request(config, incoming_slot):
 
 
 def fresh_model_requests(model, requested_slot, force_single_slot, lower_exists):
-    """33f2fc filename branch, limited to a fresh instance with no pending jobs.
+    """33f2fc ordered filename candidates for one fresh task, not parallel loads.
 
     Forced slot1 may request the base filename while still storing the result
     in slot1. It must therefore keep slot1's atlas/records.
+    The downstream worker stops at its first acquired resource; see
+    model_completion_evidence for the executed worker and notification chain.
     """
     _slot(requested_slot)
     if type(force_single_slot) is not bool or type(lower_exists) is not bool:

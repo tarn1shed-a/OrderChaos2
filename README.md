@@ -138,6 +138,7 @@ python3 -m venv .venv
 .venv/bin/python tools/scene_shader_rewrite_tests.py
 .venv/bin/python tools/scene_effect_modifiers_tests.py
 .venv/bin/python tools/scene_effect_techniques_tests.py
+.venv/bin/python tools/scene_effect_compiler_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -249,3 +250,5 @@ python3 tools/art_library.py import /path/to/oc2-assets.zip
 `.venv/bin/python tools/scene_effect_modifiers.py` 核对源modifier接口及天空两份描述区的零modifier输入，执行原接口、构建准入前沿、零mask的源pass委托，再把实际接口接到原效果对象构造。原源pass加载callback只记录参数，程序/反射仍是实验边界；两份profile分别核对，未指定活动设备选择，也未声称执行完整1406e94编译器。游戏画面和素材不变。
 
 `.venv/bin/python tools/scene_effect_techniques.py` 执行原零modifier的pass入列、状态复制、技术表收束和节点回收，再把生成的中间记录直接交给原效果构造器。中间单pass标志与最终表的程序标志来源分别核对；程序编译返回值、空反射、预热内存池和已选名称是明确夹具，不代表已恢复活动天空编译或GPU画面。完整源输入和实验报告仅留忽略目录。
+
+`.venv/bin/python tools/scene_effect_compiler.py` 继续执行原1406e94读取已生成的技术链表、建立指针数组并调用原效果构造器，入口寄存器和数组均不替换；停在缓存登记之前。输入holder已被消耗，但公开输出尚未发布，不能把临时对象说成已登记的活动效果。程序编译仍是上轮夹具，完整编译/缓存/driver和GPU继续待恢复，游戏画面不变。

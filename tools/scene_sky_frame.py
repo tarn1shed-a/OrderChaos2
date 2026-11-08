@@ -83,13 +83,14 @@ def analyze_frame(image):
                       'cameraCoordinatesCopied': 3, 'modelWrapperOffsets': [0x10, 0x18], 'wrapperPositionSlot': 0x18,
                       'vortexScope': 'explicitly absent; sky+0x70 is zero'},
             'sceneAttachment': {'entry': '0x3381f0', 'nodeFromWrapperOffset': 8, 'sceneVirtualSlot': 0xd0,
+                                'receiverCorrection': 'parent root from primary scene+8, not primary scene itself',
                                 'nullNodeOrNullSceneSkips': True, 'drawOrderEstablished': False},
             'appliedAsLiveState': False,
             'limits': ['34df7c directly dispatches sky before scene animation. Group membership alone does not establish this update order.',
                        'Camera input is the value returned by virtual+0x170; its concrete device class, parent transforms and motion producer are not inferred.',
                        'Sky/vortex nonzero configuration path is not executed by the numeric model or probe. Missing active camera is outside the finite-valid-input branch.',
                        'Probe uses explicit synthetic CSceneNode getter/setter receivers to exercise the original model wrapper. Position dirty propagation is intercepted and recorded, not reconstructed.',
-                       'Scene+0xd0 attachment is not a draw call. Actual scene queue priorities, final world matrices, draw sorting, render targets and HDR order remain pending.',
+                       'Parent-root virtual+0xd0 attachment is not a draw call. The sky caller passes primary scene+8; actual scene queue priorities, final world matrices, draw sorting, render targets and HDR order remain pending.',
                        'No browser, UI, converted asset, original process, network or GPU state is changed.']}
 
 

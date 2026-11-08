@@ -83,6 +83,7 @@ class SkySceneDispatchTests(unittest.TestCase):
         self.assertFalse(r['appliedAsLiveState']); self.assertFalse(r['passDispatch']['callbacksExecutedByProbe'])
         self.assertTrue(r['native']['defaultFactoryOnly'])
         self.assertEqual(r['dispatch']['0xd0'], '0x12f9ea8'); self.assertFalse(r['attachment']['duplicateCheck'])
+        self.assertFalse(r['attachment']['tutorialSkyAttachmentPath'])
         self.assertEqual(r['native']['sceneVirtualSlots'], len(SCENE_SLOTS))
 
 

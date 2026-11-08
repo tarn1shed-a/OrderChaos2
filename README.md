@@ -127,6 +127,7 @@ python3 -m venv .venv
 .venv/bin/python tools/scene_sky_draw_tests.py
 .venv/bin/python tools/scene_sky_collection_tests.py
 .venv/bin/python tools/scene_sky_mesh_tests.py
+.venv/bin/python tools/scene_sky_material_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -211,8 +212,10 @@ python3 tools/art_library.py import /path/to/oc2-assets.zip
 
 `.venv/bin/python tools/scene_sky_frame.py` 另核对天空帧更新：原渲染器直接更新天空，再推进场景动画；无漩涡分支把相机位置传给主天空/远山模型。原指令隔离执行核查了空模型、位置不变及更新顺序，但场景最终世界矩阵、绘制队列和HDR顺序尚未恢复，网页天空仍未启用。
 
-`.venv/bin/python tools/scene_sky_draw.py` 核对默认引擎工厂创建的实际scene类型、节点挂接与两个绘制入口的阶段调度。工具固定具体虚函数目标，验证容器追加/扩容和回调参数；未观察设备自定义工厂，也没有把阶段回调记录当作GPU绘制或HDR还原。
+`.venv/bin/python tools/scene_sky_draw.py` 核对默认引擎工厂创建的实际scene类型、原始指针容器与两个绘制入口的阶段调度。容器追加/扩容记录保持，天空实际走scene+8根节点的父子挂接，由scene_sky_material核实；未观察设备自定义工厂，也没有把阶段回调记录当作GPU绘制或HDR还原。
 
 `.venv/bin/python tools/scene_sky_collection.py` 核对默认收集器和访问者的许可/裁剪门控，区分根节点列表与单根引用。普通访问者返回1不代表已经提交几何；具体网格节点由后续scene_sky_mesh继续核对，完整树遍历、渲染队列、矩阵及HDR仍待恢复。
 
 `.venv/bin/python tools/scene_sky_mesh.py` 沿原启动工厂和BDAE几何附件核对具体天空网格节点：默认提交委托是节点自身，进入原网格提交函数。隔离验证构造、门控与提交参数；材质分类生产者、最终队列/绘制顺序、矩阵和HDR仍待恢复，未启用网页天空。
+
+`.venv/bin/python tools/scene_sky_material.py` 核实静态网格分类函数返回16、原天空父子挂接与场景上下文传递，并验证64位上下文参数。常量分类不代表材质已被忽略；具体队列内部的材质/technique分流、排序和HDR仍待恢复，未启用网页天空。

@@ -1,7 +1,8 @@
-"""Default scene factory and bounded attachment/pass-dispatch evidence.
+"""Default scene factory and bounded raw-vector/pass-dispatch evidence.
 
 Concrete virtual targets are resolved from the original factory constructor.
 Pass callbacks, queue sorting, matrices and HDR are not treated as recovered.
+The primary scene's raw vector is not the tutorial sky attachment path.
 """
 import argparse
 import hashlib
@@ -52,8 +53,9 @@ def verify_native(image):
 def attachment_append(nodes, capacity, node):
     """Valid small research states only; retain raw pointer order and duplicates.
 
-    The original caller skips null nodes. The append consumer itself does not
-    deduplicate or filter pointers. The size cap is a local tool guard.
+    Legacy helper name: this is the primary scene's raw pointer vector, not
+    tutorial sky node attachment. No deduplication or pointer filtering.
+    The size cap is a local tool guard.
     """
     if (not isinstance(nodes, list) or type(capacity) is not int or not len(nodes) <= capacity <= 10000 or
             any(type(n) is not int or not 0 <= n <= 0xffffffffffffffff for n in [*nodes, node])):
@@ -78,7 +80,9 @@ def analyze_scene(image):
                              '12f2318: primary vptr247ff40', '34d7fc: renderer+0x18 = engine+0x30'],
             'dispatch': {hex(slot): hex(target) for slot, target in SCENE_SLOTS.items()},
             'attachment': {'target': '0x12f9ea8', 'vectorOffsets': [0x10, 0x18, 0x20],
-                           'entryBytes': 8, 'duplicateCheck': False, 'referenceCountWrite': False},
+                           'entryBytes': 8, 'duplicateCheck': False, 'referenceCountWrite': False,
+                           'tutorialSkyAttachmentPath': False,
+                           'correction': 'Sky loader passes scene+8 parent root to3381f0, whose virtual+d0 is1362f5c, not primary scene12f9ea8.'},
             'passDispatch': {'direct': pass_stages('direct'), 'reference': pass_stages('reference'),
                              'directArgument': 'address of root-reference vector; collector iterates begin/end in 8-byte entries',
                              'referenceNullFallback': 'address of scene+8 member', 'bitTestsUseLowBitOnly': True,

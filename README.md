@@ -123,6 +123,7 @@ python3 -m venv .venv
 .venv/bin/python tools/swf_ui_graphics_tests.py
 .venv/bin/python tools/terrain_materials_tests.py
 .venv/bin/python tools/scene_sky_tests.py
+.venv/bin/python tools/scene_sky_frame_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -203,4 +204,6 @@ python3 tools/art_library.py import /path/to/oc2-assets.zip
 
 原地图地表当前还需 `maps/terrain-materials.json`（`oc2-terrain-materials-v1`）及其原纹理/遮罩；每块64个区块、9块共576个源区块绑定，网页合为12组材质绘制。地表已接原分层、UV与RGBA遮罩；还需 `rendering/terrain-lighting.json`（`oc2-terrain-lighting-v1`）：九块地形使用八张源区块光照图和原tutorial世界回退图，按Terrain/default的顶点色调、地形倍率和片元offset顺序计算，移除地形Standard重复照明。当前仅接明确phase0、lightmap启用、无SHADOWMAP的稳定普通分支；原地形质量、fade、水面/非白顶点及天空仍待核对。静态场景另需 `rendering/baked-lighting.json`（`oc2-scene-baked-lighting-v1`）：39个原实例按各自区块记录绑定三张光照图集与原UV1，使用源顶点照明/色调乘法，移除静态场景的Standard重复照明。网页明确固定槽0及环境mode0立即写入分支；原设备活动配置、自动LOD/淡入淡出、完整雾/天空/天气与像素级1:1仍未完成。角色、地形与本地试验门不混用这套静态实例图集。旧素材包请整体更新后刷新。
 
-原天空声明可用 `.venv/bin/python tools/scene_sky.py` 只读核查，报告写入忽略目录。已核实tutorial专用网格/贴图、按名字选择的solid分支、源深度状态、色调/高度雾与饱和度计算，以及有界原指令的缩放/参数缓存；没有把静态参数当作原设备实态。相机跟随、实际绘制顺序、环境参数生产者和最终采样仍待恢复，本工具暂不改网页或素材包。
+原天空声明可用 `.venv/bin/python tools/scene_sky.py` 只读核查，报告写入忽略目录。已核实tutorial专用网格/贴图、按名字选择的solid分支、源深度状态、色调/高度雾与饱和度计算，以及有界原指令的缩放/参数缓存；没有把静态参数当作原设备实态。相机/节点最终世界矩阵、实际绘制顺序、环境参数生产者和最终采样仍待恢复，本工具暂不改网页或素材包。
+
+`.venv/bin/python tools/scene_sky_frame.py` 另核对天空帧更新：原渲染器直接更新天空，再推进场景动画；无漩涡分支把相机位置传给主天空/远山模型。原指令隔离执行核查了空模型、位置不变及更新顺序，但场景最终世界矩阵、绘制队列和HDR顺序尚未恢复，网页天空仍未启用。

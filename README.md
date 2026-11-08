@@ -4,7 +4,7 @@
 
 **自写网页客户端、本地游戏服务器、玩法规则及启动/部署入口已从当前版本删除。** 旧原型及转换预览保存在忽略的本地备份和Git历史中；不再作为当前实现。原始资源、研究证据和私有存档保留，自动续跑保持暂停。
 
-当前研究入口：[新手地图原始加载链与缺口](docs/ORIGINAL_MAP_LOADING.md)。全仓历史归因见[审计报告](docs/PROJECT_AUDIT.md)及[318文件基线清单](docs/PROJECT_AUDIT_FILES.json)。历史目录只供追溯，不自动触发后续实现。
+当前研究入口：[地图请求与区块加载/卸载](docs/MAP_REQUEST_AND_STREAMING.md)；文件关联基线见[新手地图原始加载链与缺口](docs/ORIGINAL_MAP_LOADING.md)。全仓历史归因见[审计报告](docs/PROJECT_AUDIT.md)及[318文件基线清单](docs/PROJECT_AUDIT_FILES.json)。历史目录只供追溯，不自动触发后续实现。
 
 ## 保留内容
 

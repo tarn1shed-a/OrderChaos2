@@ -50,7 +50,7 @@ class NativeSkyDrawProbe:
             event = {'slot': slot}
             if slot in (0x88, 0xa0): event['driver'] = self.get('X1')
             if slot == 0xa0: event['bit'] = self.get('W2')
-            if slot == 0x60: event['node'] = self.get('X1')
+            if slot == 0x60: event['listAddress'] = self.get('X1')
             if slot == 0x58:
                 event['referenceAddress'] = self.get('X1'); event['node'] = self.read(self.get('X1'), 'Q')[0]
             self.events.append(event)
@@ -68,7 +68,7 @@ class NativeSkyDrawProbe:
         return {'nodes': list(self.read(begin, 'Q'*count)), 'capacity': (limit-begin)//8,
                 'allocated': bool(self.allocations), 'allocationBytes': self.allocations, 'freedOld': bool(self.frees)}
 
-    def scene_pass(self, mode, skip_word=0, clear_word=1, node=0x12345678):
+    def scene_pass(self, mode, skip_word=0, clear_word=1, argument=0x12345678):
         if mode not in ('direct', 'reference'): raise ValueError('Unknown pass mode')
         self.reset(); table = self.BASE+0x9000; driver = self.BASE+0x4000
         self.write(self.BASE, 'Q', table); self.write(self.BASE+0x40, 'Q', driver)
@@ -76,9 +76,9 @@ class NativeSkyDrawProbe:
         for slot in (0x88, 0x98, 0x60, 0x58, 0x90, 0xb0, 0xa0):
             self.write(table+slot, 'Q', self.BASE+0xf000+slot)
         self.set('X0', self.BASE); self.set('W2', skip_word); self.set('W3', clear_word)
-        if mode == 'direct': self.set('X1', node)
+        if mode == 'direct': self.set('X1', argument)
         else:
-            self.write(self.BASE+0x3000, 'Q', node); self.set('X1', self.BASE+0x3000)
+            self.write(self.BASE+0x3000, 'Q', argument); self.set('X1', self.BASE+0x3000)
         self.uc.emu_start(0x12f78b8 if mode == 'direct' else 0x12f797c, self.BASE+0xff04, count=150)
         if self.get('PC') != self.BASE+0xff00: raise ValueError('Scene pass probe exceeded bounds')
         return {'events': self.events, 'finalPassWord': self.read(self.BASE+0x26c, 'I')[0]}

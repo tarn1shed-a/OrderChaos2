@@ -62,7 +62,8 @@ class SkySceneDispatchTests(unittest.TestCase):
                         last = events[-2]; self.assertEqual(last['bit'], clear & 1); self.assertEqual(last['driver'], p.BASE+0x4000)
                         if not skip & 1:
                             gather = next(e for e in events if e.get('slot') in (0x58, 0x60))
-                            self.assertEqual(gather['node'], node if mode == 'direct' or node else 0x87654321)
+                            if mode == 'direct': self.assertEqual(gather['listAddress'], node)
+                            else: self.assertEqual(gather['node'], node or 0x87654321)
                             if mode == 'reference': self.assertEqual(gather['referenceAddress'], p.BASE+0x3000 if node else p.BASE+8)
 
     @unittest.skipUnless(NATIVE.is_file(), 'Original native source stays local')

@@ -80,6 +80,7 @@ def analyze_scene(image):
             'attachment': {'target': '0x12f9ea8', 'vectorOffsets': [0x10, 0x18, 0x20],
                            'entryBytes': 8, 'duplicateCheck': False, 'referenceCountWrite': False},
             'passDispatch': {'direct': pass_stages('direct'), 'reference': pass_stages('reference'),
+                             'directArgument': 'address of root-reference vector; collector iterates begin/end in 8-byte entries',
                              'referenceNullFallback': 'address of scene+8 member', 'bitTestsUseLowBitOnly': True,
                              'callbacksExecutedByProbe': False},
             'appliedAsLiveState': False,

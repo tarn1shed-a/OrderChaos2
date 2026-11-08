@@ -139,6 +139,7 @@ python3 -m venv .venv
 .venv/bin/python tools/scene_effect_modifiers_tests.py
 .venv/bin/python tools/scene_effect_techniques_tests.py
 .venv/bin/python tools/scene_effect_compiler_tests.py
+.venv/bin/python tools/scene_effect_registration_tests.py
 .venv/bin/python tools/navmesh_tests.py
 .venv/bin/python tools/player_spell_effects_tests.py
 .venv/bin/python tools/ui_assets_tests.py
@@ -252,3 +253,5 @@ python3 tools/art_library.py import /path/to/oc2-assets.zip
 `.venv/bin/python tools/scene_effect_techniques.py` 执行原零modifier的pass入列、状态复制、技术表收束和节点回收，再把生成的中间记录直接交给原效果构造器。中间单pass标志与最终表的程序标志来源分别核对；程序编译返回值、空反射、预热内存池和已选名称是明确夹具，不代表已恢复活动天空编译或GPU画面。完整源输入和实验报告仅留忽略目录。
 
 `.venv/bin/python tools/scene_effect_compiler.py` 继续执行原1406e94读取已生成的技术链表、建立指针数组并调用原效果构造器，入口寄存器和数组均不替换；停在缓存登记之前。输入holder已被消耗，但公开输出尚未发布，不能把临时对象说成已登记的活动效果。程序编译仍是上轮夹具，完整编译/缓存/driver和GPU继续待恢复，游戏画面不变。
+
+`.venv/bin/python tools/scene_effect_registration.py` 接着执行原缓存未命中登记、命中复用、引用转移、临时对象析构及1406e94完整返回；用真实hash冲突名字核对hash命中后仍比较名称。当前限预留容量和空反射/绑定，锁、分配器、已有缓存身份及shader程序仍是夹具，不能等同原设备活动缓存或完整渲染恢复。素材、界面和存档不变。

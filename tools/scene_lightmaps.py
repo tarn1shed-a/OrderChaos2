@@ -1,8 +1,8 @@
 """Audit original per-object atlas records without changing scene rendering.
 
 The record lookup, atlas index and filename construction are traced in native
-code. Payload bytes, the two slots' active selection and shader UV transforms
-remain unresolved; this reader deliberately does not label those bytes UVs.
+code. This reader retains payload bytes without interpretation. The separate
+scene_lightmap_binding audit follows their model/material/shader consumers.
 """
 import argparse
 import hashlib
@@ -175,7 +175,7 @@ def analyze(source=DEFAULT_SOURCE, world='tutorial', tile_x=-43, tile_z=2, side=
             'textureCandidates': textures, 'defaultTextureCandidates': defaults,
             'appliedToRendering': False,
             'limits': ['Only non-phasing files are audited. Native phasing fallback and slot0/slot1 active selection are not applied; slots are not assigned guessed quality names.',
-                       'Object IDs are uint32. +8 is the native sort key; +12 indexes the atlas list. +4 and the final 16 bytes remain opaque, not recovered UV transforms.',
+                       'Object IDs are uint32. +8 is the native sort key; +12 indexes the atlas list. +4 remains opaque. This byte reader retains the final 16 bytes; see scene_lightmap_binding for their consumer interpretation.',
                        'Candidate archives are CRC-checked without guessing mount priority. Missing atlas pages and differing fallback copies remain explicit.',
                        'No source lightmap, shader color-space formula, per-instance override or scene lighting is applied by this audit.']}
 

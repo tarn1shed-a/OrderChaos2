@@ -4,7 +4,7 @@
 
 **自写网页客户端、本地游戏服务器、玩法规则及启动/部署入口已从当前版本删除。** 旧原型及转换预览保存在忽略的本地备份和Git历史中；不再作为当前实现。原始资源、研究证据和私有存档保留，自动续跑保持暂停。
 
-当前研究入口：[Ghidra工程与地图载入到绘制总览](docs/GHIDRA_MAP_FLOW.md)。已安装本机工具并导入原版ARM64库；89个重点入口带研究书签和反编译导出，未恢复地图画面。可双击[打开分析工程](tools/open_ghidra.command)。
+当前研究入口：[GhidraMCP接入与新手地形绘制链](docs/GHIDRA_MCP_AND_TERRAIN_DRAW.md)。GhidraMCP已针对12.2构建并实测，Codex本地连接已配置；原地形的一条条件路径已追到OpenGL入口，仍未恢复地图画面。原GUI工程保持，MCP独立副本现有112个研究入口；[手动启动研究服务](tools/start_ghidra_mcp.command)。前轮工具与总览见[Ghidra工程](docs/GHIDRA_MAP_FLOW.md)。
 
 前轮证据：[原效果文件的读取、材质生成与部件更新](docs/EFFECT_RESOURCE_AND_MATERIAL.md)，接续[材质列表建立与重建](docs/MATERIAL_LIST_AND_REBUILD.md)、[显示前的材质调整](docs/MATERIAL_ADJUSTMENT.md)、[建筑模型怎样读取、进入场景和隐藏](docs/MESH_AND_SCENE.md)、[BRES重定位、节点矩阵与12项初始世界包围盒](docs/BRES_WORLD_BOUNDS.md)、[模型任务结果、显示槽与包围盒](docs/MODEL_COMPLETION_AND_BOUNDS.md)、[EntityConfig、模型槽与距离选择](docs/ENTITY_MODEL_LOADING.md)、[设备档位与实例过滤](docs/DEVICE_AND_INSTANCE_FILTERING.md)、[配置、phase与区块遮罩](docs/MAP_CONFIG_PHASE_MASK.md)及[地图请求与区块加载/卸载](docs/MAP_REQUEST_AND_STREAMING.md)；文件关联基线见[新手地图原始加载链与缺口](docs/ORIGINAL_MAP_LOADING.md)。全仓历史归因见[审计报告](docs/PROJECT_AUDIT.md)及[318文件基线清单](docs/PROJECT_AUDIT_FILES.json)。历史目录只供追溯，不自动触发后续实现。
 

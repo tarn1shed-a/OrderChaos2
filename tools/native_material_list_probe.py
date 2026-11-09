@@ -67,7 +67,7 @@ class NativeMaterialListProbe(NativeMaterialAdjustmentProbe):
             rows.append({'part': i, 'definition': definition,
                          'material': self.c(self.r(definition, 'Q')[0]).decode(),
                          'localIndex': self.r(binding+0x10, 'i')[0],
-                         'sourceExtraArgumentsPointer': self.r(definition+0x18, 'Q')[0],
+                         'sourceEffectDefinitionPointer': self.r(definition+0x18, 'Q')[0],
                          'externalReference': False})
         return rows
 

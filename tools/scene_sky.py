@@ -114,7 +114,7 @@ def sky_material(reader):
     count, table = reader.section(172)
     if count != 1 or records[0]['effectPath'] != EFFECT or records[0]['effectName'] != '#sky_box-fx':
         raise ValueError('Unsupported sky material effect binding')
-    if reader.q(table+24) != 0: raise ValueError('Additional sky material shader arguments need recovery')
+    if reader.q(table+24) != 0: raise ValueError('Expected unresolved source sky effect-definition pointer')
     size, props = reader.u(table+32), reader.rel(table+36)
     if size != 3: raise ValueError('Unsupported sky material property set')
     seen, values = set(), {}

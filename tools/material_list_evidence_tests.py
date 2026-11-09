@@ -40,7 +40,7 @@ class MaterialListTests(unittest.TestCase):
                               for r in refs], model['sourceParts'])
             for row in refs:
                 self.assertFalse(row['externalReference'])
-                self.assertEqual(row['sourceExtraArgumentsPointer'], 0)
+                self.assertEqual(row['sourceEffectDefinitionPointer'], 0)
                 self.assertEqual(model['materials'][row['localIndex']]['material'], row['material'])
 
     def test_smithy_uses_part_reference_order_not_material_table_order(self):

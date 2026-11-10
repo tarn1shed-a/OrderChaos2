@@ -28,7 +28,7 @@ def connect(runtime, verified):
     text = source.read_text()
     before = "assets = await json('/assets/manifest.json');"
     after = """const sourceProfile=new URLSearchParams(location.search).get('sourceProfile');
-    if(sourceProfile&&!/^GPU_[A-Za-z0-9_]+$/.test(sourceProfile))throw new Error('无效原配置分支');
+    if(sourceProfile&&!/^(GPU_[A-Za-z0-9_]+|APK_Default)$/.test(sourceProfile))throw new Error('无效原配置分支');
     assets = await json(sourceProfile?`/assets/verified/${sourceProfile}/manifest.json`:'/assets/manifest.json');
     if(sourceProfile){
       const evidence=await json(assets.sourceSelection.url);
@@ -41,11 +41,14 @@ def connect(runtime, verified):
       canvas.dataset.sourceModelSlot=String(evidence.settings.ForceModelLodLevel);
       canvas.dataset.sourceOmittedInstances=String(evidence.preview.omitted.length);
     }"""
+    text = text.replace('!/^GPU_[A-Za-z0-9_]+$/.test(sourceProfile)',
+                        '!/^(GPU_[A-Za-z0-9_]+|APK_Default)$/.test(sourceProfile)')
     if after not in text:
         if text.count(before)!=1:
             raise ValueError('Unexpected archived viewer entry; refusing a guessed patch')
         source.with_suffix('.js.before-source-selection').write_text(text)
-        source.write_text(text.replace(before,after))
+        text = text.replace(before,after)
+    source.write_text(text)
     lighting = public/'scene-baked-lighting.js'
     text = lighting.read_text()
     old = 'config?.modelSlot!==0'

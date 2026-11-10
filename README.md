@@ -6,6 +6,8 @@
 
 2026-11-11 补充：按用户最新要求，已将[新手地图两个原配置条件分支](docs/TUTORIAL_ASSET_SELECTION.md)接到忽略目录中的隔离历史预览，并实际进入核对。受控仓库没有恢复旧游戏代码；雷电实际选档尚未取得，旧显示/玩法适配不当作原版恢复。新增工具只导出有原依据的资料绑定，缺失项不补，自动续跑仍暂停。
 
+最新基准改为[原 APK 默认材质与光照](docs/DEFAULT_MAP_MATERIAL_LIGHTING.md)，不依赖设备选档。已核对原模型/UV/颜色图，纠正旧预览误用的 HDR/LUT 并接入原普通后处理着色文件；当前偏暗的主要阶段已定位，原环境状态及同位置画面对照尚未闭合，不宣称已根治。
+
 当前研究入口：[纹理加载、上传与材质绑定](docs/TEXTURE_LOADING_AND_UPLOAD.md)。经GhidraMCP接上所查文件识别/读取、加载和补传任务、GLES上传/错误清理及材质引用消费；34份样本候选保留原压缩格式，同名光照图未代选。原任务结束、上传返回和纹理可用分别核对，实际显卡结果及原版画面仍未取得。MCP独立工程现有269个研究入口，原GUI工程保持；[手动启动研究服务](tools/start_ghidra_mcp.command)。前轮见[完成与绘制前检查](docs/RESOURCE_COMPLETION_AND_BINDING.md)、[配置与GPU条件](docs/RENDER_READINESS.md)、[帧呈现证据](docs/FRAME_PRESENTATION.md)，加载总览见[Ghidra工程](docs/GHIDRA_MAP_FLOW.md)。
 
 前轮证据：[原效果文件的读取、材质生成与部件更新](docs/EFFECT_RESOURCE_AND_MATERIAL.md)，接续[材质列表建立与重建](docs/MATERIAL_LIST_AND_REBUILD.md)、[显示前的材质调整](docs/MATERIAL_ADJUSTMENT.md)、[建筑模型怎样读取、进入场景和隐藏](docs/MESH_AND_SCENE.md)、[BRES重定位、节点矩阵与12项初始世界包围盒](docs/BRES_WORLD_BOUNDS.md)、[模型任务结果、显示槽与包围盒](docs/MODEL_COMPLETION_AND_BOUNDS.md)、[EntityConfig、模型槽与距离选择](docs/ENTITY_MODEL_LOADING.md)、[设备档位与实例过滤](docs/DEVICE_AND_INSTANCE_FILTERING.md)、[配置、phase与区块遮罩](docs/MAP_CONFIG_PHASE_MASK.md)及[地图请求与区块加载/卸载](docs/MAP_REQUEST_AND_STREAMING.md)；文件关联基线见[新手地图原始加载链与缺口](docs/ORIGINAL_MAP_LOADING.md)。全仓历史归因见[审计报告](docs/PROJECT_AUDIT.md)及[318文件基线清单](docs/PROJECT_AUDIT_FILES.json)。历史目录只供追溯，不自动触发后续实现。

@@ -120,10 +120,12 @@ def resolve(image, source, apk, profile, legacy):
     with zipfile.ZipFile(apk) as archive:
         config = json.loads(archive.read('assets/GameOptions.json'))
     gpu = config['profiles']['GPU']
-    if profile not in gpu['overrides']:
+    if profile != 'APK_Default' and profile not in gpu['overrides']:
         raise ValueError('An explicit original GPU profile name is required')
     selector = NativeDeviceSelectionProbe(image)
-    events = selector.updates(gpu, profile)
+    # Empty override key: execute the original defaults reader, followed by
+    # the original no-matching-override branch. This is not GPU_6 selection.
+    events = selector.updates(gpu, '' if profile == 'APK_Default' else profile)
     values = dict(events)
     settings = {k: values[k] for k in KEYS}
     settings['DeviceLayer'] = selector.layer_clamp(settings['DeviceLayer'])
@@ -189,7 +191,8 @@ def resolve(image, source, apk, profile, legacy):
                 rows.append({**item,'admission':status,'modelSlot':slot,'requestedModel':model_path,
                              'recordPath':record_path,'bindings':bindings})
     return {'format':FORMAT,'profile':profile,'actualDeviceObserved':False,
-            'selection': 'explicit conditional input; emulator profile remains unknown',
+            'selection': ('original APK defaults, explicitly requested baseline; no device selection'
+                          if profile == 'APK_Default' else 'explicit conditional input; emulator profile remains unknown'),
             'settings':settings,'phase':0,'mask':mask,'APK':apk_proof,
             'region':{'tileOrigin':terrain['tileOrigin'],'tileCount':terrain['tileCount'],
                       'scope':'historical research region, not recovered original spawn/residency'},

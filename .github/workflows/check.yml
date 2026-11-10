@@ -84,6 +84,7 @@ jobs:
       - run: python tools/swimming_tests.py
       - run: python tools/diving_tests.py
       - run: python tools/shore_tests.py
+      - run: python tools/animation_blending_tests.py
       - run: python tools/map_loading_evidence_tests.py
       - run: python tools/map_streaming_evidence_tests.py
       - run: python tools/map_selection_evidence_tests.py

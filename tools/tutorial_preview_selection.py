@@ -261,17 +261,19 @@ def export_preview(report, sources, legacy, destination, *, asset_prefix=None):
     mats['sources'].update(sources.proofs)
     manifest['map']['materials']['url'] = write('terrain-materials.json',mats)
     manifest['terrainLighting']['url'] = write('terrain-lighting.json',ground)
-    selected = {row['id']:row for row in report['instances'] if row['admission']=='admittedBeforeTypeFactory'}
+    # Original DAT lookup belongs to a terrain tile (342194), not a global ID
+    # namespace. The archive contains a reused ID with different TRS in two tiles.
+    selected = {(tuple(row['tile']),row['id']):row for row in report['instances'] if row['admission']=='admittedBeforeTypeFactory'}
     omitted,scenery,instance_bindings,atlases = [],[],[],{}
     for entry in manifest['scenery']:
         if entry.get('sourcePreviewGap'):
             omitted.extend({'id':i['id'],'reason':entry['sourcePreviewGap'],'path':entry['model']}
-                           for i in entry['instances'] if i['id'] in selected)
+                           for i in entry['instances'] if (tuple(i['tile']),i['id']) in selected)
             continue
         data = json.loads((legacy/entry['url'].removeprefix('/assets/')).read_text())
         instances = []
         for instance in entry['instances']:
-            row = selected.get(instance['id'])
+            row = selected.get((tuple(instance['tile']),instance['id']))
             if row is None: continue
             if any(row[k]!=instance[k] for k in ('model','tile','position','quaternion','scale')):
                 raise ValueError('Archived instance differs from original ITM')

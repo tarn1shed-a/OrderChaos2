@@ -148,6 +148,7 @@ class SourcePhysics:
         residency. Dynamic actor registry is empty and original network is absent.
         """
         self.tiles={tuple(t['tile']):t for t in terrain['sourceTiles']};self.world=self.alloc(0x2000)
+        self.inspection_unavailable={tuple(t)for t in profile.get('inspectionUnavailableTiles',[])}
         root=self.alloc(0x300);settings=self.alloc(0x100);self.w(0x2528db0,'Q',root)
         self.w(root+0x1c0,'Q',self.world);self.w(root+0x270,'Q',settings);self.w(settings+0x84,'3i',3,3,1)
         self.w(self.world+0x4c,'3i',3,3,1)
@@ -191,7 +192,7 @@ class SourcePhysics:
 
     def available(self,x,z):
         tx=math.floor(f32(x))>>6;tz=math.floor(f32(z))>>6
-        if (tx,tz)not in self.tiles:return False
+        if (tx,tz)not in self.tiles or(tx,tz)in self.inspection_unavailable:return False
         chunk=((math.floor(f32(z))-tz*64)>>3)*8+((math.floor(f32(x))-tx*64)>>3)
         return not(self.chunk_flags.get((tx,tz),[0]*64)[chunk]&0x30000)
 

@@ -73,12 +73,13 @@ def source_coordinates(sources):
     return sorted(coordinates,key=lambda p:(p[1],p[0]))
 
 
-def build(image, source, legacy, output, center=(-42,3), radius=2):
+def build(image, source, legacy, output, center=(-42,3), radius=2, coordinates=None, namespace=None):
     from native_map_streaming_probe import NativeMapStreamingProbe
     from map_streaming_evidence import verify_native as verify_streaming
     from terrain_lighting import verify_native as verify_terrain
     from scene_collision import decode_phy
     verify_streaming(image); verify_terrain(image)
+    if namespace is not None and not re.fullmatch(r'[a-z0-9-]+',namespace):raise ValueError('Expected one local asset namespace')
     output=local_output(output); base=output/'base'; destination=output/'verified'
     if base.exists() or destination.exists(): raise ValueError('Choose a fresh geometry output; existing work is preserved')
     legacy=Path(legacy); shutil.copytree(legacy,base,ignore=shutil.ignore_patterns('verified'))
@@ -89,17 +90,25 @@ def build(image, source, legacy, output, center=(-42,3), radius=2):
     for name,sha in SHADERS.items():
         if hashlib.sha256(sources.read(name)).hexdigest()!=sha:
             raise ValueError('Original terrain shader changed; source layer/color branches need retracing')
+    def asset_path(path):
+        if namespace:
+            parts=path.split('/',1)
+            return parts[0]+'/'+namespace+'/'+parts[1]if len(parts)==2 else path
+        return path
     def write(path,value):
+        if path not in ('manifest.json','maps/terrain-materials.json','rendering/terrain-lighting.json'):path=asset_path(path)
         p=base/path; p.parent.mkdir(parents=True,exist_ok=True)
         p.write_text(json.dumps(value,ensure_ascii=False,separators=(',',':'),allow_nan=False))
         added.append(path); return '/assets/'+path
     def texture(name):
         if name in manifest['textures']:return manifest['textures'][name]
-        raw=sources.read(name);path='textures/window/'+hashlib.sha256(raw).hexdigest()+'.png'
+        raw=sources.read(name);path=asset_path('textures/window/'+hashlib.sha256(raw).hexdigest()+'.png')
         p=base/path;p.parent.mkdir(parents=True,exist_ok=True);decode(raw).save(p)
         added.append(path);manifest['textures'][name]='/assets/'+path;return manifest['textures'][name]
     offsets=NativeMapStreamingProbe(image).offsets(radius)['offsets']
-    coordinates=sorted(([center[0]+x,center[1]+z] for x,z in offsets),key=lambda p:(p[1],p[0]))
+    explicit=coordinates is not None
+    coordinates=sorted((coordinates if explicit else([center[0]+x,center[1]+z]for x,z in offsets)),key=lambda p:(p[1],p[0]))
+    if len({tuple(p)for p in coordinates})!=len(coordinates):raise ValueError('Duplicate source coordinates')
     tiles,records,mat_tiles,light_tiles,texture_rows=[],[],[],[],[]
     phy_models={}
     for x,z in coordinates:
@@ -109,7 +118,7 @@ def build(image, source, legacy, output, center=(-42,3), radius=2):
         channels=[sources.read(p) if sources.candidates(p) else None for p in mask_names]
         mask,classes=mask_channels(channels);parsed['mask']=None
         if mask:
-            path=f'maps/window-mask-{stem}.png';mask.save(base/path);added.append(path)
+            path=asset_path(f'maps/window-mask-{stem}.png');(base/path).parent.mkdir(parents=True,exist_ok=True);mask.save(base/path);added.append(path)
             parsed['mask']={'url':'/assets/'+path,'width':mask.width,'height':mask.height,
                             'channels':[p if c is not None else None for p,c in zip(mask_names,channels)],'flipY':False}
         for chunk,cl in zip(parsed['chunks'],classes):
@@ -137,14 +146,17 @@ def build(image, source, legacy, output, center=(-42,3), radius=2):
         if sources.candidates(itm):
             with tempfile.TemporaryDirectory(prefix='oc2-source-itm-')as tmp:
                 p=Path(tmp)/'tile.itm';p.write_bytes(sources.read(itm));records+=read_instances(p)
-    if len({r['id']for r in records})!=len(records):raise ValueError('Duplicate source object IDs require separate recovery')
     models=[];gaps=[]
+    unsupported_types=[r for r in records if r['sourceType']!=2]
+    records=[r for r in records if r['sourceType']==2]
+    if len({(tuple(r['tile']),r['id'])for r in records})!=len(records):raise ValueError('Duplicate source IDs within a tile require separate recovery')
     for name in sorted({r['model']for r in records}):
         raw=sources.read(name)
         with tempfile.TemporaryDirectory(prefix='oc2-source-scene-')as tmp:
-            p=Path(tmp)/'model.bdae';p.write_bytes(raw);reader=BDAE(p);data=apply_scene_transforms(reader,reader.parse())
+            p=Path(tmp)/'model.bdae';p.write_bytes(raw);reader=BDAE(p);data=reader.parse()
             gap=None
             try:
+                data=apply_scene_transforms(reader,data)
                 data['sceneSampling']=recover_scene_sampling(sources.read,reader,data)
                 data['sceneAlpha']=recover_scene_alpha(sources.read,reader,data)
                 data['sceneCulling']=recover_scene_culling(sources.read,reader,data)
@@ -152,8 +164,9 @@ def build(image, source, legacy, output, center=(-42,3), radius=2):
             except ValueError as error:
                 gap=str(error);gaps.append({'model':name,'reason':gap})
             data['source']=name
-        for material in data['materials']:
-            if material['diffuse']:texture(material['diffuse'])
+        if not gap:
+            for material in data['materials']:
+                if material['diffuse']:texture(material['diffuse'])
         path='models/source-'+hashlib.sha256(raw).hexdigest()+'.json'
         item={'url':write(path,data),'model':name,'vertices':sum(m['vertexCount']for m in data['meshes']),
               'triangles':sum(m['triangleCount']for m in data['meshes']),
@@ -169,14 +182,17 @@ def build(image, source, legacy, output, center=(-42,3), radius=2):
             except ValueError as error:
                 phy_models[name]={'path':phy,'sha256':hashlib.sha256(raw_phy).hexdigest(),'gap':str(error),'appliedToPhysics':False}
     values={v for t in tiles for v in t['colors']}
+    span=[max(p[i]for p in coordinates)-min(p[i]for p in coordinates)+1 for i in (0,1)]
     terrain={'schema':FORMAT,'world':'tutorial','tileOrigin':[min(x for x,z in coordinates),min(z for x,z in coordinates)],
-             'tileCount':[2*radius+1,2*radius+1],'grid':{'width':(2*radius+1)*64+1},
+             'tileCount':span,'grid':{'width':span[0]*64+1},
              'bounds':{'min':[min(x for x,z in coordinates)*64,min(min(t['heights'])for t in tiles)*.01,min(z for x,z in coordinates)*64],
                        'max':[(max(x for x,z in coordinates)+1)*64,max(max(t['heights'])for t in tiles)*.01,(max(z for x,z in coordinates)+1)*64]},
              'sourceTiles':tiles,'sourceTextures':texture_rows,'sourceVertexColorSummary':{'unique16':len(values),'white16':values=={65535}},
              'verification':{'seamDifferencesPreserved':seam_audit(tiles),'sourceTileCount':len(tiles)},
-             'scope':'explicit center/radius candidate window; original per-tile data, not observed residency or spawn'}
-    manifest['mapWindow']={'url':write('maps/tutorial-window.json',terrain),'center':list(center),'radius':radius,'format':FORMAT}
+             'scope':('explicit supported archive tiles; not simultaneous original residency or spawn'if explicit else
+                      'explicit center/radius candidate window; original per-tile data, not observed residency or spawn')}
+    manifest['mapWindow']={'url':write('maps/tutorial-window.json',terrain),'center':list(center),'radius':radius,'format':FORMAT,
+                           'supportedArchiveSubset':explicit,'originalRequestOffsets':offsets}
     manifest['scenery']=models
     materials.update(tiles=mat_tiles,sources=sources.proofs)
     ground.update(tiles=light_tiles,vertexColor={'source':'RGB565','mode':'per-source-tile'},sources=sources.proofs)
@@ -184,12 +200,13 @@ def build(image, source, legacy, output, center=(-42,3), radius=2):
     write('maps/terrain-materials.json',materials);write('rendering/terrain-lighting.json',ground);write('manifest.json',manifest)
     report,provider=resolve(image,source,DEFAULT_APK,'APK_Default',base)
     if report['settings']['TerrainTileSight']!=radius:raise ValueError('Requested window differs from original Default radius')
-    preview=export_preview(report,provider,base,destination,asset_prefix='/assets/geometry-map/')
+    preview=export_preview(report,provider,base,destination,asset_prefix='/assets/geometry-expanded/'if namespace else'/assets/geometry-map/')
     audit={'format':FORMAT,'sourceCenter':list(center),'sourceRadius':radius,'nativeOffsetOrder':offsets,
            'tileCount':len(tiles),'instanceCount':len(records),'modelCount':len(models),'preview':preview,
            'geometryGaps':gaps,'seamDifferencesPreserved':seam_audit(tiles),'sourceVertexColors':len(values),
            'pendingWaterChunks':sum(bool(f&0x10000)for t in light_tiles for f in t['runtimeFlags']),
            'sourcePHYModels':phy_models,'sources':sources.proofs,'addedAssetFiles':sorted(set(added)),
+           'unsupportedTypeInstances':unsupported_types,'explicitArchiveSubset':explicit,
            'legacyActorCoordinateFramePreserved':True,'lightingSettingsChanged':False,'liveResidencyObserved':False}
     (output/'geometry-audit.json').write_text(json.dumps(audit,ensure_ascii=False,indent=2)+'\n')
     return audit

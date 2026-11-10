@@ -10,6 +10,8 @@ const temp=mkdtempSync(pathJoin(tmpdir(),'oc2-native-physics-')),saveFile=pathJo
 const store=new CharacterStore(saveFile),identities=Array.from({length:3},(_,i)=>store.resolveCharacter('native-'+i));
 for(const i of identities)store.savePosition(i.record,'resources',{x:1460,y:500,worldY:136.53165});store.flush();
 const game=createGameServer({saveFile,ai:false,casting:false}),sockets=[];
+const config=JSON.parse(readFileSync(new URL('../analysis/raw/showcase-20261110/running-preview/prototype/native-physics.json',import.meta.url),'utf8'));
+const sourceCount=JSON.parse(readFileSync(config.collision,'utf8')).instances.length;
 const until=async check=>{const end=Date.now()+5000;while(!check()){if(Date.now()>end)throw Error('Expected native-physics snapshot absent');await new Promise(r=>setTimeout(r,15));}};
 let savedPosition;
 try{
@@ -22,7 +24,7 @@ try{
   }
   const a=await connect(identities[0]),b=await connect(identities[1]),old=await connect(identities[2],false);
   const room=game.rooms.get('resources:source-map:PHYSICS-01'),actor=room.get(a.welcome.id).player;
-  assert.equal(game.combatRooms.get('resources:source-map:PHYSICS-01').motion.profile.instances.length,217);
+  assert.equal(game.combatRooms.get('resources:source-map:PHYSICS-01').motion.profile.instances.length,sourceCount);
   assert.equal(game.combatRooms.get('resources:PHYSICS-01').motion.profile.instances.length,39);
   const y=actor.worldY;a.ws.send(JSON.stringify({type:'jump',pressed:true}));
   await until(()=>b.messages.some(m=>m.type==='state'&&m.players.some(p=>p.id===actor.id&&!p.grounded&&p.worldY>y+.5)));

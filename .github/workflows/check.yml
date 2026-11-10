@@ -90,6 +90,7 @@ jobs:
       - run: python tools/texture_loading_evidence_tests.py
       - run: python tools/tutorial_preview_selection_tests.py
       - run: python tools/default_map_lighting_tests.py
+      - run: python tools/default_environment_tests.py
       - run: python tools/character_portraits_tests.py
       - run: python tools/inventory_assets_tests.py
       - run: python tools/item_icons_tests.py

@@ -14,15 +14,26 @@ def connect(runtime):
     js=(public/'explore-source.js').read_text()
     old='hdrRenderer=createRecoveredHDR(THREE,renderer,renderProfile,await texture(renderProfile.lut.url));'
     if js.count(old)!=1:raise ValueError('Archived HDR entry differs; refusing a guessed edit')
-    js="import {createOriginalDefaultPostprocess} from './original-default-postprocess-v1.js?audit=3';\n"+js
+    js="import {createOriginalDefaultPostprocess} from './original-default-postprocess-v1.js?audit=5';\n"+js
+    js="import {createOriginalDefaultEnvironment} from './original-default-environment-v1.js?audit=5';\n"+js
     js=js.replace(old,"if(!assets.defaultPostprocess)throw new Error('原 APK 默认后处理资料缺失');\n    hdrRenderer=await createOriginalDefaultPostprocess(THREE,renderer,await json(assets.defaultPostprocess));")
     js=js.replace('hdrRenderer.render(scene,camera,zone);',
                   'hdrRenderer.render(scene,camera,zone);canvas.dataset.sourcePostprocess=JSON.stringify(hdrRenderer.state());')
+    lighting='bakedLighting=createBakedLighting(THREE,await json(assets.sceneBakedLighting.url),environment.fogUniforms);'
+    if js.count(lighting)!=1:raise ValueError('Archived environment entry differs')
+    js=js.replace(lighting,lighting+"\n    if(!assets.defaultEnvironment)throw new Error('原环境核对资料缺失');\n    environment=createOriginalDefaultEnvironment(THREE,await json(assets.defaultEnvironment),bakedLighting,environment);")
+    update='const zone=environment.update(point.x+origin.x,point.z+origin.z,scene);environment.prepare(scene);'
+    duplicate='bakedLighting.update(point.x+origin.x,point.z+origin.z,Math.max(0,Math.floor(dt*1000)));'
+    if js.count(update)!=1 or js.count(duplicate)!=1:raise ValueError('Archived environment frame differs')
+    js=js.replace(update,'const zone=environment.update(point.x+origin.x,point.z+origin.z,scene,Math.max(0,Math.floor(dt*1000)));environment.prepare(scene);')
+    js=js.replace(duplicate,'canvas.dataset.sourceEnvironment=JSON.stringify(environment.state());')
+    js=js.replace("canvas.dataset.hdr='source-reinhardt-bloom';","canvas.dataset.hdr='APK_Default-LDR';")
     js=js.replace('document.title=`原文件配置预览 · ${sourceProfile}（非雷电实测）`;',
                   "document.title='原 APK 默认配置 · 材质与光照核对';")
     (public/'explore-default.js').write_text(js)
     shutil.copyfile(ROOT/'tools/preview/original-default-postprocess.js',public/'original-default-postprocess-v1.js')
-    html=(public/'explore.html').read_text().replace('src="/explore.js"','src="/explore-default.js?audit=3"')
+    shutil.copyfile(ROOT/'tools/preview/original-default-environment.js',public/'original-default-environment-v1.js')
+    html=(public/'explore.html').read_text().replace('src="/explore.js"','src="/explore-default.js?audit=5"')
     (public/'explore-default.html').write_text(html)
 
 

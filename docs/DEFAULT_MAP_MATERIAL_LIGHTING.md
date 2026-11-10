@@ -57,6 +57,8 @@ APK Default 与 GPU_6 不同：模型等六个键相同，但 GPU_6 额外开启
 
 仍未闭合：原环境 RGB 后续叠加/天气状态、全部材质变体和阴影路径、完整纹理 mip/采样，以及同位置原版帧对照。现有镜头/移动、区域环境的部分播放适配仍为历史原型。没有凭肉眼修改这些未知值，也不把“仍暗”当成原资源包损坏或模拟器不够强。
 
+后续更正：本页的离屏读数是在加载第10帧保留的固定镜头实验，不能代表角色移动后的当前画面；不据此声称与后续截图是同一个最终镜头。采样刷新、原环境/天气新证据与仍暗的实际验收见[原默认环境光、天气与偏暗核对](DEFAULT_ENVIRONMENT_WEATHER.md)。
+
 ## 实际预览与核查
 
 本地入口为 `http://127.0.0.1:8787/explore-default.html?room=DEFAULT-01&sourceProfile=APK_Default`。已实际进入、检查原 GLSL 编译/运行；页面开发记录为 APK_Default-LDR、HDR=false、LUT=false、五次场景/后处理绘制。修改前后截图、GPU 读回、完整来源身份及独立存档在 analysis/raw/default-lighting-20261111/。

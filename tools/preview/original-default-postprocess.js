@@ -38,6 +38,7 @@ export async function createOriginalDefaultPostprocess(THREE,renderer,profile){
   const combine=material(['HAS_BLOOM'],sceneTarget.texture);
   const quad=new THREE.Mesh(geometry,extract);quad.frustumCulled=false;passScene.add(quad);
   let width=1,height=1,disposed=false,samples=null,frames=0,wallAudit=null;
+  let pose='',samplePose='',stableSince=0,sampleFrame=null,sampleCamera=null,sampleZone=null;
   function auditBakedWall(scene,viewCamera){
     const ray=new THREE.Raycaster();ray.setFromCamera(new THREE.Vector2(.4,.4),viewCamera);
     const hit=ray.intersectObjects(scene.children,true).find(h=>h.object.isMesh);
@@ -70,25 +71,33 @@ export async function createOriginalDefaultPostprocess(THREE,renderer,profile){
   function pass(mat,target){quad.material=mat;renderer.setRenderTarget(target);renderer.render(passScene,camera);}
   renderer.toneMapping=THREE.NoToneMapping;
   return {
-    setSize(w,h){if(w===width&&h===height)return;width=w;height=h;samples=null;frames=0;sceneTarget.setSize(w,h);for(const t of small)t.setSize(Math.max(1,w>>2),Math.max(1,h>>2));},
+    setSize(w,h){if(w===width&&h===height)return;width=w;height=h;samples=null;samplePose='';pose='';frames=0;sceneTarget.setSize(w,h);for(const t of small)t.setSize(Math.max(1,w>>2),Math.max(1,h>>2));},
     render(scene,viewCamera,zone){if(disposed)return;const previous=renderer.getRenderTarget();
       const d=zone.bloom.decrease,i=zone.bloom.intensity;
       if(!Number.isFinite(d)||!Number.isFinite(i)||d<0||i<0)throw new Error('原区域 Bloom 参数无效');
       extract.uniforms.colorDecrease.value=Math.fround(d);extract.uniforms.intensity.value=ldrBloomIntensity(d,i);
       renderer.setRenderTarget(sceneTarget);renderer.render(scene,viewCamera);
       pass(extract,small[0]);pass(blurH,small[1]);pass(blurV,small[0]);pass(combine,previous);
+      // Read the settled CURRENT view, not an early loading frame retained
+      // after the camera moves. These samples are not an Android frame.
+      frames++;
+      const now=performance.now();
+      const nextPose=[...viewCamera.matrixWorld.elements,...viewCamera.projectionMatrix.elements,zone.id].map(v=>Number(v).toFixed(3)).join(',');
+      if(nextPose!==pose){pose=nextPose;stableSince=now;}
       // A bounded development readback, never a visible diagnostic panel.
       // The original-source LDR combine can only add nonnegative bloom.
-      if(!samples&&++frames===10){samples=[[.2,.3],[.7,.7]].map(([x,y])=>{
+      if(pose!==samplePose&&now-stableSince>=400){samples=[[.2,.3],[.7,.7]].map(([x,y])=>{
         const a=new Uint8Array(4),b=new Uint8Array(4);
         renderer.readRenderTargetPixels(sceneTarget,Math.floor(x*width),Math.floor(y*height),1,1,a);
         renderer.readRenderTargetPixels(small[0],Math.floor(x*small[0].width),Math.floor(y*small[0].height),1,1,b);
         const base=[...a].slice(0,3).map(v=>v/255),bloom=[...b].slice(0,3).map(v=>v/255);
         return {xyBottomLeft:[x,y],sceneRGB8:[...a].slice(0,3),bloomRGB8:[...b].slice(0,3),combineRGB:ldrCombine(base,bloom)};
-      });wallAudit=auditBakedWall(scene,viewCamera);}
+      });wallAudit=auditBakedWall(scene,viewCamera);samplePose=pose;sampleFrame=frames;
+        sampleCamera=viewCamera.matrixWorld.elements.slice();sampleZone=zone.id;}
     },
     state:()=>({mode:'APK_Default-LDR',HDR:false,LUT:false,precision:'RGB8-equivalent',width,height,passes:5,
-                bloomIntensity:extract.uniforms.intensity.value,bloomDecrease:extract.uniforms.colorDecrease.value,samples,wallAudit}),
+                bloomIntensity:extract.uniforms.intensity.value,bloomDecrease:extract.uniforms.colorDecrease.value,
+                samplesAreCurrentView:pose===samplePose,sampleFrame,sampleCamera,sampleZone,samples,wallAudit}),
     dispose(){if(disposed)return;disposed=true;for(const t of[sceneTarget,...small])t.dispose();for(const m of[extract,blurH,blurV,combine])m.dispose();geometry.dispose();},
   };
 }

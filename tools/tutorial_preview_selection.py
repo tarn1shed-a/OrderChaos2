@@ -135,7 +135,8 @@ def resolve(image, source, apk, profile, legacy):
         raise ValueError('Tutorial phase table changed; do not assume phase 0')
     root = Path(legacy)
     manifest = json.loads((root/'manifest.json').read_text())
-    terrain = json.loads((root/manifest['map']['url'].removeprefix('/assets/')).read_text())
+    terrain_entry = manifest.get('mapWindow', manifest['map'])
+    terrain = json.loads((root/terrain_entry['url'].removeprefix('/assets/')).read_text())
     mask_probe = MaskProbe(image)
     models, overrides, entity = level_inputs(sources)
     query, gate = NativeDeviceInstanceProbe(image), NativeDeviceInstanceProbe(image)
@@ -151,13 +152,18 @@ def resolve(image, source, apk, profile, legacy):
             path = Path(temp)/(stem+'.trn'); path.write_bytes(raw)
             tile = read_tile(path)
             # The archived geometry is only reused after comparing source vertices.
-            ox, oz = terrain['tileOrigin']; width = terrain['grid']['width']
-            for zz in range(65):
-                for xx in range(65):
-                    at = ((z-oz)*64+zz)*width+(x-ox)*64+xx
-                    expected = (x*64+xx, tile['heights'][zz*65+xx]*.01, z*64+zz)
-                    if any(abs(a-b) > 2e-5 for a,b in zip(terrain['positions'][at*3:at*3+3], expected)):
-                        raise ValueError('Archived terrain differs from original height samples')
+            if terrain.get('sourceTiles'):
+                original_tiles = [t for t in terrain['sourceTiles'] if t['tile'] == [x,z]]
+                if len(original_tiles)!=1 or any(original_tiles[0][k] != list(tile[k]) for k in ('heights','normals','colors')):
+                    raise ValueError('Per-tile geometry differs from original samples')
+            else:
+                ox, oz = terrain['tileOrigin']; width = terrain['grid']['width']
+                for zz in range(65):
+                    for xx in range(65):
+                        at = ((z-oz)*64+zz)*width+(x-ox)*64+xx
+                        expected = (x*64+xx, tile['heights'][zz*65+xx]*.01, z*64+zz)
+                        if any(abs(a-b) > 2e-5 for a,b in zip(terrain['positions'][at*3:at*3+3], expected)):
+                            raise ValueError('Archived terrain differs from original height samples')
             names = [mask_probe.request(x,z,c,small=mask['value']) for c in range(4)]
             channels = [sources.read(n) if sources.candidates(n) else None for n in names]
             lights = lightmap_requests('tutorial', x, z, enabled=settings['ShowTerrainLightMap'])
@@ -202,7 +208,7 @@ def resolve(image, source, apk, profile, legacy):
                     'Environment mode, camera, shader variants, VFS/GPU success and original final frame are not recovered.']}, sources
 
 
-def export_preview(report, sources, legacy, destination):
+def export_preview(report, sources, legacy, destination, *, asset_prefix=None):
     """Reuse the isolated viewer; replace only validated source asset bindings."""
     legacy, destination = Path(legacy), Path(destination)
     settings = report['settings']
@@ -213,7 +219,9 @@ def export_preview(report, sources, legacy, destination):
     baked = json.loads((legacy/'rendering/baked-lighting.json').read_text())
     ground = json.loads((legacy/'rendering/terrain-lighting.json').read_text())
     mats = json.loads((legacy/'maps/terrain-materials.json').read_text())
-    prefix = '/assets/verified/'+report['profile']+'/'
+    prefix = asset_prefix or '/assets/verified/'+report['profile']+'/'
+    if not prefix.startswith('/assets/') or not prefix.endswith('/') or '..' in prefix:
+        raise ValueError('Expected a local asset namespace')
     destination.mkdir(parents=True,exist_ok=True)
     def write(name,value):
         (destination/name).write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n')
@@ -237,8 +245,10 @@ def export_preview(report, sources, legacy, destination):
             filename = 'mask-'+str(tile['tile'][0])+'_'+str(tile['tile'][1])+'.png'; image.save(destination/filename)
             tile['mask'] = {'url':prefix+filename,'width':image.width,'height':image.height,
                             'channels':[n if c is not None else None for n,c in zip(source_tile['maskRequests'],channels)],'flipY':False}
-        for chunk,cl in zip(tile['chunks'],classes):
+        for ordinal,(chunk,cl) in enumerate(zip(tile['chunks'],classes)):
             chunk.update(maskClasses=cl,effectiveIndices=effective_indices(chunk['indices'],cl))
+            if ground['configuration'].get('sourceGeometryWindow'):
+                chunk['sourceWaterPending']=bool(light['runtimeFlags'][ordinal]&0x10000)
         tile['textures'] = [{'sourcePath':n,'url':texture(n)[0]}for n in parsed['textures']]
         name = source_tile['uniqueLocalLightmapCandidate']
         if not name:
@@ -250,6 +260,10 @@ def export_preview(report, sources, legacy, destination):
     selected = {row['id']:row for row in report['instances'] if row['admission']=='admittedBeforeTypeFactory'}
     omitted,scenery,instance_bindings,atlases = [],[],[],{}
     for entry in manifest['scenery']:
+        if entry.get('sourcePreviewGap'):
+            omitted.extend({'id':i['id'],'reason':entry['sourcePreviewGap'],'path':entry['model']}
+                           for i in entry['instances'] if i['id'] in selected)
+            continue
         data = json.loads((legacy/entry['url'].removeprefix('/assets/')).read_text())
         instances = []
         for instance in entry['instances']:

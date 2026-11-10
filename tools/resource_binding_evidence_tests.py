@@ -4,10 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from analyze_native_resources import NativeImage, NATIVE_SHA256
-from resource_binding_evidence import ROOT, verify_native
-from terrain_draw_evidence import verify_mcp_record
-
+ROOT = Path(__file__).resolve().parents[1]
 NATIVE = ROOT/'analysis/raw/beff-native/library.so'
 
 
@@ -15,22 +12,27 @@ NATIVE = ROOT/'analysis/raw/beff-native/library.so'
 class ResourceBindingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        from analyze_native_resources import NativeImage
         cls.raw = NATIVE.read_bytes()
         cls.image = NativeImage(cls.raw)
 
     def test_original_checks_do_not_claim_every_return_is_a_draw_gate(self):
+        from analyze_native_resources import NATIVE_SHA256
+        from resource_binding_evidence import verify_native
         report = verify_native(self.image)
         self.assertEqual(report['sha256'], NATIVE_SHA256)
         self.assertFalse(report['vertexBinderReturnIsUniversalDrawGate'])
         self.assertFalse(report['materialSelectionReturnIsCheckedByObservedMeshCaller'])
 
     def test_changed_native_build_is_refused(self):
+        from analyze_native_resources import NativeImage
         changed = bytearray(self.raw)
         changed[-1] ^= 1
         with self.assertRaises(ValueError):
             NativeImage(changed)
 
     def test_changed_task_publish_bind_or_guard_bytes_are_refused(self):
+        from resource_binding_evidence import verify_native
         image = self.image
         for changed in (0x142bf98, 0x142bfdc, 0x141b298, 0x1474328,
                         0x14741b0, 0x1414850, 0x14779ac, 0x142477c):
@@ -53,6 +55,8 @@ class ResourceBindingTests(unittest.TestCase):
         self.assertEqual(guard['size'], 132)
 
     def test_untrusted_mcp_identity_and_memory_are_rejected(self):
+        from analyze_native_resources import NATIVE_SHA256
+        from terrain_draw_evidence import verify_mcp_record
         # Deliberately invalid validation fixtures, never research observations.
         baseline = {'program': {'sha256': NATIVE_SHA256, 'image_base': '00000000',
                                 'language_id': 'AARCH64:LE:64:v8A'},

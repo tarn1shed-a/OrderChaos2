@@ -21,7 +21,6 @@ from scene_lightmaps import object_records, read_records, source_names
 from terrain_convert import read_instances, read_tile
 from terrain_lighting import lightmap_requests
 from terrain_materials import mask_channels, effective_indices, tile_materials
-from texture_decode import decode
 
 ROOT = Path(__file__).resolve().parents[1]
 FORMAT = 'oc2-tutorial-conditional-selection-v1'
@@ -212,7 +211,7 @@ def resolve(image, source, apk, profile, legacy):
                     'Environment mode, camera, shader variants, VFS/GPU success and original final frame are not recovered.']}, sources
 
 
-def export_preview(report, sources, legacy, destination, *, asset_prefix=None):
+def export_preview(report, sources, legacy, destination, *, asset_prefix=None, texture_fallback=None):
     """Reuse the isolated viewer; replace only validated source asset bindings."""
     legacy, destination = Path(legacy), Path(destination)
     settings = report['settings']
@@ -230,12 +229,14 @@ def export_preview(report, sources, legacy, destination, *, asset_prefix=None):
     def write(name,value):
         (destination/name).write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n')
         return prefix+name
-    def texture(name):
-        raw = sources.read(name)
-        filename = 'texture-'+hashlib.sha256(raw).hexdigest()+'.png'
+    def texture(name, *, terrain_layer=False):
+        from terrain_missing_textures import texture_image
+        image,proof=texture_image(sources,name,texture_fallback,terrain_layer=terrain_layer)
+        digest=hashlib.sha256(image.tobytes()).hexdigest()if proof else sources.proofs[name]['sha256']
+        filename = ('native-fallback-'if proof else 'texture-')+digest+'.png'
         target = destination/filename
-        image = decode(raw)
         if not target.exists(): image.save(target)
+        if proof:mats.setdefault('nativeMissingTextureFallbacks',{})[name]=proof
         return prefix+filename,image
     for source_tile, tile, light in zip(report['tiles'], mats['tiles'], ground['tiles']):
         if source_tile['tile'] != tile['tile'] or tile['tile'] != light['tile']:
@@ -253,7 +254,7 @@ def export_preview(report, sources, legacy, destination, *, asset_prefix=None):
             chunk.update(maskClasses=cl,effectiveIndices=effective_indices(chunk['indices'],cl))
             if ground['configuration'].get('sourceGeometryWindow'):
                 chunk['sourceWaterPending']=bool(light['runtimeFlags'][ordinal]&0x10000)
-        tile['textures'] = [{'sourcePath':n,'url':texture(n)[0]}for n in parsed['textures']]
+        tile['textures'] = [{'sourcePath':n,'url':texture(n,terrain_layer=True)[0]}for n in parsed['textures']]
         name = source_tile['uniqueLocalLightmapCandidate']
         if not name:
             raise ValueError('Original terrain lightmap absent; no replacement is generated')

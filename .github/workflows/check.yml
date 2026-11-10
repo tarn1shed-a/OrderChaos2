@@ -78,6 +78,7 @@ jobs:
       - run: python tools/walk_collision_tests.py
       - run: python tools/source_physics_tests.py
       - run: python tools/map_expansion_tests.py
+      - run: python tools/terrain_missing_textures_tests.py
       - run: python tools/map_loading_evidence_tests.py
       - run: python tools/map_streaming_evidence_tests.py
       - run: python tools/map_selection_evidence_tests.py

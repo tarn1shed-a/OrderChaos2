@@ -36,7 +36,8 @@ def supported_tiles(source,atlas):
 def collision(source,geometry,output):
     output=local_output(output);output.mkdir(parents=True,exist_ok=True)
     if(output/'collision.json').exists():raise ValueError('Existing collision evidence preserved')
-    s=Sources(source);terrain=json.loads((geometry/'base/maps/expansion/tutorial-window.json').read_text())
+    s=Sources(source);manifest=json.loads((geometry/'base/manifest.json').read_text())
+    terrain=json.loads((geometry/'base'/manifest['mapWindow']['url'].removeprefix('/assets/')).read_text())
     selection=json.loads((geometry/'verified/selection.json').read_text())
     old=json.loads((ROOT/'analysis/raw/walk-collision-20261111/final-export/collision.json').read_text())
     shapes={};instances=[];choices=[];no_files=[];gaps=[];unavailable=set()

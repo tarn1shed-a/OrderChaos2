@@ -27,7 +27,6 @@ from scene_texture_sampling import recover_scene_sampling
 from terrain_convert import read_tile, read_instances
 from terrain_lighting import loaded_chunk_flags, final_water_flags, lightmap_requests, terrain_texture_encoding
 from terrain_materials import SHADERS, tile_materials, mask_channels, effective_indices
-from texture_decode import decode
 from tutorial_preview_selection import resolve, export_preview
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,7 +72,8 @@ def source_coordinates(sources):
     return sorted(coordinates,key=lambda p:(p[1],p[0]))
 
 
-def build(image, source, legacy, output, center=(-42,3), radius=2, coordinates=None, namespace=None):
+def build(image, source, legacy, output, center=(-42,3), radius=2, coordinates=None, namespace=None,
+          texture_fallback=None, preview_namespace=None):
     from native_map_streaming_probe import NativeMapStreamingProbe
     from map_streaming_evidence import verify_native as verify_streaming
     from terrain_lighting import verify_native as verify_terrain
@@ -86,7 +86,7 @@ def build(image, source, legacy, output, center=(-42,3), radius=2, coordinates=N
     manifest=json.loads((legacy/'verified/APK_Default/manifest.json').read_text())
     materials=copy.deepcopy(json.loads((legacy/'maps/terrain-materials.json').read_text()))
     ground=copy.deepcopy(json.loads((legacy/'rendering/terrain-lighting.json').read_text()))
-    sources=Sources(source); added=[]
+    sources=Sources(source); added=[]; fallback_proofs={}
     for name,sha in SHADERS.items():
         if hashlib.sha256(sources.read(name)).hexdigest()!=sha:
             raise ValueError('Original terrain shader changed; source layer/color branches need retracing')
@@ -100,10 +100,14 @@ def build(image, source, legacy, output, center=(-42,3), radius=2, coordinates=N
         p=base/path; p.parent.mkdir(parents=True,exist_ok=True)
         p.write_text(json.dumps(value,ensure_ascii=False,separators=(',',':'),allow_nan=False))
         added.append(path); return '/assets/'+path
-    def texture(name):
-        if name in manifest['textures']:return manifest['textures'][name]
-        raw=sources.read(name);path=asset_path('textures/window/'+hashlib.sha256(raw).hexdigest()+'.png')
-        p=base/path;p.parent.mkdir(parents=True,exist_ok=True);decode(raw).save(p)
+    def texture(name, *, terrain_layer=False):
+        if name in manifest['textures']and(name not in fallback_proofs or terrain_layer):return manifest['textures'][name]
+        from terrain_missing_textures import texture_image
+        decoded,proof=texture_image(sources,name,texture_fallback,terrain_layer=terrain_layer)
+        digest=hashlib.sha256(decoded.tobytes()).hexdigest() if proof else sources.proofs[name]['sha256']
+        path=asset_path('textures/window/'+('native-fallback-'if proof else '')+digest+'.png')
+        p=base/path;p.parent.mkdir(parents=True,exist_ok=True);decoded.save(p)
+        if proof:fallback_proofs[name]=proof
         added.append(path);manifest['textures'][name]='/assets/'+path;return manifest['textures'][name]
     offsets=NativeMapStreamingProbe(image).offsets(radius)['offsets']
     explicit=coordinates is not None
@@ -124,7 +128,7 @@ def build(image, source, legacy, output, center=(-42,3), radius=2, coordinates=N
         for chunk,cl in zip(parsed['chunks'],classes):
             chunk.update(maskClasses=cl,effectiveIndices=effective_indices(chunk['indices'],cl))
         texture_rows.append({'tile':[x,z],'textures':parsed['textures'][:]})
-        parsed['textures']=[{'sourcePath':p,'url':texture(p)} for p in parsed['textures']];mat_tiles.append(parsed)
+        parsed['textures']=[{'sourcePath':p,'url':texture(p,terrain_layer=True)} for p in parsed['textures']];mat_tiles.append(parsed)
         from scene_lighting import f32
         minimum=f32(min(tile['heights'])*f32(.01));flags=[]
         for i,chunk in enumerate(parsed['chunks']):
@@ -195,12 +199,14 @@ def build(image, source, legacy, output, center=(-42,3), radius=2, coordinates=N
                            'supportedArchiveSubset':explicit,'originalRequestOffsets':offsets}
     manifest['scenery']=models
     materials.update(tiles=mat_tiles,sources=sources.proofs)
+    if fallback_proofs:materials['nativeMissingTextureFallbacks']=fallback_proofs
     ground.update(tiles=light_tiles,vertexColor={'source':'RGB565','mode':'per-source-tile'},sources=sources.proofs)
     ground['configuration']['sourceGeometryWindow']=True
     write('maps/terrain-materials.json',materials);write('rendering/terrain-lighting.json',ground);write('manifest.json',manifest)
     report,provider=resolve(image,source,DEFAULT_APK,'APK_Default',base)
     if report['settings']['TerrainTileSight']!=radius:raise ValueError('Requested window differs from original Default radius')
-    preview=export_preview(report,provider,base,destination,asset_prefix='/assets/geometry-expanded/'if namespace else'/assets/geometry-map/')
+    prefix='/assets/'+preview_namespace+'/'if preview_namespace else('/assets/geometry-expanded/'if namespace else'/assets/geometry-map/')
+    preview=export_preview(report,provider,base,destination,asset_prefix=prefix,texture_fallback=texture_fallback)
     audit={'format':FORMAT,'sourceCenter':list(center),'sourceRadius':radius,'nativeOffsetOrder':offsets,
            'tileCount':len(tiles),'instanceCount':len(records),'modelCount':len(models),'preview':preview,
            'geometryGaps':gaps,'seamDifferencesPreserved':seam_audit(tiles),'sourceVertexColors':len(values),

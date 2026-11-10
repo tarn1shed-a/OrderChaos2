@@ -88,6 +88,7 @@ jobs:
       - run: python tools/effect_material_evidence_tests.py
       - run: python tools/resource_binding_evidence_tests.py
       - run: python tools/texture_loading_evidence_tests.py
+      - run: python tools/tutorial_preview_selection_tests.py
       - run: python tools/character_portraits_tests.py
       - run: python tools/inventory_assets_tests.py
       - run: python tools/item_icons_tests.py

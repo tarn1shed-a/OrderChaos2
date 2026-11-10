@@ -17,7 +17,10 @@ def start(config):
     cfg=json.loads(p.read_text())
     if cfg['nativeSHA256']!=NATIVE_SHA256:raise ValueError('Physics configuration identifies another original build')
     image=NativeImage(Path(cfg['library']).read_bytes())
-    if cfg.get('swimming'):
+    if cfg.get('diving'):
+        from source_diving import SourceDiving
+        engine=SourceDiving(image)
+    elif cfg.get('swimming'):
         from source_swimming import SourceSwimming
         engine=SourceSwimming(image)
     else:engine=SourcePhysics(image)
@@ -31,6 +34,7 @@ def start(config):
     else:read_source=Sources(Path(cfg['source'])).read
     summary=engine.load_world(terrain,profile,read_source,flags)
     if cfg.get('swimming'):summary.update(engine.load_water(json.loads(Path(cfg['swimming']).read_text())))
+    if cfg.get('diving'):summary.update(engine.load_diving(json.loads(Path(cfg['diving']).read_text())))
     for line in sys.stdin:
         try:
             q=json.loads(line);op=q['operation'];data=q.get('data',{})
@@ -41,7 +45,10 @@ def start(config):
                 identity=data['identity'];position=data['position']
                 if identity in engine.actors:del engine.actors[identity]
                 engine.actor(identity,position);result=True
-            elif op=='tick':result=engine.actor_tick(data['identity'],data['position'],data['velocity'],data['milliseconds'],data['jump'])
+            elif op=='tick':
+                args=[data['identity'],data['position'],data['velocity'],data['milliseconds'],data['jump']]
+                result=engine.actor_tick(*args,control=data.get('control'))if cfg.get('diving')else engine.actor_tick(*args)
+            elif op=='restore-height'and cfg.get('diving'):result=engine.restore_height(data['point'])
             elif op=='ray':result=engine.ray(data['from'],data['to'],data.get('capsule',False))
             elif op=='forget':engine.actors.pop(data['identity'],None);result=True
             else:raise ValueError('Unsupported physics bridge operation')

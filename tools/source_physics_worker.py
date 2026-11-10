@@ -16,7 +16,11 @@ def start(config):
     if not p.is_relative_to(root/'analysis/raw'):raise ValueError('Native physics configuration must stay in the ignored inspection runtime')
     cfg=json.loads(p.read_text())
     if cfg['nativeSHA256']!=NATIVE_SHA256:raise ValueError('Physics configuration identifies another original build')
-    engine=SourcePhysics(NativeImage(Path(cfg['library']).read_bytes()))
+    image=NativeImage(Path(cfg['library']).read_bytes())
+    if cfg.get('swimming'):
+        from source_swimming import SourceSwimming
+        engine=SourceSwimming(image)
+    else:engine=SourcePhysics(image)
     terrain=json.loads(Path(cfg['terrain']).read_text());profile=json.loads(Path(cfg['collision']).read_text())
     lights=json.loads(Path(cfg['terrainLighting']).read_text());flags={tuple(r['tile']):r['runtimeFlags']for r in lights['tiles']}
     if cfg.get('sourceFiles'):
@@ -26,6 +30,7 @@ def start(config):
             return raw
     else:read_source=Sources(Path(cfg['source'])).read
     summary=engine.load_world(terrain,profile,read_source,flags)
+    if cfg.get('swimming'):summary.update(engine.load_water(json.loads(Path(cfg['swimming']).read_text())))
     for line in sys.stdin:
         try:
             q=json.loads(line);op=q['operation'];data=q.get('data',{})

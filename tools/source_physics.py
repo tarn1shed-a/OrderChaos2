@@ -158,7 +158,7 @@ class SourcePhysics:
         table=self.alloc(n*n*8);active=self.alloc(n*n);self.w(self.world+8,'Q',table);self.w(self.world+0x18,'Q',active)
         raw_cache={};count=0;identities=[];self.tile_objects={}
         for (tx,tz),tile in self.tiles.items():
-            at=self.alloc(0x100);vertices=self.alloc(4225*44);chunks=self.alloc(64*0xa8)
+            at=self.alloc(getattr(self,'TILE_BYTES',0x100));vertices=self.alloc(4225*44);chunks=self.alloc(64*0xa8)
             slot=(tz%n)*n+tx%n;self.w(table+slot*8,'Q',at);self.w(active+slot,'B',1)
             self.w(at+8,'2i',tx,tz);self.w(at+0x20,'Q',vertices);self.w(at+0x80,'Q',chunks)
             self.w(at+0xd8,'3f',tx*64,0,tz*64)
@@ -170,10 +170,8 @@ class SourcePhysics:
             self.uc.mem_write(vertices,bytes(raw))
             if chunk_flags:
                 row=chunk_flags[(tx,tz)]
-                if any(v&0x10000 for v in row):
-                    # Water consumers require additional source NAV metadata.
-                    # These cells stay unavailable to movement in this worker.
-                    pass
+                # This dry-only base omits original water fields/parents.
+                # SourceSwimming supplies verified TRN metadata separately.
                 for i,flags in enumerate(row):self.w(chunks+i*0xa8+0x70,'I',flags)
             heads=[];minimum=[tx*64,min(heights),tz*64];maximum=[(tx+1)*64,max(heights),(tz+1)*64]
             for instance in profile['instances']:

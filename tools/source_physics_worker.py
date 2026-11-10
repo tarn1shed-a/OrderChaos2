@@ -17,7 +17,11 @@ def start(config):
     cfg=json.loads(p.read_text())
     if cfg['nativeSHA256']!=NATIVE_SHA256:raise ValueError('Physics configuration identifies another original build')
     image=NativeImage(Path(cfg['library']).read_bytes())
-    if cfg.get('diving'):
+    if cfg.get('shoreTransitions'):
+        if not cfg.get('diving'):raise ValueError('Shore binding requires original diving inputs')
+        from source_shore import SourceShore
+        engine=SourceShore(image)
+    elif cfg.get('diving'):
         from source_diving import SourceDiving
         engine=SourceDiving(image)
     elif cfg.get('swimming'):
@@ -35,6 +39,7 @@ def start(config):
     summary=engine.load_world(terrain,profile,read_source,flags)
     if cfg.get('swimming'):summary.update(engine.load_water(json.loads(Path(cfg['swimming']).read_text())))
     if cfg.get('diving'):summary.update(engine.load_diving(json.loads(Path(cfg['diving']).read_text())))
+    if cfg.get('shoreTransitions'):summary.update(engine.load_shore())
     for line in sys.stdin:
         try:
             q=json.loads(line);op=q['operation'];data=q.get('data',{})

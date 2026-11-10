@@ -79,16 +79,31 @@ def verify(image):
             'instructions': instructions, 'routines': routines}
 
 
-def verify_mcp_record(image, path):
+def verify_mcp_record(image, path, *, relative_relocations=False):
     data = json.loads(path.read_text())
     if data['program']['sha256'] != NATIVE_SHA256:
         raise ValueError('MCP record refers to another source binary')
-    memory = decompiled = 0
+    rels = {}
+    if relative_relocations:
+        if (data['program']['image_base'] != '00000000' or
+                data['program']['language_id'] != 'AARCH64:LE:64:v8A'):
+            raise ValueError('Relative relocation comparison requires the verified zero-base ARM64 image')
+        rels = {r['r_offset']: r['r_addend'] for r in
+                image.elf.get_section_by_name('.rela.dyn').iter_relocations()
+                if r['r_info_type'] == 1027}
+    memory = decompiled = relocation_count = 0
     for row in data['queries']:
         request, result = row['request'], row['result']
         if request['tool'] == 'read_memory':
-            if result['gaps'] or bytes.fromhex(result['hex']) != image.read(
-                    int(request['args']['address'], 16), request['args'].get('length', 64)):
+            at, length = int(request['args']['address'], 16), request['args'].get('length', 64)
+            expected = bytearray(image.read(at, length))
+            for offset, addend in rels.items():
+                if offset < at+length and offset+8 > at:
+                    if offset < at or offset+8 > at+length:
+                        raise ValueError('Partial relative relocation reads are not covered')
+                    expected[offset-at:offset-at+8] = addend.to_bytes(8, 'little', signed=False)
+                    relocation_count += 1
+            if result['gaps'] or bytes.fromhex(result['hex']) != expected:
                 raise ValueError('MCP memory response differs from original ELF bytes')
             memory += 1
         if request['tool'] == 'decompile_function_by_address':
@@ -98,7 +113,8 @@ def verify_mcp_record(image, path):
                 raise ValueError('MCP returned another function or a truncated decompilation')
             decompiled += 1
     return {'record': path.name, 'queries': len(data['queries']),
-            'memoryComparisons': memory, 'decompiledEntriesChecked': decompiled}
+            'memoryComparisons': memory, 'decompiledEntriesChecked': decompiled,
+            'originalRelativeRelocationsChecked': relocation_count}
 
 
 def main():

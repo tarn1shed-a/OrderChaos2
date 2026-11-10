@@ -9,7 +9,6 @@ import math
 import struct
 import time
 from pathlib import Path
-from analyze_native_resources import NativeImage
 
 f32=lambda v:struct.unpack('<f',struct.pack('<f',v))[0]
 

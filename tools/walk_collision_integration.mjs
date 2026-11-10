@@ -20,11 +20,16 @@ try{
   assert.equal(game.combatRooms.get('resources:ISOLATE-01').motion.profile.instances.length,39);
   const room=game.rooms.get('resources:source-map:ISOLATE-01'),serverA=room.get(a.welcome.id),before=serverA.player.x;
   a.ws.send(JSON.stringify({type:'jump',pressed:true}));
-  await until(()=>a.received.some(v=>v.type==='notice'&&v.message.includes('尚未恢复腾空')));
-  assert.equal(serverA.player.jump,null);
+  if(serverA.motion.sourceNative){
+    await until(()=>!serverA.player.grounded);a.ws.send(JSON.stringify({type:'jump',pressed:false}));
+    await until(()=>serverA.player.grounded);
+  }else{
+    await until(()=>a.received.some(v=>v.type==='notice'&&v.message.includes('尚未恢复腾空')));
+    assert.equal(serverA.player.jump,null);
+  }
   a.ws.send(JSON.stringify({type:'input',x:1,y:0}));await until(()=>serverA.player.x>before+1);
   a.ws.send(JSON.stringify({type:'input',x:0,y:0}));
   await until(()=>b.received.some(v=>v.type==='state'&&v.players?.some(p=>p.id===a.welcome.id&&p.x>before+1)));
   assert(!old.received.some(v=>v.players?.some(p=>p.id===a.welcome.id)));
-  console.log(JSON.stringify({roomIsolation:true,twoConnectionMovement:true,oldCoordinateFramePreserved:true,unrecoveredAirborneNotInvented:true,sourceInstances:217}));
+  console.log(JSON.stringify({roomIsolation:true,twoConnectionMovement:true,oldCoordinateFramePreserved:true,originalAirborne:Boolean(serverA.motion.sourceNative),sourceInstances:217}));
 }finally{for(const ws of sockets)ws.terminate();await game.close();}

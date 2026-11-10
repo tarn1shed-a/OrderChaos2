@@ -179,6 +179,10 @@ def resolve(image, source, apk, profile, legacy):
             gate.load_itm(raw_itm)
             for i, item in enumerate(read_instances(path)):
                 status = gate.admission(i, settings['ModelDetailLevel'], settings['DeviceLayer'])
+                if item['sourceType']!=2:
+                    rows.append({**item,'admission':status,'factoryPending':True,
+                                 'scope':'Original pre-creation gate only; effect/inside factory not substituted with type2 model loading'})
+                    continue
                 slot = settings['ForceModelLodLevel']
                 if slot not in (0,1):
                     raise ValueError('Non-forced slot selection is not exported by this bounded tool')

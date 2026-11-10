@@ -9,6 +9,7 @@ import collections
 import copy
 import hashlib
 import json
+import re
 import shutil
 import struct
 import tempfile
@@ -60,6 +61,16 @@ def seam_audit(tiles):
                         if seen[key][k]!=value[k]: differences[name]+=1
                 seen[key]=value
     return dict(differences)
+
+
+def source_coordinates(sources):
+    """Enumerate actual TRN names; holes in the archive are not filled."""
+    coordinates=[]
+    for name in sources.lookup:
+        match=re.fullmatch(r'world/tutorial/terrain/(-?\d+)_(-?\d+)\.trn',name)
+        if match:coordinates.append([int(v)for v in match.groups()])
+    if not coordinates:raise ValueError('No original tutorial terrain files')
+    return sorted(coordinates,key=lambda p:(p[1],p[0]))
 
 
 def build(image, source, legacy, output, center=(-42,3), radius=2):

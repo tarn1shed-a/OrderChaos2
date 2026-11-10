@@ -36,7 +36,7 @@ def effect_state(image,source):
         return {'state':state,'equationGL':equation,'factorsGL':factors,'separateAlphaFactors':False,'vertex':vp,'fragment':fp}
 
 
-def native_probe(image):
+def native_probe(image,*,host_math=False):
     from source_physics import SourcePhysics
     class Probe(SourcePhysics):
         def hook(self,uc,address,size,data):
@@ -45,13 +45,18 @@ def native_probe(image):
                 if self.imports[address]=='strncmp':a=a.split(b'\0')[0];b=b.split(b'\0')[0]
                 self.set('W0',(next((x-y for x,y in zip(a,b)if x!=y),len(a)-len(b)))&0xffffffff)
                 self.set('PC',self.get('X30'))
+            elif host_math and self.imports.get(address)in ('pow','powf'):
+                import math
+                if self.imports[address]=='pow':self.df('D0',math.pow(self.gd('D0'),self.gd('D1')))
+                else:self.sf('S0',math.pow(self.gf('S0'),self.gf('S1')))
+                self.set('PC',self.get('X30'))
             else:super().hook(uc,address,size,data)
     return Probe(image)
 
 
 class NativeWater:
-    def __init__(self,image):
-        self.image=image;self.e=native_probe(image);e=self.e
+    def __init__(self,image,*,host_math=False):
+        self.image=image;self.e=native_probe(image,host_math=host_math);e=self.e
         root=e.alloc(0x400);cfg=e.alloc(0x200);e.w(root+0x270,'Q',cfg);e.w(0x2528db0,'Q',root)
         e.w(cfg+0x84,'3I',3,3,1);self.start=e.cursor
 

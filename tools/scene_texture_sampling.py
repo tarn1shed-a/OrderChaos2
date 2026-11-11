@@ -74,7 +74,11 @@ def texture_dimensions(raw):
     return {**rgb,'container':'ZIP-PVR2-split'}
 
 
-def recover_scene_sampling(extract,reader,data):
+def repeat_override(request):
+    return request == {'addressU':0,'addressV':0,'minFilter':0,'magFilter':1}
+
+
+def recover_scene_sampling(extract,reader,data,*,allow_repeat_override=False):
     records=material_samplers(reader)
     if len(records)!=len(data['materials']):raise ValueError('Scene material count differs')
     materials=[]
@@ -96,12 +100,12 @@ def recover_scene_sampling(extract,reader,data):
                 if any(s['texture'] is not None for p in effect['profiles'] for s in p['samplers'].values()):raise ValueError('Non-null source FX default')
                 effects[path]=effect
             source=record['samplers'].get('texture')
-            if not source or source['texture']!=converted['diffuse'] or any(v is not None for v in source['request'].values()):
+            if not source or source['texture']!=converted['diffuse'] or (any(v is not None for v in source['request'].values()) and not (allow_repeat_override and repeat_override(source['request']))):
                 raise ValueError('Scene diffuse sampler override needs separate recovery')
             encoded=raw(source['texture']);dimensions=texture_dimensions(encoded)
             materials.append({'index':index,'name':record['material'],'texture':source['texture'],
                               'textureSHA256':hashlib.sha256(encoded).hexdigest(),'sourceTexture':dimensions,
                               'sourceRequest':source['request'],'addressU':0,'addressV':0})
-    return {'format':'oc2-scene-sampling-v1','materials':materials,'applied':['diffuse-address-U','diffuse-address-V'],
+    return {'format':'oc2-scene-sampling-v2'if allow_repeat_override else'oc2-scene-sampling-v1','materials':materials,'applied':['diffuse-address-U','diffuse-address-V'],
             'limits':['Fresh source 2D POT texture construction and current scene material skip-setter requests. External cache mutations are not recreated.',
-                      'Only diffuse addressing is applied. Original file mips are counted, not uploaded. Browser filtering, anisotropy, orientation and lighting remain adapters; original lightmap and full scene shaders are pending.']}
+                      'Only diffuse addressing is applied. Original file mips are counted, not uploaded. Browser filtering, anisotropy and orientation remain adapters. Explicit min0 may become4 under the original global switch; no active filter is asserted.']}

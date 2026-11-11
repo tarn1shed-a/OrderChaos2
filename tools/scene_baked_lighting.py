@@ -5,7 +5,7 @@ No active model slot, environment mode or browser lighting profile is chosen.
 import hashlib
 import struct
 
-from scene_texture_sampling import verify_native as verify_sampling
+from scene_texture_sampling import verify_native as verify_sampling, repeat_override
 from scene_sampling import material_samplers
 from scene_render_state import SHADERS
 from scene_active_lighting import verify_native as verify_active_lighting
@@ -33,7 +33,7 @@ def verify_native(image):
             'scope': 'Supported ETC1 / compatible ETC2 RGB upload, not the CPU fallback or observed device capabilities.'}
 
 
-def recover_model_lighting(reader, data):
+def recover_model_lighting(reader, data, *, allow_repeat_override=False):
     records = material_samplers(reader)
     if len(records) != len(data['materials']): raise ValueError('Scene lightmap material count differs')
     materials = []
@@ -42,7 +42,8 @@ def recover_model_lighting(reader, data):
         sampler = source['samplers'].get('lightMap')
         if (source['material'] != material['name'] or not sampler or
                 sampler['texture'] != 'texture/lightmap.tga' or
-                any(value is not None for value in sampler['request'].values())):
+                (any(value is not None for value in sampler['request'].values()) and not
+                 (allow_repeat_override and repeat_override(sampler['request'])))):
             raise ValueError('Scene lightmap override branch needs separate recovery')
         at = table+index*80
         size, properties = reader.u(at+32), reader.rel(at+36)

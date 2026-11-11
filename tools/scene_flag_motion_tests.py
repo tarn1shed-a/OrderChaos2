@@ -72,7 +72,14 @@ for(const edit of[x=>x.clock.loop=false,x=>x.bones[0].node=-1,x=>x.weights[0][0]
             for n in('explore-map.js','explore-map.html'):shutil.copyfile(RAW/('before-'+n),pub/n)
             self.assertEqual(connect(d,EXP)['files'],15)
             files={str(p.relative_to(d)):p.read_bytes()for p in d.rglob('*')if p.is_file()}
-            for n,b in files.items():self.assertEqual(b,(RUN/n).read_bytes())
+            # Entry points may gain a later, separately checked material branch.
+            # Pin this connector's historical output instead of requiring the
+            # live preview to stay frozen at the flag-only stage forever.
+            entrypoints={'prototype/public/explore-map.js':'2c5d78058b5b46c3641aa38fe4b3b3ad223770d2b14ad59b6cc8eea8bbf653ab',
+                         'prototype/public/explore-map.html':'45d64e70840ffbf04efa57ab410361f674f245b83554b3c3cd8ad84d42c570d8'}
+            for n,b in files.items():
+                if n in entrypoints:self.assertEqual(hashlib.sha256(b).hexdigest(),entrypoints[n])
+                else:self.assertEqual(b,(RUN/n).read_bytes())
             with self.assertRaises(ValueError):connect(d,EXP)
             self.assertEqual(files,{str(p.relative_to(d)):p.read_bytes()for p in d.rglob('*')if p.is_file()})
 

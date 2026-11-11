@@ -96,7 +96,13 @@ class Original(unittest.TestCase):
             for n in ('explore-map.js','explore-map.html'):shutil.copyfile(RAW/('before-'+n),pub/n)
             self.assertEqual(connect(p,EXP)['files'],8)
             contents={str(f.relative_to(p)):f.read_bytes()for f in p.rglob('*')if f.is_file()}
-            for n,b in contents.items():self.assertEqual((RUN/n).read_bytes(),b)
+            # Pin this historical stage; the next source-part correction has
+            # its own connector and must not rewrite the old replay result.
+            pins={'prototype/public/explore-map.js':'273c24de7aeb3ce757a0bce25304627511c459cff2c80275ae93c6a95d22f4d3',
+                  'prototype/public/explore-map.html':'72ba022c54830801f0d7778f0e8da4f46d38a38417b89f27fd6b9d4249d368c6'}
+            for n,b in contents.items():
+                if n in pins:self.assertEqual(hashlib.sha256(b).hexdigest(),pins[n])
+                else:self.assertEqual((RUN/n).read_bytes(),b)
             with self.assertRaises(ValueError):connect(p,EXP)
             self.assertEqual(contents,{str(f.relative_to(p)):f.read_bytes()for f in p.rglob('*')if f.is_file()})
 

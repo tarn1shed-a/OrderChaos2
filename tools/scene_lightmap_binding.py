@@ -145,7 +145,11 @@ def material_request_slots(requests):
 
 
 def material_request(slots, material_ordinal):
-    """33faa0 requests entry i, or entry0 when i exceeds the binding array."""
+    """33faa0 uses drawable-part ordinal i, not the BRES material-table index.
+
+    See scene_part_lightmaps for 111b8c4/113235c's part storage and the original
+    loop execution. Past the binding-array end, the original uses entry0.
+    """
     if type(material_ordinal) is not int or not 0 <= material_ordinal <= 100000:
         raise ValueError('Unsupported source drawable material ordinal')
     if not slots: return None

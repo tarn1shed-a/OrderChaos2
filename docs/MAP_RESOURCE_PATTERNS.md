@@ -75,3 +75,16 @@
 7. **外包与解压校验要明确命名。** 本轮ut_lightmap_shake_trans原外包SHA以abe9开头，BRES缓冲以1509开头；前版混写已更正。先让错误引用被拒绝，再重新取证，不能删掉校验以完成导出。
 
 已新增 `scene_dynamic_wind.py`、`preview/source-dynamic-wind.js`、`connect_dynamic_wind.py` 及[完整证据与边界](SOURCE_MAP_DYNAMIC_WIND.md)。本地source-map-dynamic-wind共8份输出，原GLSL片段独立保存并校验，不进Git。45条草木现在均有有界接入：44条原零速、1条原非零公式；仍不称完整原帧或像素级1:1。最新遗漏58条；光源不动，自动续跑暂停。
+
+
+## 31条平面揭示的规律（2026-11-12）
+
+1. **先看最早决定结果的条件。** 原plane.tga是split纹理，四级alpha红通道全0；原参考值0，0≤0先丢弃，后续RGB光照不可达。不能为了“看到恢复效果”把透明度改大，也不需要自造公共光照来填这一支。
+2. **文件名trans不等于开启混合。** ut_trans两份profile只有ALPHA_TEST，原blend位关闭，深度测试/写入开启、LEQUAL、双面。裁切与混合/透明排序要各看自己的原位和消费者。
+3. **材质有没有采样器，比摆放有没有DAT更直接。** 此材质只有texture和CurrentTechnique，没有LIGHTMAP；31条里20条有图集记录、11条没有，都不能强行进入旧烘焙绑定。接回这31条时原1200条图集绑定保持。
+4. **指针基址偏移不能漏。** 本轮参考值从源状态+36到运行状态+12，应用时缓存低层对象+0x4d0；驱动比低层对象早0x38，上传端因此读驱动+0x508。漏掉这层关系会把旧0.5常量误当成原平面的值。
+5. **所有mip都核对后，才可对输出作等价简化。** 不只看PNG基级。浏览器还逐字节检查实际PNGalpha；出现任何非零alpha都拒绝恒丢弃接法，留待恢复RGB/排序，不能让新资源被静默隐藏。
+6. **队列有缺口可以保留，但不能编顺序。** 原运行pass无blend位，消费者还读编译程序标志；显式flag夹具给出两条容器路线，不等于实际设备选择。此处颜色/深度无写使结果不依赖排序；完整原队列仍待恢复。
+7. **摆放数量与可见像素分开统计。** 当前154模型、1231源摆放中含31条zeroAlphaInstances；不是新增31件可见美术。历史displayedInstances计图集绑定，不能跨材质族直接用作画面可见数。
+
+新增 `scene_zero_planes.py`、`preview/source-zero-planes.js`、`connect_zero_planes.py` 和[平面证据/绘制边界](SOURCE_MAP_ZERO_ALPHA_PLANES.md)。本地source-map-zero-planes共5份输出，原清单/模型/纹理/状态转储不上Git。最新尚未接入27条：17旗帜skin、7槽0记录、2混合墙、1法线/调色板。光源不动，自动续跑保持暂停。

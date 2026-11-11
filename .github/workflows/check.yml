@@ -91,6 +91,7 @@ jobs:
       - run: python tools/scene_gray_materials_tests.py
       - run: python tools/scene_wind_identity_tests.py
       - run: python tools/scene_dynamic_wind_tests.py
+      - run: python tools/scene_zero_planes_tests.py
       - run: python tools/map_loading_evidence_tests.py
       - run: python tools/map_streaming_evidence_tests.py
       - run: python tools/map_selection_evidence_tests.py

@@ -7,7 +7,6 @@ No light, geometry, source weights/inverses or collision rule is redesigned.
 import hashlib,json,struct
 from pathlib import Path
 from scene_flags_evidence import MODELS,literal_nodes,controller_evidence,animation_evidence
-from native_flag_motion import NativeFlagMotion
 from bdae_skin import compose
 from scene_texture_sampling import recover_scene_sampling
 from scene_alpha import recover_scene_alpha
@@ -32,6 +31,7 @@ def flag_geometry(reader,data):
 
 
 def recover(extract,reader,data,image):
+    from native_flag_motion import NativeFlagMotion
     p=NativeFlagMotion(image,reader);nodes=p.nodes_source;aliases={n['name']:i for i,n in enumerate(nodes)}
     rate=struct.unpack('<f',image.read(0x1f02100,4))[0];threshold=struct.unpack('<f',image.read(0x1df7a78,4))[0]
     if rate!=struct.unpack('<f',struct.pack('<f',1000/30))[0]or threshold!=struct.unpack('<f',struct.pack('<f',.05))[0]:raise ValueError('Original flag interpolation constants differ')

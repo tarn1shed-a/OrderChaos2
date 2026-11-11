@@ -17,7 +17,11 @@ def start(config):
     cfg=json.loads(p.read_text())
     if cfg['nativeSHA256']!=NATIVE_SHA256:raise ValueError('Physics configuration identifies another original build')
     image=NativeImage(Path(cfg['library']).read_bytes())
-    if cfg.get('animationBlending'):
+    if cfg.get('stopQueue'):
+        if not all(cfg.get(k)for k in ['animationBlending','diving','shoreTransitions']):raise ValueError('Stop queue requires original blending/shore/diving inputs')
+        from source_stop_queue import SourceStopQueue
+        engine=SourceStopQueue(image)
+    elif cfg.get('animationBlending'):
         if not cfg.get('diving')or not cfg.get('shoreTransitions'):raise ValueError('Animation binding requires original shore/diving inputs')
         from source_animation_blending import SourceAnimationBlending
         engine=SourceAnimationBlending(image)
@@ -45,6 +49,7 @@ def start(config):
     if cfg.get('diving'):summary.update(engine.load_diving(json.loads(Path(cfg['diving']).read_text())))
     if cfg.get('shoreTransitions'):summary.update(engine.load_shore())
     if cfg.get('animationBlending'):summary.update(engine.load_animation_blending(json.loads(Path(cfg['animationBlending']).read_text())))
+    if cfg.get('stopQueue'):summary.update(engine.load_stop_queue(json.loads(Path(cfg['stopQueue']).read_text())))
     for line in sys.stdin:
         try:
             q=json.loads(line);op=q['operation'];data=q.get('data',{})

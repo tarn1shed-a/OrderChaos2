@@ -28,7 +28,10 @@ try{
  assert.equal(get().swimming,false);assert.equal(get().jump,null);assert.equal(get().locomotionPosture,32);
  await until(()=>get().waterState===0&&get().x>(-2230+2752)/192*1280,()=>send(a.ws,1,true));send(a.ws,0,false);
  await until(()=>get().sourceVelocityY===0&&get().sourceAnimation.posture===8);
- assert.equal(get().sourceAnimation.available,false);assert.deepEqual(get().sourceAnimation.actionPair,[24,1]);
+ if(get().sourceAnimation.nativeQueueCPU){
+  assert.equal(get().sourceAnimation.current.clip,'run_idle');
+  await until(()=>get().sourceAnimation.current.clip==='idle'&&get().sourceAnimation.completionCount>=1);
+ }else{assert.equal(get().sourceAnimation.available,false);assert.deepEqual(get().sourceAnimation.actionPair,[24,1]);}
  const shore={x:get().x,y:get().y,worldY:get().worldY};
  await until(()=>b.messages.some(m=>m.type==='state'&&m.players.some(p=>p.id===id&&p.worldY===shore.worldY&&p.x===shore.x&&!p.jump&&!p.swimming)));
  assert(get().sourceCamera.nativeCPU);
@@ -41,7 +44,7 @@ try{
  assert(frames.some(p=>p.previous?.clip==='swim_forward'&&p.current.clip==='run_normal_front'&&p.weights[0]>0&&p.weights[0]<1));
  const peerFrames=b.messages.filter(m=>m.type==='state').flatMap(m=>m.players).filter(p=>p.id===id&&p.sourceAnimation?.available).map(p=>p.sourceAnimation);
  assert(peerFrames.some(p=>p.current.clip==='run_normal_front'&&p.weights[0]>0&&p.weights[0]<1));
- console.log(JSON.stringify({sourceStateAndTwoChildBlend:true,primaryQueueGapPreserved:true,deepShallowDryRoundtrip:true,noFalseJump:true,twoConnectionsAgree:true,shoreReconnectExact:true,privateSavedHeight:true,liveAndMainSaveUntouched:true}));
+ console.log(JSON.stringify({sourceStateAndTwoChildBlend:true,fullTwoChannelQueueGapPreserved:true,deepShallowDryRoundtrip:true,noFalseJump:true,twoConnectionsAgree:true,shoreReconnectExact:true,privateSavedHeight:true,liveAndMainSaveUntouched:true}));
 }finally{
  for(const s of sockets)s.terminate();await game.close();rmSync(dir,{recursive:true,force:true});
 }

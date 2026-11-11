@@ -17,7 +17,7 @@ export function createCharacterFactory(THREE,data,materials){
   if(!data.sourceBlendBinding)return factory;
   return()=>{
     const root=factory(),bones=base.characterAnimationState(root).bones,mixer=new THREE.AnimationMixer(root),actions={};
-    for(const clip of data.clips.filter(c=>['idle','walk_forward','swim_idle','swim_forward','run_normal_front'].includes(c.name))){
+    for(const clip of data.clips.filter(c=>['idle','walk_forward','swim_idle','swim_forward','run_normal_front','run_idle'].includes(c.name))){
       const tracks=clip.tracks.map(t=>new(t.type==='quaternion'?THREE.QuaternionKeyframeTrack:THREE.VectorKeyframeTrack)(`${bones[t.node].name}.${t.type}`,t.times,t.values));
       const action=mixer.clipAction(new THREE.AnimationClip(clip.name,clip.duration,tracks)).setLoop(THREE.LoopRepeat,Infinity);
       actions[clip.name]=action;
@@ -43,13 +43,14 @@ export function updateCharacterAnimation(root,seconds,motion,time){
   for(const a of Object.values(c.actions))a.setEffectiveWeight(0);
   const p=c.packet,elapsed=Number.isFinite(time)?Math.max(0,time-c.at):0;
   for(const [slot,weight]of [[p.current,p.weights[0]],[p.previous,p.weights[1]]])if(slot){
-    const a=c.actions[slot.clip];a.time=((slot.ageMs+elapsed)/1000)%a.getClip().duration;a.setEffectiveWeight(weight);
+    const a=c.actions[slot.clip],duration=a.getClip().duration,age=(slot.ageMs+elapsed)/1000;
+    a.time=slot.loop===false?Math.min(age,duration):age%duration;a.setEffectiveWeight(weight);
   }
   c.mixer.update(0);
 }
 export function characterAnimationState(root){
   const state=base.characterAnimationState(root),c=controllers.get(root),p=c?.packet;
-  return state&&c?.active?{...state,phase:p.current.clip,jumpHeight:0,sourceBlend:{from:p.previous?.clip||null,to:p.current.clip,weights:p.weights,remainingMs:p.remainingMs,posture:p.posture,movement:p.movement,sequence:p.sequence,nativeCPU:true}}:state;
+  return state&&c?.active?{...state,phase:p.current.clip,jumpHeight:0,sourceBlend:{from:p.previous?.clip||null,to:p.current.clip,weights:p.weights,remainingMs:p.remainingMs,posture:p.posture,movement:p.movement,sequence:p.sequence,nativeCPU:true,...(p.nativeQueueCPU?{nativeQueueCPU:true,completionCount:p.completionCount,ageMs:p.current.ageMs,loop:p.current.loop}: {})}}:state;
 }
 export function disposeCharacterAnimation(root){
   const c=controllers.get(root);if(c){c.mixer.stopAllAction();c.mixer.uncacheRoot(root);controllers.delete(root);}

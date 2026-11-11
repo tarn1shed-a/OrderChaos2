@@ -93,6 +93,7 @@ jobs:
       - run: python tools/scene_dynamic_wind_tests.py
       - run: python tools/scene_zero_planes_tests.py
       - run: python tools/scene_flags_evidence_tests.py
+      - run: python tools/scene_flag_motion_tests.py
       - run: python tools/map_loading_evidence_tests.py
       - run: python tools/map_streaming_evidence_tests.py
       - run: python tools/map_selection_evidence_tests.py

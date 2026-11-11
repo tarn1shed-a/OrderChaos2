@@ -40,7 +40,7 @@ class Original(unittest.TestCase):
             from bdae_animation import BDAEAnimation
             with self.assertRaisesRegex(ValueError,'encoding'):BDAEAnimation(b.path).channels()
     def test_rebuild_and_original_cpu_boundary_without_changing_preview(self):
-        before=json.loads((RAW/'before-assets.json').read_text());public=json.loads((RAW/'before-public.json').read_text())
+        before={str(p.relative_to(RUN/'game-data/converted')):hashlib.sha256(p.read_bytes()).hexdigest()for p in (RUN/'game-data/converted').rglob('*')if p.is_file()};public={str(p.relative_to(RUN/'prototype/public')):hashlib.sha256(p.read_bytes()).hexdigest()for p in (RUN/'prototype/public').rglob('*')if p.is_file()}
         with tempfile.TemporaryDirectory(dir=RAW)as td:
             result=audit(RUN,Path(td));self.assertEqual((Path(td)/'flags-evidence.json').read_bytes(),(RAW/'verified/flags-evidence.json').read_bytes())
         self.assertEqual(len(result['placements']),17);self.assertTrue(all(not p['admittedToPreview']for p in result['placements']));self.assertFalse(result['previewSceneChanged'])

@@ -47,7 +47,7 @@ def native_check(image):
     return {'addressU':0,'addressV':0,'placeholderSamplerCopiedToAtlas':False,'nativeCPU':True,'activeMinFilterRecovered':False}
 
 
-def export(runtime,output,*,models=MODELS,namespace='source-map-trees',base_manifest='source-layers/manifest.json',material_builder=None,audit_format=FORMAT,audit_key='sourceTreeRecovery'):
+def export(runtime,output,*,models=MODELS,namespace='source-map-trees',base_manifest='source-layers/manifest.json',material_builder=None,geometry_builder=None,audit_format=FORMAT,audit_key='sourceTreeRecovery'):
     from analyze_native_resources import NativeImage
     from terrain_convert import read_instances
     from terrain_missing_textures import texture_image
@@ -64,7 +64,8 @@ def export(runtime,output,*,models=MODELS,namespace='source-map-trees',base_mani
         encoded=sources.read(name);decoded,_=texture_image(sources,name,None);n=hashlib.sha256(encoded).hexdigest()+'.png';decoded.save(output/n);manifest['textures'][name]=prefix+n;return prefix+n
     with tempfile.TemporaryDirectory()as tmp:
         for model in models:
-            p=Path(tmp)/'model.bdae';p.write_bytes(sources.read(model));reader=BDAE(p);data=apply_scene_transforms(reader,reader.parse())
+            p=Path(tmp)/'model.bdae';p.write_bytes(sources.read(model));reader=BDAE(p)
+            data=(geometry_builder or apply_scene_transforms)(reader,reader.parse())
             if material_builder:material_builder(sources.read,reader,data,image)
             else:
                 data['sceneSampling']=recover_scene_sampling(sources.read,reader,data,allow_repeat_override=True);data['sceneAlpha']=recover_scene_alpha(sources.read,reader,data);data['sceneCulling']=recover_scene_culling(sources.read,reader,data);data['sceneBakedLighting']=recover_model_lighting(reader,data,allow_repeat_override=True)

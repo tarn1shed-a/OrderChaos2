@@ -47,7 +47,7 @@ def native_check(image):
     return {'addressU':0,'addressV':0,'placeholderSamplerCopiedToAtlas':False,'nativeCPU':True,'activeMinFilterRecovered':False}
 
 
-def export(runtime,output,*,models=MODELS,namespace='source-map-trees',base_manifest='source-layers/manifest.json',material_builder=None,geometry_builder=None,audit_format=FORMAT,audit_key='sourceTreeRecovery'):
+def export(runtime,output,*,models=MODELS,namespace='source-map-trees',base_manifest='source-layers/manifest.json',material_builder=None,geometry_builder=None,audit_format=FORMAT,audit_key='sourceTreeRecovery',bind_lightmaps=True):
     from analyze_native_resources import NativeImage
     from terrain_convert import read_instances
     from terrain_missing_textures import texture_image
@@ -89,11 +89,13 @@ def export(runtime,output,*,models=MODELS,namespace='source-map-trees',base_mani
                 actual=[{k:b[k]for k in('ordinal','atlas','uvTransform')}for b in row['bindings']]
                 if expected!=actual:raise ValueError('Original DAT differs from selected binding')
                 if not actual or any(not sources.candidates(b['atlas'])for b in actual):gaps.append({'tile':row['tile'],'id':row['id'],'reason':'Original atlas unavailable'});continue
-                for b in actual:
+                for b in actual if bind_lightmaps else []:
                     name=b['atlas']
                     if name not in atlases:
                         encoded=sources.read(name);atlases[name]={'sourcePath':name,'url':texture(name),'sha256':hashlib.sha256(encoded).hexdigest(),**texture_dimensions(encoded)}
-                instances.append({**original[0],'flags':2});baked['instances'].append({'objectId':row['id'],'model':model,'tile':row['tile'],'recordPath':row['recordPath'],'bindings':actual});added.append({'tile':row['tile'],'id':row['id'],'model':model,'position':row['position']})
+                instances.append({**original[0],'flags':2})
+                if bind_lightmaps:baked['instances'].append({'objectId':row['id'],'model':model,'tile':row['tile'],'recordPath':row['recordPath'],'bindings':actual})
+                added.append({'tile':row['tile'],'id':row['id'],'model':model,'position':row['position']})
             if instances:manifest['scenery'].append({'url':write(hashlib.sha256(sources.read(model)).hexdigest()+'.json',data),'model':model,'vertices':sum(m['vertexCount']for m in data['meshes']),'triangles':sum(m['triangleCount']for m in data['meshes']),'instances':instances})
     if not added:raise ValueError('No original tree bindings recovered')
     baked['atlases']=list(atlases.values());manifest['sceneBakedLighting']['url']=write('baked-lighting.json',baked)

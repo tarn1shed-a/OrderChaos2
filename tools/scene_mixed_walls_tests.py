@@ -114,7 +114,12 @@ class Original(unittest.TestCase):
                 shutil.copyfile(RAW/('before-'+name), public/name)
             self.assertEqual(connect(runtime, EXP)['files'], 11)
             files = {str(p.relative_to(runtime)): p.read_bytes() for p in runtime.rglob('*') if p.is_file()}
+            stage_hashes = {'prototype/public/explore-map.js': '76b88d8650754d45b0cb8bc49f6d71dd0c56545e5b2fbe401e539654d0cb4e98',
+                            'prototype/public/explore-map.html': 'bfcdc1b38faa495022768ff2b44c97551f6229092851f5634510db48f5624498'}
             for name, content in files.items():
+                if name in stage_hashes:
+                    self.assertEqual(hashlib.sha256(content).hexdigest(), stage_hashes[name])
+                    continue
                 self.assertEqual((RUN/name).read_bytes(), content)
             with self.assertRaises(ValueError):
                 connect(runtime, EXP)

@@ -57,7 +57,11 @@ class Original(unittest.TestCase):
             for n in('explore-map.js','explore-map.html','scene-sampling.js'):shutil.copyfile(RAW/('before-'+n),pub/n)
             self.assertEqual(connect(p,EXP)['files'],14)
             before={str(f.relative_to(p)):f.read_bytes()for f in p.rglob('*')if f.is_file()}
-            for n,b in before.items():self.assertEqual(b,(RUN/n).read_bytes())
+            stage_hashes={'prototype/public/explore-map.js':'2c7f14d679c0ebac0552685ff4da6c4f4e6738bffd0f122d9e06fee9beaa9d24',
+                          'prototype/public/explore-map.html':'1cb4ad143fc460123836b3291401996c22d809832c36001ffdc4e02d892f9fca'}
+            for n,b in before.items():
+                if n in stage_hashes:self.assertEqual(hashlib.sha256(b).hexdigest(),stage_hashes[n])
+                else:self.assertEqual(b,(RUN/n).read_bytes())
             with self.assertRaises(ValueError):connect(p,EXP)
             self.assertEqual(before,{str(f.relative_to(p)):f.read_bytes()for f in p.rglob('*')if f.is_file()})
     def test_private_assets_and_main_save_remain_unchanged(self):

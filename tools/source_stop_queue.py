@@ -113,17 +113,22 @@ class SourceStopQueue(SourceAnimationBlending):
         try:self.call(0x330d0c,{'X0':q['engine'],'W1':milliseconds})
         finally:self.queue_native=self.queue_selection=False
         if not self.selected:return
-        name=self.selected[:64].split(b'\0')[0].decode()
+        self.bind_selected(q,self.selected)
+
+    def bind_selected(self,q,selected,channel=0,control=None):
+        name=selected[:64].split(b'\0')[0].decode()
         if name not in self.stop_profile['ranges']:raise ValueError('Original selected track missing')
         old=q['control'];q['previous']=q['current']
         if old:self.original_fragment(0x32fd74,0x32fd78,{'X21':old})
-        owner=self.alloc(0x90);self.original_fragment(0x1189f74,0x118a060,{'X19':owner});control=self.r(owner+0x18,'Q')[0]
+        if control is None:
+            owner=self.alloc(0x90);self.original_fragment(0x1189f74,0x118a060,{'X19':owner});control=self.r(owner+0x18,'Q')[0]
         r=self.stop_profile['ranges'][name];table=self.alloc(32);self.w(table,'IiQ4I',1,4,self.string(r['sourceName'].encode()),r['startMs'],r['endMs'],r['originMs'],0)
         self.call(0x1196824,{'X0':control,'X1':table})
         import struct
-        flags,speed,begin,blend=struct.unpack_from('<I3f',self.selected,64)
+        flags,speed,begin,blend=struct.unpack_from('<I3f',selected,64)
         self.call(0x11967dc,{'X0':control,'W1':(flags>>4)&1});self.w(control+0x34,'f',speed)
-        self.original_fragment(0x32fe58,0x32fe68,{'X19':q['engine'],'X27':0,'X23':control})
+        if begin>0:self.call(0x1196234,{'X0':control},{'S0':r['startMs']+begin})
+        self.original_fragment(0x32fe58,0x32fe68,{'X19':q['engine'],'X27':channel,'X23':control})
         q['control']=control;q['current']={'clip':name,'ageMs':0,'loop':bool(flags&0x10),'control':control,'startMs':r['startMs']};q['sequence']+=1
         self.blend_start(q,blend,2 if q['previous']else 1)
 

@@ -5,6 +5,12 @@ export * from './character-animation-shore.js';
 const controllers=new WeakMap();
 export function checkedBlend(packet){
   if(!packet?.available)return null;
+  if(packet.nativeLayerQueueCPU){
+    if(packet.sourceChannels!==2||packet.layerPoseAgreement!==true||!Array.isArray(packet.layers)||packet.layers.length!==2||
+       packet.layers.some((layer,i)=>layer.channel!==i)||
+       ['current','previous','weights','remainingMs'].some(key=>JSON.stringify(packet.layers[0][key])!==JSON.stringify(packet.layers[1][key]))||
+       ['current','previous','weights','remainingMs'].some(key=>JSON.stringify(packet[key])!==JSON.stringify(packet.layers[0][key])))throw Error('Unrecovered distinct layer poses');
+  }
   if(packet.nativeStateCPU!==true||packet.nativeBlendCPU!==true||!Array.isArray(packet.weights)||packet.weights.length!==2||
      packet.weights.some(w=>!Number.isFinite(w)||w<0||w>1)||Math.abs(packet.weights[0]+packet.weights[1]-1)>1e-6||
      !Number.isInteger(packet.sequence)||packet.sequence<1||!Number.isFinite(packet.current?.ageMs)||packet.current.ageMs<0||
@@ -50,7 +56,7 @@ export function updateCharacterAnimation(root,seconds,motion,time){
 }
 export function characterAnimationState(root){
   const state=base.characterAnimationState(root),c=controllers.get(root),p=c?.packet;
-  return state&&c?.active?{...state,phase:p.current.clip,jumpHeight:0,sourceBlend:{from:p.previous?.clip||null,to:p.current.clip,weights:p.weights,remainingMs:p.remainingMs,posture:p.posture,movement:p.movement,sequence:p.sequence,nativeCPU:true,...(p.nativeQueueCPU?{nativeQueueCPU:true,completionCount:p.completionCount,ageMs:p.current.ageMs,loop:p.current.loop}: {})}}:state;
+  return state&&c?.active?{...state,phase:p.current.clip,jumpHeight:0,sourceBlend:{from:p.previous?.clip||null,to:p.current.clip,weights:p.weights,remainingMs:p.remainingMs,posture:p.posture,movement:p.movement,sequence:p.sequence,nativeCPU:true,...(p.nativeQueueCPU?{nativeQueueCPU:true,completionCount:p.completionCount,ageMs:p.current.ageMs,loop:p.current.loop}: {}),...(p.nativeLayerQueueCPU?{sourceChannels:2,layerPoseAgreement:p.layerPoseAgreement,prioritySelection:p.prioritySelection,layerRootWeights:p.layerRootWeights,layerCompletions:p.layers.map(l=>l.completionCount)}:{})}}:state;
 }
 export function disposeCharacterAnimation(root){
   const c=controllers.get(root);if(c){c.mixer.stopAllAction();c.mixer.uncacheRoot(root);controllers.delete(root);}

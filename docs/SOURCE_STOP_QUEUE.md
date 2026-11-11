@@ -60,3 +60,5 @@ node tools/animation_blending_integration.mjs
 接入器只接受上一轮尚未叠加本轮接线的忽略目录副本。活动预览仍在 `analysis/raw/showcase-20261110/running-preview`；导出留 `analysis/raw/stop-queue-assets-ready-20261111`；完整研究、测试和截图留 `analysis/raw/stop-queue-20261111`。
 
 本地素材包 `backups/tutorial-stop-queue-source-assets-20261111.zip`：3218份文件及逐文件SHA清单，142,614,141字节，SHA256 `0895a56d40e5df80cde86eac3e290730d7ccf7c43283a08a4ebcd4fa4306ca44`。保留上一包全部文件/证据及旧清单，加入本轮原指令/MCP记录和三份导出；逐文件校验通过。不含角色存档、恢复码或验收截图，不上传GitHub。自动续跑保持PAUSED，本轮收束后等待指令。
+
+后续核对：本文件的单通道是当时宿主检查环境选择，并非原选定模型只有一个通道。原模型表及两通道CPU队列现见[SOURCE_ANIMATION_LAYERS.md](SOURCE_ANIMATION_LAYERS.md)；不同动作骨骼合成仍未恢复。

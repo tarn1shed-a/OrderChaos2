@@ -86,6 +86,7 @@ jobs:
       - run: python tools/shore_tests.py
       - run: python tools/animation_blending_tests.py
       - run: python tools/stop_queue_tests.py
+      - run: python tools/layer_queue_tests.py
       - run: python tools/map_loading_evidence_tests.py
       - run: python tools/map_streaming_evidence_tests.py
       - run: python tools/map_selection_evidence_tests.py

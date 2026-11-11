@@ -38,7 +38,7 @@
 | wp_plant_pinetree006 | 3 | 0 | 接回 |
 | wp_plant_pinetree001 | 1 | float32(0.8) | 保留缺口 |
 
-最后一种有一份普通树干材质、三份ut_lightmap_shake_trans材质。其解压效果SHA256 `abe9d1b3926b38bc9fcf674f4e9827c78bf74980c49c396498cfd52fdcd3cd20`，无LIGHTMAP_GRAY；三个摇动材质都为0.8，相关UV2幅度并非全零，不能借零分支显示。
+最后一种有一份普通树干材质、三份ut_lightmap_shake_trans材质。其解压效果SHA256 `150990c43a8d59a947727d3c16be2b6562fed28cbb46f7d9fc74c3a2e34ec4d6`（2026-11-12复核更正，前版混写了外包与内层校验），无LIGHTMAP_GRAY；三个摇动材质都为0.8，相关UV2幅度并非全零，不能借零分支显示。
 
 ## 非零摇动查到了哪里
 

@@ -47,22 +47,28 @@ def native_check(image):
     return {'addressU':0,'addressV':0,'placeholderSamplerCopiedToAtlas':False,'nativeCPU':True,'activeMinFilterRecovered':False}
 
 
-def export(runtime,output):
+def export(runtime,output,*,models=MODELS,namespace='source-map-trees',base_manifest='source-layers/manifest.json',material_builder=None,audit_format=FORMAT,audit_key='sourceTreeRecovery'):
     from analyze_native_resources import NativeImage
     from terrain_convert import read_instances
     from terrain_missing_textures import texture_image
     runtime,output=map(local_output,(runtime,output));assets=runtime/'game-data/converted';cfg=json.loads((runtime/'prototype/native-physics.json').read_text());image=NativeImage(Path(cfg['library']).read_bytes());proof=native_check(image);sources=Sources(DEFAULT_SOURCE)
-    manifest=json.loads((assets/'source-layers/manifest.json').read_text());selection=json.loads((assets/manifest['sourceSelection']['url'].removeprefix('/assets/')).read_text());baked=json.loads((assets/manifest['sceneBakedLighting']['url'].removeprefix('/assets/')).read_text())
+    import re
+    if not re.fullmatch(r'[a-z0-9-]+',namespace):raise ValueError('Expected one local source asset namespace')
+    manifest=json.loads((assets/base_manifest).read_text());selection=json.loads((assets/manifest['sourceSelection']['url'].removeprefix('/assets/')).read_text());baked=json.loads((assets/manifest['sceneBakedLighting']['url'].removeprefix('/assets/')).read_text())
     if selection['profile']!='APK_Default'or selection['settings']['ForceModelLodLevel']!=0 or manifest['sourceSelection']['modelSlot']!=0:raise ValueError('Only the verified original default slot0 branch is supported')
-    output.mkdir(parents=True,exist_ok=True);prefix='/assets/source-map-trees/';added=[];gaps=[];tiles={};atlases={a['sourcePath']:a for a in baked['atlases']};oldkeys={(tuple(i['tile']),i['id'])for m in manifest['scenery']for i in m['instances']}
+    output.mkdir(parents=True,exist_ok=True);prefix='/assets/'+namespace+'/';added=[];gaps=[];tiles={};atlases={a['sourcePath']:a for a in baked['atlases']};oldkeys={(tuple(i['tile']),i['id'])for m in manifest['scenery']for i in m['instances']}
     def write(name,value):
         (output/name).write_text(json.dumps(value,separators=(',',':'),ensure_ascii=False));return prefix+name
     def texture(name):
         if name in manifest['textures']:return manifest['textures'][name]
         encoded=sources.read(name);decoded,_=texture_image(sources,name,None);n=hashlib.sha256(encoded).hexdigest()+'.png';decoded.save(output/n);manifest['textures'][name]=prefix+n;return prefix+n
     with tempfile.TemporaryDirectory()as tmp:
-        for model in MODELS:
-            p=Path(tmp)/'model.bdae';p.write_bytes(sources.read(model));reader=BDAE(p);data=apply_scene_transforms(reader,reader.parse());data['sceneSampling']=recover_scene_sampling(sources.read,reader,data,allow_repeat_override=True);data['sceneAlpha']=recover_scene_alpha(sources.read,reader,data);data['sceneCulling']=recover_scene_culling(sources.read,reader,data);data['sceneBakedLighting']=recover_model_lighting(reader,data,allow_repeat_override=True);data['source']=model
+        for model in models:
+            p=Path(tmp)/'model.bdae';p.write_bytes(sources.read(model));reader=BDAE(p);data=apply_scene_transforms(reader,reader.parse())
+            if material_builder:material_builder(sources.read,reader,data,image)
+            else:
+                data['sceneSampling']=recover_scene_sampling(sources.read,reader,data,allow_repeat_override=True);data['sceneAlpha']=recover_scene_alpha(sources.read,reader,data);data['sceneCulling']=recover_scene_culling(sources.read,reader,data);data['sceneBakedLighting']=recover_model_lighting(reader,data,allow_repeat_override=True)
+            data['source']=model
             for mat in data['materials']:texture(mat['diffuse'])
             instances=[]
             for row in selection['instances']:
@@ -91,7 +97,7 @@ def export(runtime,output):
     if not added:raise ValueError('No original tree bindings recovered')
     baked['atlases']=list(atlases.values());manifest['sceneBakedLighting']['url']=write('baked-lighting.json',baked)
     added_ids={(i['id'],i['model'])for i in added};selection['preview']['omitted']=[o for o in selection['preview']['omitted']if(o['id'],o.get('path'))not in added_ids];selection['preview']['displayedInstances']=len(baked['instances']);selection['preview']['scope']='Original static bindings; browser filter/mip and full residency remain adapters';manifest['sourceSelection']['url']=write('selection.json',selection)
-    audit={'format':FORMAT,'native':proof,'added':added,'gaps':gaps,'sources':sources.proofs,'oldModels':len(manifest['scenery'])-len(MODELS),'displayedModels':len(manifest['scenery']),'displayedInstances':len(baked['instances']),'omittedInstances':len(selection['preview']['omitted']),'lightsChanged':False,'activeFilterRecovered':False,'scope':'Original static model/address/ITM/DAT evidence; no new material effect or model placement; existing web filter adapter remains'};manifest['sourceTreeRecovery']={'url':write('audit.json',audit),'format':FORMAT};write('manifest.json',manifest)
+    audit={'format':audit_format,'native':proof,'added':added,'gaps':gaps,'sources':sources.proofs,'oldModels':len(manifest['scenery'])-len(models),'displayedModels':len(manifest['scenery']),'displayedInstances':len(baked['instances']),'omittedInstances':len(selection['preview']['omitted']),'lightsChanged':False,'activeFilterRecovered':False,'scope':'Original static model/address/ITM/DAT evidence; no new material effect or model placement; existing web filter adapter remains'};manifest[audit_key]={'url':write('audit.json',audit),'format':audit_format};write('manifest.json',manifest)
     return audit
 
 

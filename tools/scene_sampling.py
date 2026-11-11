@@ -95,7 +95,7 @@ def material_samplers(reader):
     return result
 
 
-def effect_profile_samplers(reader):
+def effect_profile_samplers(reader,*,extra_properties=None):
     """Read both source FX profile blocks, retaining them as separate inputs.
 
     This bounded reader handles one FX with sampler2D-only parameter lists;
@@ -114,11 +114,20 @@ def effect_profile_samplers(reader):
         if not 1 <= size <= 64:
             raise ValueError('Unsupported source FX sampler parameter count')
         reader.at(parameters, size*32)
-        samplers = {}
+        samplers = {};seen=set()
         for index in range(size):
             prop = parameters + index*32
             field = reader.string(reader.q(prop))
-            if field in samplers or reader.u(prop + 8) != 17:
+            if field in seen:raise ValueError('Duplicate source FX parameter')
+            seen.add(field)
+            if field in (extra_properties or {}):
+                import math
+                kind=extra_properties[field]
+                if kind not in(8,10)or reader.u(prop+8)!=kind:raise ValueError('Unsupported source FX extra parameter')
+                value=_property(reader,prop,20,24,16)
+                if not all(math.isfinite(v)for v in reader.unpack('f'if kind==8 else'3f',value)):raise ValueError('Non-finite source FX extra value')
+                continue
+            if reader.u(prop + 8) != 17:
                 raise ValueError('Unsupported or duplicate source FX sampler parameter')
             value = _property(reader, prop, 20, 24, 16)
             if reader.i(value) != 0:

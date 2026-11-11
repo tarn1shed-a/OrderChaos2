@@ -70,8 +70,9 @@ def cull_state(profiles, technique):
     return state['cullEnabled']
 
 
-def recover_scene_culling(extract, reader, data):
-    techniques = material_techniques(reader)
+def recover_scene_culling(extract, reader, data,*,effect_hashes=None,extra_properties=None):
+    effects_allowed=EFFECTS if effect_hashes is None else effect_hashes
+    techniques = material_techniques(reader,extra_properties=extra_properties)
     bindings = data.get('sceneAlpha', {}).get('materials', [])
     if len(techniques) != len(bindings) or len(bindings) != len(data['materials']):
         raise ValueError('Source scene culling requires verified named-technique bindings')
@@ -83,7 +84,7 @@ def recover_scene_culling(extract, reader, data):
     with tempfile.TemporaryDirectory(prefix='oc2-scene-culling-') as temp:
         for i, (source, binding, technique) in enumerate(zip(data['materials'], bindings, techniques)):
             path = binding['effectPath']
-            if (path not in EFFECTS or binding['index'] != i or binding['name'] != source['name'] or
+            if (path not in effects_allowed or binding['index'] != i or binding['name'] != source['name'] or
                     binding['texture'] != source['diffuse'] or technique['name'] != 'tech0' or
                     binding['sourceTechnique'] != technique or binding['resolvedTechniqueIndex'] != 0):
                 raise ValueError('Source scene culling material/technique differs')
@@ -93,7 +94,7 @@ def recover_scene_culling(extract, reader, data):
                 target = Path(temp)/path
                 target.write_bytes(raw)
                 effect = BDAE(target)
-                if hashlib.sha256(effect.b).hexdigest() != EFFECTS[path]:
+                if hashlib.sha256(effect.b).hexdigest() != effects_allowed[path]:
                     raise ValueError('Source scene culling FX changed; retrace required')
                 definitions[path] = effect_render_state(effect)
             profiles = definitions[path]['profiles']

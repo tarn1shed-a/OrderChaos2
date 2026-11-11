@@ -78,14 +78,15 @@ def repeat_override(request):
     return request == {'addressU':0,'addressV':0,'minFilter':0,'magFilter':1}
 
 
-def recover_scene_sampling(extract,reader,data,*,allow_repeat_override=False):
+def recover_scene_sampling(extract,reader,data,*,allow_repeat_override=False,effect_hashes=None,fx_properties=None):
+    effects_allowed=EFFECTS if effect_hashes is None else effect_hashes
     records=material_samplers(reader)
     if len(records)!=len(data['materials']):raise ValueError('Scene material count differs')
     materials=[]
     with tempfile.TemporaryDirectory(prefix='oc2-scene-sampling-') as temp:
         effects={}
         for index,(record,converted) in enumerate(zip(records,data['materials'])):
-            if record['material']!=converted['name'] or record['effectPath'] not in EFFECTS:
+            if record['material']!=converted['name'] or record['effectPath'] not in effects_allowed:
                 raise ValueError('Unsupported source scene material/effect')
             if record['effectName']!='#'+Path(record['effectPath']).stem+'-fx':raise ValueError('Source scene effect identity differs')
             def raw(path):
@@ -94,8 +95,8 @@ def recover_scene_sampling(extract,reader,data,*,allow_repeat_override=False):
             path=record['effectPath']
             if path not in effects:
                 target=Path(temp)/path;target.write_bytes(raw(path));definition=BDAE(target)
-                if hashlib.sha256(definition.b).hexdigest()!=EFFECTS[path]:raise ValueError('Source scene FX changed; retrace required')
-                effect=effect_profile_samplers(definition)
+                if hashlib.sha256(definition.b).hexdigest()!=effects_allowed[path]:raise ValueError('Source scene FX changed; retrace required')
+                effect=effect_profile_samplers(definition,extra_properties=(fx_properties or {}).get(path))
                 if effect['effectName']!=record['effectName'][1:]:raise ValueError('Source effect definition differs')
                 if any(s['texture'] is not None for p in effect['profiles'] for s in p['samplers'].values()):raise ValueError('Non-null source FX default')
                 effects[path]=effect

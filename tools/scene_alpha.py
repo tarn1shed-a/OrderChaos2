@@ -54,7 +54,7 @@ def verify_native(image):
             'cullingApplied': False}
 
 
-def material_techniques(reader):
+def material_techniques(reader,*,extra_properties=None):
     """Read only the current two-sampler + named-technique material branch."""
     count, table = reader.section(172)
     if not 1 <= count <= 256:
@@ -67,7 +67,8 @@ def material_techniques(reader):
         if reader.q(at+24) != 0:
             raise ValueError('Additional source material shader arguments need recovery')
         size, properties = reader.u(at+32), reader.rel(at+36)
-        if size != 3:
+        extras=(extra_properties or {}).get(reader.string(reader.q(at+8)),{})
+        if size != 3+len(extras):
             raise ValueError('Unsupported source scene material property set')
         reader.at(properties, size*32)
         seen, technique = set(), None
@@ -83,12 +84,15 @@ def material_techniques(reader):
                 if kind != 17:
                     raise ValueError('Source scene sampler type differs')
                 continue
+            if name in extras:
+                if kind!=extras[name]:raise ValueError('Additional source scene property type differs')
+                continue
             effect_name = reader.string(reader.q(at+16)).removeprefix('#')
             if name != effect_name+'-profile_GLES2/CurrentTechnique' or kind != 28:
                 raise ValueError('Unknown source scene property/technique')
             value = reader.rel(prop+28)
             technique = {'property': name, **reader.named_technique(value)}
-        if technique is None or not {'texture', 'lightMap'} <= seen:
+        if technique is None or not {'texture', 'lightMap',*extras} <= seen:
             raise ValueError('Source scene technique is missing')
         results.append(technique)
     return results
@@ -109,7 +113,8 @@ def texture_alpha(raw):
             'baseAlphaSHA256': hashlib.sha256(channel.tobytes()).hexdigest()}
 
 
-def recover_scene_alpha(extract, reader, data):
+def recover_scene_alpha(extract, reader, data,*,effect_hashes=None,extra_properties=None,extra_defines=None):
+    effects_allowed=EFFECTS if effect_hashes is None else effect_hashes
     def raw(path):
         value = extract(path)
         return bytes(value) if isinstance(value, (bytes, bytearray, memoryview)) else Path(value).read_bytes()
@@ -123,20 +128,20 @@ def recover_scene_alpha(extract, reader, data):
     fallback_image = decode(fallback)
     if fallback_image.size != (16, 16) or fallback_image.getchannel('R').getextrema() != (255, 255):
         raise ValueError('Source fallback alpha is not the observed opaque red plane')
-    records, techniques = material_samplers(reader), material_techniques(reader)
+    records, techniques = material_samplers(reader), material_techniques(reader,extra_properties=extra_properties)
     if not len(records) == len(techniques) == len(data['materials']):
         raise ValueError('Scene alpha material count differs')
     materials, definitions = [], {}
     with tempfile.TemporaryDirectory(prefix='oc2-scene-alpha-') as temp:
         for index, (record, technique, converted) in enumerate(zip(records, techniques, data['materials'])):
             path = record['effectPath']
-            if record['material'] != converted['name'] or path not in EFFECTS or set(record['samplers']) != {'texture', 'lightMap'}:
+            if record['material'] != converted['name'] or path not in effects_allowed or set(record['samplers']) != {'texture', 'lightMap'}:
                 raise ValueError('Unsupported source scene alpha material/effect')
             if path not in definitions:
                 target = Path(temp)/path
                 target.write_bytes(raw(path))
                 definition = BDAE(target)
-                if hashlib.sha256(definition.b).hexdigest() != EFFECTS[path]:
+                if hashlib.sha256(definition.b).hexdigest() != effects_allowed[path]:
                     raise ValueError('Source scene alpha FX changed; retrace required')
                 definitions[path] = effect_render_state(definition)
             effect = definitions[path]
@@ -145,7 +150,7 @@ def recover_scene_alpha(extract, reader, data):
             rules = []
             for profile in effect['profiles']:
                 macros = profile['fragmentShader']['defines']
-                expected = {'LIGHTMAP': ''} | ({'ALPHA_TEST': ''} if 'ALPHA_TEST' in macros else {})
+                expected = {'LIGHTMAP': ''} | ({'ALPHA_TEST': ''} if 'ALPHA_TEST' in macros else {}) | (extra_defines or {}).get(path,{})
                 if (technique['name'] != profile['technique'] or profile['fragmentShader']['file'] != 'ut_common_fs.glsl' or
                         profile['vertexShader']['file'] != 'ut_common_vs.glsl' or
                         macros != expected or profile['vertexShader']['defines'] != expected or

@@ -102,6 +102,7 @@ jobs:
       - run: python tools/temple_ambient_tests.py
       - run: python tools/character_orientation_tests.py
       - run: python tools/rgb_scene_target_tests.py
+      - run: python tools/default_underwear_tests.py
       - run: python tools/map_loading_evidence_tests.py
       - run: python tools/map_streaming_evidence_tests.py
       - run: python tools/map_selection_evidence_tests.py

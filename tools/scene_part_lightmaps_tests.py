@@ -85,7 +85,11 @@ order.forEach((mat,part)=>{const b=row.bindings[part]??row.bindings[0],m=mesh.ma
             r=Path(t);pub=r/'prototype/public';pub.mkdir(parents=True);(r/'game-data/converted').mkdir(parents=True)
             for n in('explore-map.js','explore-map.html'):shutil.copyfile(RAW/('before-'+n),pub/n)
             self.assertEqual(connect(r,EXP)['files'],6);files={str(p.relative_to(r)):p.read_bytes()for p in r.rglob('*')if p.is_file()}
-            for n,b in files.items():self.assertEqual((RUN/n).read_bytes(),b)
+            pins={'prototype/public/explore-map.js':'f64d07457d274dab4a08ff3ed1877bba1f5923d5d7925b6f923eb057978a3270',
+                  'prototype/public/explore-map.html':'2c4e302eb5c6e50f018d4ed84743ff9ee6ababdb5dd4f6529d1ab1e266259bb5'}
+            for n,b in files.items():
+                if n in pins:self.assertEqual(hashlib.sha256(b).hexdigest(),pins[n])
+                else:self.assertEqual((RUN/n).read_bytes(),b)
             with self.assertRaises(ValueError):connect(r,EXP)
             self.assertEqual(files,{str(p.relative_to(r)):p.read_bytes()for p in r.rglob('*')if p.is_file()})
 

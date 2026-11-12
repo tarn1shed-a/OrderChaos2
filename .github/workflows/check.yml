@@ -104,6 +104,7 @@ jobs:
       - run: python tools/rgb_scene_target_tests.py
       - run: python tools/default_underwear_tests.py
       - run: python tools/wolf_texture_tests.py
+      - run: python tools/temple_assembly_tests.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

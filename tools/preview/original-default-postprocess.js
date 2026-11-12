@@ -12,14 +12,33 @@ export function translateOriginalShader(source,stage){
   return text;
 }
 
+// The original scene target is RGB8. Sampling that target returns alpha=1,
+// even when a source material writes RGB only. Our RGBA8 storage must preserve
+// that read behavior; the separate original RGBA8 bloom targets keep alpha.
+export function sourceRGBInputFragment(fragment){
+  if(!/uniform\s+lowp\s+sampler2D\s+sourcePicture\s*;/.test(fragment)||
+     fragment.split('void main()').length!==2||fragment.includes('sourceRGBPicture'))
+    throw Error('原 RGB 场景缓冲采样程序不匹配');
+  let count=0;
+  const rewritten=fragment.replace(/\btexture\(sourcePicture,\s*([A-Za-z_][A-Za-z_0-9.]*)\)/g,(_,coord)=>{
+    count++;return `sourceRGBPicture(${coord})`;
+  });
+  if(!count||/\btexture\(sourcePicture,/.test(rewritten))
+    throw Error('原 RGB 场景缓冲存在未核对的采样表达式');
+  return rewritten.replace('void main()',
+    'vec4 sourceRGBPicture(highp vec2 p){return vec4(texture(sourcePicture,p).rgb,1.0);}\nvoid main()');
+}
+
 export async function createOriginalDefaultPostprocess(THREE,renderer,profile){
   const c=profile?.configuration;
   if(profile?.format!=='oc2-apk-default-postprocess-v1'||c?.EnableRTTCreating!==true||c.RTTViewportScale!==1||
-     c.EnableBloom!==true||c.EnableBloomHDR!==false||profile.combine.nativeMask!==16||profile.combine.LUT!==false)
+     c.EnableBloom!==true||c.EnableBloomHDR!==false||profile.combine.nativeMask!==16||profile.combine.LUT!==false||
+     profile.targets?.sceneSourceFormat!=='RGB8'||profile.targets.smallSourceFormat!=='RGBA8')
     throw new Error('原 APK 默认后处理资料不匹配');
   async function text(url){if(!url?.startsWith('/assets/verified/APK_Default/'))throw new Error('原着色文件路径无效');const r=await fetch(url);if(!r.ok)throw new Error('原着色文件缺失');return r.text();}
   const vertex=translateOriginalShader(await text(profile.shaders['pe_common_vs.glsl']),'vertex');
   const fragment=translateOriginalShader(await text(profile.shaders['pe_common_fs.glsl']),'fragment');
+  const rgbFragment=sourceRGBInputFragment(fragment);
   const sceneTarget=new THREE.WebGLRenderTarget(1,1,{type:THREE.UnsignedByteType,depthBuffer:true});
   const small=[0,1].map(()=>new THREE.WebGLRenderTarget(1,1,{type:THREE.UnsignedByteType,depthBuffer:false}));
   for(const t of[sceneTarget,...small]){t.texture.colorSpace=THREE.NoColorSpace;t.texture.minFilter=t.texture.magFilter=THREE.LinearFilter;t.texture.generateMipmaps=false;}
@@ -28,7 +47,7 @@ export async function createOriginalDefaultPostprocess(THREE,renderer,profile){
   geometry.setAttribute('TexCoord0',geometry.getAttribute('uv'));
   const camera=new THREE.Camera(),passScene=new THREE.Scene();
   function material(defines,picture){return new THREE.RawShaderMaterial({glslVersion:THREE.GLSL3,
-    vertexShader:vertex,fragmentShader:fragment,defines:Object.fromEntries(defines.map(d=>[d,1])),
+    vertexShader:vertex,fragmentShader:picture===sceneTarget.texture?rgbFragment:fragment,defines:Object.fromEntries(defines.map(d=>[d,1])),
     uniforms:{WorldViewProjectionMatrix:{value:new THREE.Matrix4()},coordOffsetScale:{value:1},coordMax:{value:new THREE.Vector2(1,1)},
       sourcePicture:{value:picture},texture_bloom:{value:small[0].texture},colorDecrease:{value:0},intensity:{value:0}},
     depthTest:false,depthWrite:false,toneMapped:false,blending:THREE.NoBlending});}

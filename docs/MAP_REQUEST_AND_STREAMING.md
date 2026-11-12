@@ -6,6 +6,8 @@
 
 后续进展见[配置、phase与区块遮罩](MAP_CONFIG_PHASE_MASK.md)：已找到Android APK配置基线、phase输入写入与原表、已知mask初始化生产者；下文相应“未知”保留为上轮历史状态，以后续报告的边界为准。
 
+2026-11-13 补充：[入图位置与楼层](MAP_ENTRY_AND_FLOOR.md)已把 0xa34f28 的解析对象对应到原 GS2C_EnterMap，并核对 location.position→Hero setter→加载中心保存及初始支撑条件。下文消息名/对象类型未知属于历史缺口；实际原服首入坐标、opcode、完整分派与活动状态仍未获得。
+
 ## 请求路径从哪里来
 
 | 原指令位置 | 本轮确认 | 边界 |

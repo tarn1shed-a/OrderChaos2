@@ -105,6 +105,7 @@ jobs:
       - run: python tools/default_underwear_tests.py
       - run: python tools/wolf_texture_tests.py
       - run: python tools/temple_assembly_tests.py
+      - run: python tools/map_entry_evidence_tests.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

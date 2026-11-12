@@ -93,7 +93,13 @@ class Original(unittest.TestCase):
             runtime=p/'runtime';pub=runtime/'prototype/public';pub.mkdir(parents=True);(runtime/'game-data/converted').mkdir(parents=True)
             for n in('explore-map.js','explore-map.html'):shutil.copyfile(RAW/('before-'+n),pub/n)
             self.assertEqual(connect(runtime,out)['files'],30);files={str(x.relative_to(runtime)):x.read_bytes()for x in runtime.rglob('*')if x.is_file()}
-            for n,b in files.items():self.assertEqual((RUN/n).read_bytes(),b)
+            # Pin this historical connector stage; later presentation adapters
+            # legitimately change the live entry, not the sampling export.
+            pins={'prototype/public/explore-map.js':'bbbe7e6fbfbf45ffa281cb7f08410099285afb8c62ca14522f9d387f4d1f1c60',
+                  'prototype/public/explore-map.html':'890166e4e31864e62de8ee193f0acc5d83a0eeefd52e4e1c7f615193db0bdd70'}
+            for n,b in files.items():
+                if n in pins:self.assertEqual(hashlib.sha256(b).hexdigest(),pins[n])
+                else:self.assertEqual((RUN/n).read_bytes(),b)
             with self.assertRaises(ValueError):connect(runtime,out)
             self.assertEqual(files,{str(x.relative_to(runtime)):x.read_bytes()for x in runtime.rglob('*')if x.is_file()})
 

@@ -99,6 +99,8 @@ jobs:
       - run: python tools/scene_missing_records_tests.py
       - run: python tools/scene_part_lightmaps_tests.py
       - run: python tools/temple_sampling_tests.py
+      - run: python tools/temple_ambient_tests.py
+      - run: python tools/character_orientation_tests.py
       - run: python tools/map_loading_evidence_tests.py
       - run: python tools/map_streaming_evidence_tests.py
       - run: python tools/map_selection_evidence_tests.py

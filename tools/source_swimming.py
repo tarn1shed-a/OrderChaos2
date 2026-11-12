@@ -59,7 +59,7 @@ class SourceSwimming(SourcePhysics):
 
     def available(self,x,z):
         tx=math.floor(f32(x))>>6;tz=math.floor(f32(z))>>6
-        if(tx,tz)not in self.tiles or(tx,tz)in self.inspection_unavailable:return False
+        if(tx,tz)not in self.tiles:return False
         j=((math.floor(f32(z))-tz*64)>>3)*8+((math.floor(f32(x))-tx*64)>>3)
         return not(self.chunk_flags[(tx,tz)][j]&0x20000)
 

@@ -1,11 +1,16 @@
 """Guarded local transport patch replay; no original server equivalence claim."""
-import shutil,tempfile,unittest
+import hashlib,shutil,tempfile,unittest
 from pathlib import Path
 from tutorial_map_geometry import ROOT
 from connect_mvp_capacity import connect,PINS
 
 RAW=ROOT/'analysis/raw/mvp-entry-20261113'
-RUN=ROOT/'analysis/raw/showcase-20261110/running-preview'
+# Pin the reviewed capacity-patch output. The current private preview may
+# legitimately contain later independent rendering fixes.
+OUTPUTS={
+ 'prototype/server.mjs':'3dcb69fed7f05eb5a38027a1bc440361832a873db93e5ad95f3dbe923997b7eb',
+ 'prototype/public/explore-map.js':'a524d8052643bf3a706acb3e641860b3a003e1d96ea2435008ecd0950d5faf97',
+}
 class Public(unittest.TestCase):
     def test_refuses_live_project(self):
         with self.assertRaises(ValueError):connect(ROOT)
@@ -20,7 +25,7 @@ class Local(unittest.TestCase):
                 shutil.copyfile(RAW/'before-runtime'/name,p)
             self.assertEqual(connect(out)['minimumPlayersToJoin'],1)
             before={name:(out/name).read_bytes()for name in PINS}
-            for name,value in before.items():self.assertEqual(value,(RUN/name).read_bytes())
+            for name,value in before.items():self.assertEqual(hashlib.sha256(value).hexdigest(),OUTPUTS[name])
             with self.assertRaises(ValueError):connect(out)
             self.assertEqual(before,{name:(out/name).read_bytes()for name in PINS})
 

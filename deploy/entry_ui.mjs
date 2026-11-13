@@ -11,7 +11,7 @@ export function createSourceEntry({connect,legacy}){
   if(new URLSearchParams(location.search).get('entry')==='legacy')return null;
   const css=document.createElement('link');css.rel='stylesheet';css.href='/__delivery/entry_ui.css';document.head.append(css);
   const root=document.createElement('section');root.className='source-entry';root.hidden=true;root.setAttribute('aria-label','登录与角色选择');document.body.append(root);
-  let manifest=null,screen=null,selected=null,roles=[],identities=[],isReady=false,busy=false;
+  let manifest=null,screen=null,selected=null,roles=[],identities=[],isReady=false,busy=false,pendingError=null;
   const blocked=new Map();
   function hideRoot(){root.hidden=true;for(const[el,value]of blocked)el.inert=value;blocked.clear();}
   function fallback(){hideRoot();legacy();}
@@ -83,8 +83,13 @@ export function createSourceEntry({connect,legacy}){
       const row=el.closest('[role=button]');el.setAttribute('display',row?.getAttribute('aria-label')===role?.name?'inline':'none');
     }
   }
+  async function connectionError(message){
+    await show('LoginMsgBox');hide('._DetailScrollPane');hide('._TxtTitle');hide('._VersionText');hide('.cnt._YesBtn');hide('.cnt._NoBtn');
+    label('._MsgText',message);label('.cnt._OkBtn.mc_label.txt_label',word('GENERAL_OK'));button(q('.cnt._OkBtn'),word('GENERAL_OK'),login);
+  }
   return {
-    open(){login().catch(error=>{root.dataset.entryError=error.message;fallback();});},
+    open(){const message=pendingError;pendingError=null;(message?connectionError(message):login()).catch(error=>{root.dataset.entryError=error.message;fallback();});},
+    error(message){pendingError=String(message);},
     hide:hideRoot,
     ready(){isReady=true;const play=q('._CharacterMC._StartBtn');if(play&&selected){play.setAttribute('aria-disabled','false');play.setAttribute('tabindex','0');}}
   };

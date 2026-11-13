@@ -17,5 +17,12 @@ export function stageEntry(source){
   replace('    requestAnimationFrame(draw);\n  } catch (error)', '    requestAnimationFrame(draw);sceneStages.start();\n  } catch (error)');
   replace("  if(windowChange){for(const entry of archiveObjects)entry.root.visible=windowChange.resident.has(entry.tile.join(','));canvas.dataset.sourceArchiveWindow=JSON.stringify({center:windowChange.center,resident:[...windowChange.resident],scope:'original-offset-and-distance-branches;host-buffer-residency'});}",
     '  if(!sceneStages.present(windowChange)){requestAnimationFrame(draw);return;}');
+  // Host transport timing only. Input calculation, periodic cadence and source CPU stay intact.
+  replace('const sourcePresentation=createSourceFramePresentation();','const sourcePresentation=createSourceFramePresentation({delayMs:50});');
+  replace('setInterval(() => {\n  if (!connected || document.hidden) return;', 'function publishMovement(){\n  if (!connected || document.hidden) return;');
+  replace("}, 50);\nsetInterval(() => { if(connected&&!document.hidden)send({type:'ping'", "}\nsetInterval(publishMovement,50);\nsetInterval(() => { if(connected&&!document.hidden)send({type:'ping'");
+  replace('keys.add(e.code);target=null;', 'keys.add(e.code);target=null;if(!e.repeat)publishMovement();');
+  replace("window.addEventListener('keyup', e => keys.delete(e.code));", "window.addEventListener('keyup', e => {if(keys.delete(e.code))publishMovement();});");
+  replace("joystickInput=value;if(value.active){target=null;keys.clear();}else if(connected)send({type:'input',x:0,y:0});", "const wasActive=joystickInput.active;joystickInput=value;if(value.active){target=null;keys.clear();if(!wasActive)publishMovement();}else if(connected)send({type:'input',x:0,y:0});");
   return source;
 }

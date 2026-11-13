@@ -32,8 +32,8 @@ export async function prepare(root,{stage=false}={}){
   if(stage){
     const path=resolve(destination,'staged-entry.js'),raw=Buffer.from(stageEntry(await readFile(files['/explore-map.js'].path,'utf8')));
     await writeFile(path,raw);files['/explore-map.js']={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.js']};
-    const helper=resolve(root,'deploy/staged_scene.mjs'),bytes=await readFile(helper);
-    files['/__delivery/staged_scene.mjs']={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES['.mjs']};
+    for(const name of ['staged_scene.mjs','streaming_window.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
+      files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES['.mjs']};}
   }
   const urls=Object.keys(files).sort(),sidecars=new Map();let cursor=0;
   async function worker(){while(cursor<urls.length){

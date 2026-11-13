@@ -144,7 +144,7 @@ def build_context(archive, destination):
                'deploy/acceptance.mjs', 'deploy/physics_acceptance.py', *python_closure()]
     sources += ['deploy/prepare_delivery.mjs', 'deploy/static_delivery.mjs',
                 'deploy/delivery_boot.mjs', 'deploy/delivery_worker.mjs', 'deploy/delivery_audit.mjs',
-                'deploy/stage_runtime.mjs', 'deploy/stage_plan.mjs', 'deploy/staged_scene.mjs']
+                'deploy/stage_runtime.mjs', 'deploy/stage_plan.mjs', 'deploy/staged_scene.mjs', 'deploy/streaming_window.mjs']
     if manifest['pythonFiles'] != {name: digest((ROOT / name).read_bytes()) for name in python_closure()}:
         raise ValueError('Physics host modules changed since packing')
     destination.mkdir(parents=True, mode=0o700)

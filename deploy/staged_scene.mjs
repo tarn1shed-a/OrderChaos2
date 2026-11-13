@@ -1,19 +1,21 @@
 // Browser preparation schedule only. Original geometry/material/binding functions are reused.
 import {sourceArchiveWindow} from '/source-archive-window.js';
+import {preparationWindow} from '/__delivery/streaming_window.mjs';
 export function createSceneStages({canvas,scene,archiveObjects,terrain,offsets,radius,initial}){
   const tiles=terrain.sourceTiles.map(t=>t.tile),window=sourceArchiveWindow(tiles,offsets,radius);
-  const first=window.update(initial.x,initial.z),critical=first.resident,jobs=new Map();
+  const first=window.update(initial.x,initial.z),critical=preparationWindow(tiles,offsets,first.center).prepared,jobs=new Map();
   let active=0,started=false,display=null,epoch=0,presentedEpoch=-1;
   const state=canvas.dataset,key=t=>t.join(',');
-  state.loadingStage='entry';state.loadingEntryTiles=String(critical.size);
-  function job(tile,fn){const id=key(tile);if(!jobs.has(id))jobs.set(id,{tile,steps:[],status:'pending',priority:1});jobs.get(id).steps.push(fn);}
+  state.loadingStage='entry';state.loadingEntryTiles=String(first.resident.size);state.loadingPreparedEntryTiles=String(critical.size);
+  function job(tile,fn){const id=key(tile);if(!jobs.has(id))jobs.set(id,{tile,steps:[],status:'pending',priority:2});jobs.get(id).steps.push(fn);}
   function report(){state.loadingBackgroundDone=String([...jobs.values()].filter(j=>j.status==='done').length);state.loadingBackgroundTotal=String(jobs.size);api.onProgress?.();}
   function pump(){
     if(!started)return;
     while(active<2){
-      const next=[...jobs.values()].filter(j=>j.status==='pending').sort((a,b)=>a.priority-b.priority||Math.max(Math.abs(a.tile[0]-first.center[0]),Math.abs(a.tile[1]-first.center[1]))-Math.max(Math.abs(b.tile[0]-first.center[0]),Math.abs(b.tile[1]-first.center[1])))[0];
+      const center=display?.center||first.center;
+      const next=[...jobs.values()].filter(j=>j.status==='pending').sort((a,b)=>a.priority-b.priority||Math.max(Math.abs(a.tile[0]-center[0]),Math.abs(a.tile[1]-center[1]))-Math.max(Math.abs(b.tile[0]-center[0]),Math.abs(b.tile[1]-center[1])))[0];
       if(!next)break;active++;next.status='loading';
-      (async()=>{await new Promise(resolve=>setTimeout(resolve,0));for(const step of next.steps)await step();next.status='done';epoch++;})().catch(error=>{next.status='failed';state.loadingBackgroundError=error.message;}).finally(()=>{active--;report();pump();});
+      (async()=>{for(const step of next.steps){await new Promise(resolve=>setTimeout(resolve,0));await step();}next.status='done';epoch++;})().catch(error=>{next.status='failed';state.loadingBackgroundError=error.message;}).finally(()=>{active--;report();pump();});
     }
     if(state.loadingStage!=='complete'&&[...jobs.values()].every(j=>j.status==='done')){state.loadingStage='complete';state.loadingBackgroundMs=String(Math.round(performance.now()));}
   }
@@ -32,7 +34,7 @@ export function createSceneStages({canvas,scene,archiveObjects,terrain,offsets,r
     },
     start(){started=true;state.loadingStage='background';state.loadingEntryReadyMs=String(Math.round(performance.now()));report();pump();},
     present(change){
-      if(change){display=change;epoch++;for(const id of display.resident){const row=jobs.get(id);if(row)row.priority=0;}pump();}
+      if(change){display=change;epoch++;const margin=preparationWindow(tiles,offsets,display.center).prepared;for(const [id,row]of jobs)row.priority=display.resident.has(id)?0:margin.has(id)?1:2;pump();}
       if(!display)return false;
       if([...display.resident].some(id=>jobs.has(id)&&jobs.get(id).status!=='done')){state.loadingPresentation='waiting-for-complete-window';return false;}
       if(epoch!==presentedEpoch){for(const entry of archiveObjects)entry.root.visible=display.resident.has(key(entry.tile));presentedEpoch=epoch;}

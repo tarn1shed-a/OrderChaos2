@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import {stageEntry} from '../deploy/stage_runtime.mjs';
-const source=(await readFile(new URL('../deploy/staged_scene.mjs',import.meta.url),'utf8')).replace(/^import[^\n]+\n/m,'').replace('export function createSceneStages','function createSceneStages');
+import {preparationWindow} from '../deploy/streaming_window.mjs';
+const source=(await readFile(new URL('../deploy/staged_scene.mjs',import.meta.url),'utf8')).replace(/^import[^\n]+\n/gm,'').replace('export function createSceneStages','function createSceneStages');
 function fixture({fail=false}={}){
-  const context={performance,Date,setTimeout,sourceArchiveWindow:()=>({update:()=>({center:[0,0],resident:new Set(['0,0'])})})};
+  const context={performance,Date,setTimeout,preparationWindow,sourceArchiveWindow:()=>({update:()=>({center:[0,0],resident:new Set(['0,0'])})})};
   vm.createContext(context);vm.runInContext(source+';this.factory=createSceneStages;',context);
   const tiles=[0,1,2].map(x=>({tile:[x,0],original:'same-geometry-'+x}));
   const canvas={dataset:{}},scene={children:[],add(root){this.children.push(root);}},archiveObjects=[];
@@ -52,5 +53,18 @@ test('loader overlay refuses unknown or modified game source',()=>assert.throws(
 test('verified private entry overlay changes loading sections only',async t=>{
   let original;try{original=await readFile(new URL('../analysis/raw/showcase-20261110/running-preview/prototype/public/explore-map.js',import.meta.url),'utf8');}catch{t.skip('Private historical runtime not in Git');return;}
   const changed=stageEntry(original);assert(changed.includes('sceneStages.start()'));
-  for(const [start,end]of [['function updateCharacter(', 'async function texture('],['function updateRoster()', 'function draw(now)']])assert.equal(changed.slice(changed.indexOf(start),changed.indexOf(end)),original.slice(original.indexOf(start),original.indexOf(end)));
+  for(const [start,end]of [['function updateCharacter(', 'async function texture('],['function updateRoster()', 'function inputBlocked()']])assert.equal(changed.slice(changed.indexOf(start),changed.indexOf(end)),original.slice(original.indexOf(start),original.indexOf(end)));
+  const calculation=original.slice(original.indexOf('  if (!connected || document.hidden) return;',original.indexOf('setInterval(() => {')),original.indexOf('}, 50);\nsetInterval(() => { if(connected&&!document.hidden)'));
+  assert(changed.includes(calculation));assert(changed.includes('setInterval(publishMovement,50)'));assert(changed.includes('createSourceFramePresentation({delayMs:50})'));
+});
+test('prepare adjacent request windows without expanding the visible window',()=>{
+  const offsets=Array.from({length:25},(_,i)=>[i%5-2,Math.floor(i/5)-2]),tiles=Array.from({length:81},(_,i)=>[i%9-4,Math.floor(i/9)-4]);
+  const {entry,prepared}=preparationWindow(tiles,offsets,[0,0]);assert.equal(entry.size,25);assert.equal(prepared.size,49);
+  for(const center of [[1,0],[-1,0],[0,1],[0,-1]])for(const key of preparationWindow(tiles,offsets,center).entry)assert(prepared.has(key));
+});
+test('50ms transport buffer preserves paired source coordinates and camera, without prediction',async t=>{
+  let module;try{module=await import('../analysis/raw/showcase-20261110/running-preview/prototype/public/source-frame-presentation.js');}catch{t.skip('Private historical runtime not in Git');return;}
+  const fast=module.createSourceFramePresentation({delayMs:50}),old=module.createSourceFramePresentation({delayMs:100});
+  for(let i=0;i<10;i++){const player={id:'fixture',x:i,y:i*2,worldY:i*3,sourceCamera:{nativeCPU:true,yaw:i,position:[i,4,6],target:[i,0,2]}};fast.push([player],i*50,i*50+20);old.push([player],i*50,i*50+20);}
+  for(let now=100;now<400;now+=16){const a=fast.sample(now).get('fixture'),b=old.sample(now+50).get('fixture');delete a.presentation;delete b.presentation;assert.deepEqual(a,b);}
 });

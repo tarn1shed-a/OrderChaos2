@@ -77,7 +77,7 @@ def probe(config, source, input_root=None, walk=False):
             zone = target['zone']
             if zone is not None:
                 checkpoints.append({'step': step['objective']['step'],
-                    'kind': 'objectiveZoneCentre', 'zoneId': zone['ID'],
+                    'kind': 'objectiveZoneAnchor', 'zoneId': zone['ID'],
                     'point': [zone[k] for k in ('x', 'y', 'z')]})
     for row in checkpoints:
         x, y, z = row['point']; row['available'] = engine.available(x, z)
@@ -132,7 +132,8 @@ def probe(config, source, input_root=None, walk=False):
                        'Original quest-state scripts, dynamic elevator and live server are absent.',
                        'Each straight segment is independently seeded from a table checkpoint; '
                        'this is not a continuous traversal or recovered path.',
-                       'A checkpoint centre can differ from a walkable surface. '
+                       'An objective zone anchor has horizontal-centre X/Z and bottom Y, '
+                       'and can differ from a walkable surface. '
                        'Ground height mismatch identifies work, not a rule to teleport the player.']}
 
 

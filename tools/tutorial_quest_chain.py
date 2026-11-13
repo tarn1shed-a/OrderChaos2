@@ -1,7 +1,7 @@
 """Audit the original tutorial chain before wiring a playable quest.
 
 This reader never accepts/completes quests, moves roles, or writes saves. Table
-centres are checkpoints for investigation, not paths or completion predicates.
+anchors are checkpoints for investigation, not paths or completion predicates.
 Full source rows and derived reports belong in ignored analysis/raw/.
 """
 import argparse
@@ -109,7 +109,7 @@ def audit(source=DEFAULT_SOURCE):
             'No state is manufactured from static tables. Missing is not false or zero.',
             'FinishGiverID=0 and AutoShowFinish=1 do not prove automatic completion.',
             'obj_idx and step differ; logic type and entry remain original raw values.',
-            'Zone centres are not movement paths; same-number matches are candidates, not proved type dispatch.',
+            'Zone anchors are not movement paths; source a07274 uses X/Z centre and bottom Y. Same-number matches are candidates, not proved objective type dispatch.',
             'Map5 tables include an elevator and manual spawns; static geometry alone cannot certify the route.',
             'Schema-less starter/finisher tables are not decoded or declared empty by this reader.',
         ],

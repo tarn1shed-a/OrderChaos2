@@ -3,7 +3,6 @@ import math
 from pathlib import Path
 import unittest
 
-from analyze_native_resources import NativeImage
 from character_display_evidence import verify_native
 from native_character_display_probe import CharacterDisplayProbe
 from optimized_abc import extract_named_abc, parse_abc, named_method, disassemble
@@ -16,6 +15,7 @@ SO = Path(__file__).resolve().parents[1]/'analysis/raw/ghidra-mcp-20261110/input
 class NativeCharacterDisplayTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        from analyze_native_resources import NativeImage
         cls.image = NativeImage(SO.read_bytes())
         cls.vm = CharacterDisplayProbe(cls.image)
 

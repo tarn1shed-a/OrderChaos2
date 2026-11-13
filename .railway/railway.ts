@@ -4,7 +4,7 @@ import { defineRailway, github, project, service, volume } from "railway/iac";
 // See https://docs.railway.com/infrastructure-as-code#multi-repo-projects
 export const partial = "OrderChaos2";
 export default defineRailway(() => {
-  const data = volume("OrderChaos2-data", {sizeMB: 500, region: "sfo"});
+  const data = volume("OrderChaos2-data", {sizeMB: 500, region: "asia-southeast1-eqsg3a"});
   const OrderChaos2 = service("OrderChaos2", {
     source: github("tarn1shed-a/OrderChaos2", { branch: "main", checkSuites: false }),
     build: { buildEnvironment: "V3", builder: "DOCKERFILE", dockerfilePath: "Dockerfile" },
@@ -17,7 +17,7 @@ export default defineRailway(() => {
     },
     // Variables stay unmanaged. Set only the bundle SHA and capacity with the CLI.
     volumeMounts: {"/data": data},
-    replicas: { "sfo": 1 },
+    replicas: { "asia-southeast1-eqsg3a": 1 },
     networking: { privateNetworkEndpoint: "orderchaos2" },
   });
 

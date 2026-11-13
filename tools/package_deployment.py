@@ -156,6 +156,9 @@ def build_context(archive, destination):
     sources += ['deploy/prepare_delivery.mjs', 'deploy/static_delivery.mjs',
                 'deploy/delivery_boot.mjs', 'deploy/delivery_worker.mjs', 'deploy/delivery_audit.mjs',
                 'deploy/stage_runtime.mjs', 'deploy/stage_plan.mjs', 'deploy/staged_scene.mjs', 'deploy/streaming_window.mjs']
+    # Presentation host modules are versioned with the image, separate from the
+    # unchanged private archive's physics-host hash set.
+    sources += ['tools/head_name_evidence.py','tools/native_font_draw.py','tools/source_name_worker.py']
     sources=sorted(set(sources)|{'deploy/'+p.name for p in (ROOT/'deploy').iterdir()if p.is_file()and p.suffix in ('.mjs','.css')})
     if manifest['pythonFiles'] != {name: digest((ROOT / name).read_bytes()) for name in python_closure()}:
         raise ValueError('Physics host modules changed since packing')

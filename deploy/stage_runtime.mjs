@@ -43,6 +43,10 @@ export function stageEntry(source,{entryUI=false}={}){
   replace('if (target && me) { const dx=target.x-me.x, dy=target.y-me.y, d=Math.hypot(dx,dy); if(d<2)target=null;else{x=dx/d;y=dy/d;} }',
     'if (target && me) { const movement=clickMovement(target,me);if(movement){x=movement.x;y=movement.y;}else target=null; }');
   if(entryUI){
+    source="import {createSelfName} from '/__delivery/self_name.mjs';\nlet selfName;\n"+source;
+    replace('    modelTemplate = await loadModel(assets.player);','    modelTemplate = await loadModel(assets.player);selfName=createSelfName(THREE,scene);');
+    replace('    const a = avatars.get(p.id); a.target.copy(entityPosition(p));','    const a = avatars.get(p.id); a.target.copy(entityPosition(p));\n    if(p.id===selfId&&!a.sourceNameOffset)selfName?.register(a,sourcePreviewResources?.data,characterAnimationState(a.body)?.bones);');
+    replace('  hdrRenderer.render(scene,camera,zone);','  selfName?.update({avatar:avatars.get(selfId),role:snapshot.find(p=>p.id===selfId),selfId,camera});\n  hdrRenderer.render(scene,camera,zone);');
     source="import {createAttributeUI} from '/__delivery/attribute_ui.mjs';\nimport {renderAttributePreview} from '/__delivery/attribute_preview.mjs';\nlet attributeUI,sourcePreviewResources;\n"+source;
     replace('if(entry===assets.player)playerLookProfile={hair:data.appearance.hair,materials:profile};', 'if(entry===assets.player){playerLookProfile={hair:data.appearance.hair,materials:profile};sourcePreviewResources={data,textures};}');
     replace('function inputBlocked(){return ', 'function inputBlocked(){return attributeUI?.isOpen||');

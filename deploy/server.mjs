@@ -9,6 +9,7 @@ import {writeFileSync} from 'node:fs';
 import {entryServer,trialRoleManager,installEntryManagement} from './entry_manage.mjs';
 import {installEntryRead} from './entry_read.mjs';
 import {configureTrialEntry,trialEntryPosition} from './tutorial_entry.mjs';
+import {createNameDrawer,installNameDraw} from './name_draw_server.mjs';
 
 const root=resolve(new URL('../',import.meta.url).pathname);
 const runtime=resolve(root,'analysis/raw/portable/running-preview');
@@ -36,6 +37,7 @@ try {
   game=createGameServer({maxPlayersPerRoom:maxPlayers,saveFile:'/data/saves/characters.json',gameplay,motion:null,mapWindowMotion:motion,navigation:null});
   await installDelivery(game.server,root);
   installEntryRead(game.server,'/data/saves/characters.json');
+  installNameDraw(game.server,createNameDrawer(root));
   installEntryManagement(game.server,trialRoleManager(game.entryStore,game.entryActive,{entryPosition:()=>trialEntryPosition(motion)}));
   await new Promise((ok,fail)=>{game.server.once('error',fail);game.server.listen(port,'0.0.0.0',()=>{game.server.off('error',fail);ok();});});
 } catch(error) { if(game)await game.close();else await motion.close();throw error; }

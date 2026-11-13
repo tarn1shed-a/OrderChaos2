@@ -14,6 +14,9 @@
 !tools/local_mvp_runtime.json
 !tools/requirements-native.txt
 !tools/requirements-resources.txt
+!tools/head_name_evidence.py
+!tools/native_font_draw.py
+!tools/source_name_worker.py
 !tools/analyze_native_resources.py
 !tools/animation_blending.py
 !tools/bdae_animation.py

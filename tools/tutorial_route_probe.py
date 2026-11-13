@@ -15,6 +15,21 @@ from tutorial_map_geometry import local_output
 from tutorial_quest_chain import audit
 
 
+class DiagnosticPhysics(SourcePhysics):
+    """Attribute shapes to their actual load input, even if source IDs repeat."""
+    def __init__(self, image):
+        super().__init__(image)
+        self.shape_sources = {}
+
+    def transform(self, head, instance):
+        head = super().transform(head, instance)
+        pointer = head
+        while pointer:
+            self.shape_sources[pointer] = instance
+            pointer = self.r(pointer + 8, 'Q')[0]
+        return head
+
+
 def probe(config, source, input_root=None, walk=False):
     config = Path(config).resolve()
     local_output(config)
@@ -38,7 +53,7 @@ def probe(config, source, input_root=None, walk=False):
     library = path(cfg['library']).read_bytes()
     if hashlib.sha256(library).hexdigest() != NATIVE_SHA256:
         raise ValueError('Original library identity differs')
-    engine = SourcePhysics(NativeImage(library))
+    engine = DiagnosticPhysics(NativeImage(library))
     terrain = json.loads(path(cfg['terrain']).read_text())
     profile = json.loads(path(cfg['collision']).read_text())
     lighting = json.loads(path(cfg['terrainLighting']).read_text())
@@ -64,7 +79,6 @@ def probe(config, source, input_root=None, walk=False):
                 checkpoints.append({'step': step['objective']['step'],
                     'kind': 'objectiveZoneCentre', 'zoneId': zone['ID'],
                     'point': [zone[k] for k in ('x', 'y', 'z')]})
-    instance_by_id = {r['id']: r for r in profile['instances']}
     for row in checkpoints:
         x, y, z = row['point']; row['available'] = engine.available(x, z)
         if not row['available']:
@@ -76,9 +90,10 @@ def probe(config, source, input_root=None, walk=False):
         for pointer, ident in engine.objects.items():
             bounds = list(engine.r(pointer + 0x20, '6f'))
             if bounds[0] <= x <= bounds[3] and bounds[2] <= z <= bounds[5]:
+                instance = engine.shape_sources[pointer]
                 candidates.append({'instanceId': ident, 'bounds': bounds,
-                                   'sourcePHY': instance_by_id[ident]['sourcePHY'],
-                                   'ownerTile': instance_by_id[ident]['tile']})
+                                   'sourcePHY': instance['sourcePHY'],
+                                   'ownerTile': instance['tile']})
         row['xzBoundingCandidates'] = candidates
     segments = []
     if walk:

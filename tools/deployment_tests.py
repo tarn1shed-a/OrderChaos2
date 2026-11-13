@@ -77,6 +77,11 @@ class DeploymentTests(unittest.TestCase):
         manifest = json.loads((ROOT / 'tools/local_mvp_runtime.json').read_text())
         self.assertNotIn('prototype/native-physics.json', manifest['files'])
 
+    def test_build_context_includes_required_ui_retirement_stylesheet(self):
+        self.assertIn('!deploy/retired_ui.css', (ROOT / '.dockerignore').read_text().splitlines())
+        self.assertIn('retired_ui.css', (ROOT / 'deploy/static_delivery.mjs').read_text())
+        self.assertIn('display: none !important', (ROOT / 'deploy/retired_ui.css').read_text())
+
     def test_railway_uses_current_iac_and_preserves_unmanaged_variables(self):
         source = (ROOT / '.railway/railway.ts').read_text()
         self.assertIn('variables: { managed: false }', source)

@@ -53,7 +53,7 @@ self.addEventListener('message',event=>{
   const id=event.source?.id,port=event.ports[0];if(!id||!port)return;
   event.waitUntil((async()=>{
     try{
-      if(event.data?.type==='BIND'){const index=await bind(id);port.postMessage({ok:true,revision:index.revision});return;}
+      if(event.data?.type==='BIND'){const index=await bind(id);port.postMessage({ok:true,revision:index.revision,protocol:2});return;}
       if(event.data?.type!=='WARM')return;
       const index=await forClient(id),plan=index.plans[event.data.entry]||[],background=event.data.phase==='background';
       const urls=Array.isArray(plan)?(background?[]:plan):(background?plan.background:plan.critical);let cursor=0,completed=0,failed=0;

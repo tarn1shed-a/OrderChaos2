@@ -21,7 +21,7 @@ function platform(){
 function worker(platform){
   const handlers={};const self={location:{origin:'https://local.test'},addEventListener:(name,fn)=>handlers[name]=fn,skipWaiting:async()=>{},clients:{claim:async()=>{}}};
   vm.runInNewContext(script,{self,caches:platform.caches,fetch:platform.fetch,crypto:webcrypto,Request,Response,URL,console});
-  async function bind(id){let done,value;handlers.message({source:{id},data:{type:'BIND'},ports:[{postMessage:v=>value=v}],waitUntil:p=>done=p});await done;assert.equal(value.ok,true);}
+  async function bind(id){let done,value;handlers.message({source:{id},data:{type:'BIND'},ports:[{postMessage:v=>value=v}],waitUntil:p=>done=p});await done;assert.equal(value.ok,true);assert.equal(value.protocol,2);}
   async function get(id,path='/assets/model.json'){
     let response;handlers.fetch({clientId:id,request:new Request('https://local.test'+path),respondWith:p=>response=p});return response?await response:null;
   }

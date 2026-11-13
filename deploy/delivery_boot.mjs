@@ -18,8 +18,14 @@ try{
     function change(){if(navigator.serviceWorker.controller){clearTimeout(timer);navigator.serviceWorker.removeEventListener('controllerchange',change);resolve();}}
     navigator.serviceWorker.addEventListener('controllerchange',change);change();
   });
-  const worker=navigator.serviceWorker.controller||registration.active;
-  const result=await new Promise((resolve,reject)=>{const channel=new MessageChannel(),timer=setTimeout(()=>reject(Error('Delivery bind timeout')),8000);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();event.data.ok?resolve(event.data):reject(Error(event.data.error));};worker.postMessage({type:'BIND'},[channel.port2]);});
+  let worker=navigator.serviceWorker.controller||registration.active;
+  const bind=target=>new Promise((resolve,reject)=>{const channel=new MessageChannel(),timer=setTimeout(()=>{channel.port1.close();reject(Error('Delivery bind timeout'));},8000);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();event.data.ok?resolve(event.data):reject(Error(event.data.error));};target.postMessage({type:'BIND'},[channel.port2]);});
+  let result=await bind(worker);
+  if(result.protocol!==2){
+    // A previous deployed worker can still control this page while its update installs.
+    await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{navigator.serviceWorker.removeEventListener('controllerchange',change);reject(Error('Delivery update timeout'));},6000);function change(){if(navigator.serviceWorker.controller&&navigator.serviceWorker.controller!==worker){clearTimeout(timer);navigator.serviceWorker.removeEventListener('controllerchange',change);resolve();}}navigator.serviceWorker.addEventListener('controllerchange',change);change();});
+    worker=navigator.serviceWorker.controller;result=await bind(worker);if(result.protocol!==2)throw Error('Delivery protocol unavailable');
+  }
   diagnostics.deliveryRevision=result.revision;diagnostics.deliveryStatus='active';
   const warm=new MessageChannel();warm.port1.onmessage=event=>{
     const value=event.data;if(value.completed!==undefined)diagnostics.deliveryPrefetched=String(value.completed);

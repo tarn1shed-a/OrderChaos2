@@ -5,8 +5,14 @@
 .source-entry[hidden]{display:none}
 .source-entry>svg{display:block;width:100%;height:100%}
 .source-entry[data-source-screen="QuickLogin"]>svg{width:min(360px,calc(100vw - 40px));height:min(540px,calc(100dvh - 48px))}
-.source-entry[data-source-screen="CharacterChooseCharacter"]>svg{width:min(280px,calc(100vw - 40px));height:min(520px,calc(100dvh - 48px))}
+.source-entry[data-source-screen="CharacterDelete"]>svg{width:min(400px,calc(100vw - 40px));height:min(640px,calc(100dvh - 48px))}
+.source-entry[data-source-screen="LoginMsgBox"]>svg{width:min(630px,calc(100vw - 40px));height:min(370px,calc(100dvh - 48px))}
 .source-entry text[data-font-source*="League"]{font-family:EntryGothic,EntryText}
 .source-entry text[data-font-source*="Alegreya"]{font-family:EntryDisplay,EntryText}
 .source-entry [role=button]{cursor:pointer;outline:none}
 .source-entry [aria-disabled=true]{cursor:default}
+.source-entry-field{display:block;box-sizing:border-box;width:100%;height:100%;padding:0;border:0;outline:none;background:transparent;color:#fff;font-family:EntryText;font-size:480px;line-height:1.15;text-align:left;white-space:pre-wrap;overflow:auto}
+.source-entry-field[data-font-size="400"]{font-size:400px}
+.source-entry-field[data-align="middle"]{text-align:center}
+.source-entry-field[data-font-family="EntryDisplay"]{font-family:EntryDisplay,EntryText}
+.source-entry-field::placeholder{color:inherit;opacity:1}

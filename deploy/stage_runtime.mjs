@@ -42,7 +42,7 @@ export function stageEntry(source,{entryUI=false}={}){
     replace("$('session-dialog').close();$('session-open').hidden=true;", "$('session-dialog').close();sourceEntry?.hide();$('session-open').hidden=true;");
     replace('denied = true; message(msg.message);','sourceEntry?.error(msg.message);denied = true; message(msg.message);');
     replace('movementTiming=createBrowserTiming(canvas);openSession();init();',
-      "sourceEntry=createSourceEntry({legacy:legacySession,connect:(name,credentials,profession)=>{if(!ready)return;$('profession').value=String(profession);connect(name,$('room').value,false,credentials);}});movementTiming=createBrowserTiming(canvas);openSession();init();");
+      "sourceEntry=createSourceEntry({connect:(name,credentials,profession)=>{if(!ready)return;$('profession').value=String(profession);connect(name,$('room').value,false,credentials);}});movementTiming=createBrowserTiming(canvas);openSession();init();");
   }
   return source;
 }

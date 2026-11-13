@@ -6,7 +6,7 @@ import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {installDelivery} from './static_delivery.mjs';
 import {writeFileSync} from 'node:fs';
-import {observeServer} from './observe_server.mjs';
+import {entryServer,trialRoleManager,installEntryManagement} from './entry_manage.mjs';
 import {installEntryRead} from './entry_read.mjs';
 
 const root=resolve(new URL('../',import.meta.url).pathname);
@@ -24,7 +24,7 @@ const base=pathToFileURL(runtime+'/prototype/');
 const {loadNativeWindowCollision}=await import(new URL('game/native-window-collision.mjs',base));
 const {loadGameplay}=await import(new URL('game/basic-attack.mjs',base));
 const observed=new URL('server-observed.mjs',base);
-writeFileSync(observed,observeServer(readFileSync(new URL('server.mjs',base),'utf8'),new URL('./movement_trace.mjs',import.meta.url).href));
+writeFileSync(observed,entryServer(readFileSync(new URL('server.mjs',base),'utf8'),new URL('./movement_trace.mjs',import.meta.url).href));
 const {createGameServer}=await import(observed);
 const motion=loadNativeWindowCollision(new URL('native-physics.json',base));
 if(!motion?.sourceNative)throw Error('Original collision inputs are unavailable; no fallback');
@@ -35,6 +35,7 @@ try {
   game=createGameServer({maxPlayersPerRoom:maxPlayers,saveFile:'/data/saves/characters.json',gameplay,motion:null,mapWindowMotion:motion,navigation:null});
   await installDelivery(game.server,root);
   installEntryRead(game.server,'/data/saves/characters.json');
+  installEntryManagement(game.server,trialRoleManager(game.entryStore,game.entryActive));
   await new Promise((ok,fail)=>{game.server.once('error',fail);game.server.listen(port,'0.0.0.0',()=>{game.server.off('error',fail);ok();});});
 } catch(error) { if(game)await game.close();else await motion.close();throw error; }
 console.log(JSON.stringify({listening:port,host:'0.0.0.0',saveFile:'/data/saves/characters.json',maxPlayers,sourceNative:true}));

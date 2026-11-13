@@ -26,6 +26,15 @@ class OriginalEntryTests(unittest.TestCase):
   path='ui/Flash/QuickLogin.swf'
   with tempfile.TemporaryDirectory()as td:
    with self.assertRaisesRegex(ValueError,'source changed'):recover_login_ui(lambda p:self.read(p)+(b'x'if p==path else b''),td)
+ def test_management_drawings_use_original_inputs_and_add_icon(self):
+  with tempfile.TemporaryDirectory()as td:
+   r=recover_login_ui(self.read,td,management=True)
+   self.assertTrue({'CharacterChooseRace','CharacterChooseClass','CharacterChoosePart','CharacterChooseVillage'}<=r['windows'].keys())
+   self.assertEqual(r['methods']['delete_char_mc.OnClickOK']['codeSHA256'],'58cb26163feb90f514dec0899b8d4ebe7ab6749099d096cb97eb622e654c6766')
+   self.assertEqual(r['strings']['GENERAL_ROLESELECT_REMOVE_WINDOW_TITLE']['text'],'删除角色')
+   self.assertIn('data-entry-bounds=',(Path(td)/'CharacterChoosePart.svg').read_text())
+   icon=r['assets']['ui/icons/userinterface/icon_characteradd_0.5x.png']
+   self.assertEqual((Path(td)/icon['url'].rsplit('/',1)[-1]).read_bytes(),self.read('ui/icons/userinterface/icon_characteradd_0.5x.png'))
  def test_extended_styles_do_not_change_legacy_reader_contract(self):
   lib=document(self.read('ui/Flash/library.swf'),'library',False)
   for cid in [2189,2190,1543,1690,1523,1735]:

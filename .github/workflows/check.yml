@@ -36,6 +36,7 @@ jobs:
       - run: python tools/native_combat_tests.py
       - run: python tools/native_interaction_tests.py
       - run: python tools/quest_assets_tests.py
+      - run: python tools/tutorial_quest_chain_tests.py
       - run: python tools/swf_ui_graphics_tests.py
       - run: python tools/login_ui_assets_tests.py
       - run: python tools/role_ui_evidence_tests.py

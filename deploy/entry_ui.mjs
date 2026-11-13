@@ -1,4 +1,5 @@
-// Original drawings/placement; existing web identities are an explicitly separate adapter.
+// Original drawings; centered login sizing is the user's explicit web layout preference.
+// Existing web identities are a separate adapter.
 const NS='http://www.w3.org/2000/svg';
 export function savedEntryIdentities(storage){
   try{
@@ -24,6 +25,28 @@ export function createSourceEntry({connect,legacy}){
     const activate=()=>{if(el.getAttribute('aria-disabled')!=='true')fn();};el.addEventListener('click',activate);el.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key)){e.preventDefault();activate();}});
   };
   const image=(el,url)=>{if(!el||!url)return;const b=el.getBBox();if(!b.width||!b.height)return;el.replaceChildren();const img=document.createElementNS(NS,'image');for(const[k,v]of Object.entries({x:b.x,y:b.y,width:b.width,height:b.height,href:url,preserveAspectRatio:'xMidYMid meet'}))img.setAttribute(k,v);el.append(img);};
+  async function loginLogo(el,url){
+    const bitmap=new Image();bitmap.src=url;await bitmap.decode();
+    const b=el.getBBox(),m=screen.getScreenCTM().inverse().multiply(el.getScreenCTM());
+    const p=new DOMPoint(b.x,b.y).matrixTransform(m),end=new DOMPoint(b.x+b.width,b.y+b.height).matrixTransform(m);
+    const width=end.x-p.x,height=width*bitmap.naturalHeight/bitmap.naturalWidth;
+    const img=document.createElementNS(NS,'image');
+    for(const[k,v]of Object.entries({x:p.x,y:(p.y+end.y-height)/2,width,height,href:url,preserveAspectRatio:'xMidYMid meet','data-entry-logo':''}))img.setAttribute(k,v);
+    // The SWF Picture placeholder has a nonuniform parent scale. Carry the
+    // original bitmap in screen coordinates so that scale cannot flatten it.
+    el.setAttribute('display','none');screen.append(img);
+  }
+  function centerLogin(){
+    const inverse=screen.getScreenCTM().inverse(),points=[];
+    for(const el of [screen.querySelector('[data-entry-logo]'),...['._QuickLoginBtn','._GameCenterBtn','._FaceBookBtn'].map(path=>q(path))]){
+      const b=el.getBBox(),matrix=inverse.multiply(el.getScreenCTM());
+      for(const[x,y]of [[b.x,b.y],[b.x+b.width,b.y],[b.x,b.y+b.height],[b.x+b.width,b.y+b.height]])points.push(new DOMPoint(x,y).matrixTransform(matrix));
+    }
+    const x=Math.min(...points.map(p=>p.x)),y=Math.min(...points.map(p=>p.y)),w=Math.max(...points.map(p=>p.x))-x,h=Math.max(...points.map(p=>p.y))-y;
+    // Fit the complete original artwork as one group; never stretch individual controls.
+    screen.setAttribute('viewBox',`${x-12} ${y-12} ${w+24} ${h+24}`);
+    screen.setAttribute('preserveAspectRatio','xMidYMid meet');
+  }
   const loaded=fetch('/assets/source-entry/entry.json').then(r=>{if(!r.ok)throw Error('Original entry resources unavailable');return r.json();}).then(v=>{
     if(v.format!=='oc2-source-entry-ui-v1')throw Error('Original entry profile differs');manifest=v;return v;
   });
@@ -42,12 +65,13 @@ export function createSourceEntry({connect,legacy}){
     hide('._QuickLogin');hide('._QuickLoginText'); // native auto-login preference is unavailable; no invented saved setting
     hide('._VersionText');hide('.m_Version'); // native account/runtime version response is not a web version
     for(const[path,key]of [['._QuickLoginBtn.title','GENERAL_QUICK_LOGIN'],['._FaceBookBtn.title','GENERAL_LOGIN_FACEBOOK_BTN'],['._GameCenterBtn.title','GENERAL_LOGIN_GAMECENTER_BTN']])label(path,word(key));
-    image(q('.m_Picture._Picture'),manifest.logo);
+    await loginLogo(q('.m_Picture._Picture'),manifest.logo);
     for(const[name,key]of [['_FaceBookBtn','facebook'],['_GameCenterBtn','gamecenter']]){
       image(q('.'+name+'.icon'),manifest.assets['ui/icons/userinterface/'+key+'_0.5x.png']?.url);
       button(q('.'+name),word(name==='_FaceBookBtn'?'GENERAL_LOGIN_FACEBOOK_BTN':'GENERAL_LOGIN_GAMECENTER_BTN')+'（原账号登录不可用）',()=>{},true);
     }
     button(q('._QuickLoginBtn'),word('GENERAL_QUICK_LOGIN'),choose);
+    centerLogin();
   }
   async function choose(){
     if(busy)return;busy=true;

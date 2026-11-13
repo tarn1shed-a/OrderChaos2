@@ -1,0 +1,22 @@
+name: oc2-migration
+services:
+  game:
+    build: .
+    platform: linux/amd64
+    cpus: 2
+    mem_limit: 1g
+    ports:
+      - "127.0.0.1:8880:8080"
+    environment:
+      OC2_BUNDLE_PATH: /run/oc2-runtime.tar.gz
+      OC2_BUNDLE_SHA256: ${OC2_BUNDLE_SHA256:?Use the SHA256 in the private migration receipt}
+      MAX_PLAYERS_PER_ROOM: "8"
+    volumes:
+      - oc2-test-saves:/data
+      - type: bind
+        source: ${OC2_BUNDLE_PATH:?Set the absolute path to the private migration archive}
+        target: /run/oc2-runtime.tar.gz
+        read_only: true
+    stop_grace_period: 30s
+volumes:
+  oc2-test-saves:

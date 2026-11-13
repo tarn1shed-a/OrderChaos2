@@ -1,0 +1,34 @@
+// Deployment transport/paths only. Reviewed game modules remain byte-identical.
+import {readFileSync, existsSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {createHash} from 'node:crypto';
+
+const root=resolve(new URL('../',import.meta.url).pathname);
+const runtime=resolve(root,'analysis/raw/portable/running-preview');
+const manifest=JSON.parse(readFileSync(resolve(root,'tools/local_mvp_runtime.json'),'utf8'));
+for(const [name,digest] of Object.entries(manifest.files)) {
+  const file=resolve(runtime,name);
+  if(!file.startsWith(runtime+'/')||!existsSync(file)||createHash('sha256').update(readFileSync(file)).digest('hex')!==digest)
+    throw Error('Reviewed runtime identity differs: '+name);
+}
+const port=Number(process.env.PORT||8080),maxPlayers=Number(process.env.MAX_PLAYERS_PER_ROOM||8);
+if(!Number.isInteger(port)||port<1||port>65535)throw Error('Invalid PORT');
+if(!Number.isInteger(maxPlayers)||maxPlayers<1||maxPlayers>32)throw Error('Invalid MAX_PLAYERS_PER_ROOM');
+const base=pathToFileURL(runtime+'/prototype/');
+const {loadNativeWindowCollision}=await import(new URL('game/native-window-collision.mjs',base));
+const {loadGameplay}=await import(new URL('game/basic-attack.mjs',base));
+const {createGameServer}=await import(new URL('server.mjs',base));
+const motion=loadNativeWindowCollision(new URL('native-physics.json',base));
+if(!motion?.sourceNative)throw Error('Original collision inputs are unavailable; no fallback');
+const gameplay=loadGameplay();
+if(!gameplay)throw Error('Reviewed gameplay data unavailable');
+let game;
+try {
+  game=createGameServer({maxPlayersPerRoom:maxPlayers,saveFile:'/data/saves/characters.json',gameplay,motion:null,mapWindowMotion:motion,navigation:null});
+  await new Promise((ok,fail)=>{game.server.once('error',fail);game.server.listen(port,'0.0.0.0',()=>{game.server.off('error',fail);ok();});});
+} catch(error) { if(game)await game.close();else await motion.close();throw error; }
+console.log(JSON.stringify({listening:port,host:'0.0.0.0',saveFile:'/data/saves/characters.json',maxPlayers,sourceNative:true}));
+let closing=false;
+async function stop(){if(closing)return;closing=true;try{await game.close();process.exit(0);}catch(error){console.error(error.message);process.exit(1);}}
+process.on('SIGTERM',stop);process.on('SIGINT',stop);

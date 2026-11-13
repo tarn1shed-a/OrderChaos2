@@ -1,0 +1,9 @@
+{
+  "name": "orderchaos2-research-tools",
+  "private": true,
+  "type": "module",
+  "description": "Deployment configuration tooling only; private game runtime is packaged separately.",
+  "devDependencies": {
+    "railway": "3.16.0"
+  }
+}

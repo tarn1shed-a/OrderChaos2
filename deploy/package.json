@@ -1,0 +1,10 @@
+{
+  "name": "oc2-deployment-host",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.13.0" },
+  "dependencies": {
+    "three": "0.187.0",
+    "ws": "8.23.0"
+  }
+}

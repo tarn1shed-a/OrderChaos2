@@ -79,3 +79,8 @@ test('public home and old index enter the current map and retain invitation sett
   const r=await request('/?room=FRIENDS-02&sourceProfile=GPU_4',{},'HEAD');
   assert.equal(r.headers.location,'/explore-map.html?room=FRIENDS-02&sourceProfile=GPU_4');
 });
+test('retired or encoded lab page requests cannot reach the old prototype HTML',async()=>{
+  for(const path of ['/explore.html?room=DYNAMIC-01&lab=collision','/explore%2Ehtml?lab=collision','/explore-map.html?room=DYNAMIC-01&lab=collision']){
+    const r=await request(path);assert.equal(r.status,307);assert.equal(r.headers.location,'/explore-map.html?room=RAILWAY-01&sourceProfile=APK_Default');assert.equal(r.body.length,0);
+  }
+});

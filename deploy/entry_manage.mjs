@@ -10,8 +10,11 @@ export function entryServer(source,traceURL){
   if(observed.split(anchor).length!==2)throw Error('Entry store anchor differs');
   const spawn='x: restorePosition ? position.x : world.spawn.x + index * 35,';
   if(observed.split(spawn).length!==2)throw Error('Entry placement anchor differs');
+  const scene="        const scene = msg.scene || 'camp';";
+  if(observed.split(scene).length!==2)throw Error('Entry scene anchor differs');
   return observed.replace(anchor,anchor+'\n    entryStore:store,entryActive:activeCharacters,')
-    .replace(spawn,'x: restorePosition ? position.x : world.spawn.x + (sourceWindow?0:index * 35),');
+    .replace(spawn,'x: restorePosition ? position.x : world.spawn.x + (sourceWindow?0:index * 35),')
+    .replace(scene,"        if(msg.lab!==undefined)return reject(ws,'本地碰撞测试入口已停用，请从正式地图入口进入');\n"+scene);
 }
 
 export function trialRoleManager(store,active,{archive=record=>{

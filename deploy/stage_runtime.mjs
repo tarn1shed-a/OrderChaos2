@@ -5,6 +5,8 @@ export function stageEntry(source,{entryUI=false}={}){
   if(createHash('sha256').update(source).digest('hex')!==BASE)throw Error('Staged loader source identity differs');
   const replace=(from,to)=>{if(source.split(from).length!==2)throw Error('Staged loader anchor differs');source=source.replace(from,to);};
   replace("import { RESOURCE_WORLD } from './world.js';","import { RESOURCE_WORLD } from '/__delivery/trial-world.js';");
+  // Retire the prototype camp panel; keep inert backing nodes for reviewed bindings.
+  replace('function setCampPanel(open) {','function setCampPanel(open) {\n  open=false;');
   source="import {createSceneStages} from '/__delivery/staged_scene.mjs';\nlet sceneStages;\n"+source;
   source="import {clickTarget,clickMovement} from '/__delivery/click_input.mjs';\n"+source;
   source="import {createBrowserTiming} from '/__delivery/browser_timing.mjs';\n"+source;

@@ -6,6 +6,7 @@ import {createHash} from 'node:crypto';
 import {resolve} from 'node:path';
 import {brotliCompress,gzip,constants} from 'node:zlib';
 import {promisify} from 'node:util';
+import {retirePrototypeHTML,retiredRoute} from './retire_prototype.mjs';
 const CSP="default-src 'self'; connect-src 'self'; style-src 'self'; script-src 'self'; worker-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'";
 export function encoding(header,available){
   const qualities=new Map((header||'').split(',').filter(Boolean).map(part=>{const [name,...params]=part.trim().toLowerCase().split(';');let q=1;for(const p of params)if(p.trim().startsWith('q='))q=Number(p.trim().slice(2));return[name,Number.isFinite(q)&&q>=0&&q<=1?q:0];}));
@@ -29,6 +30,8 @@ export async function installDelivery(server,root){
       const parsed=new URL(req.url,'http://localhost');let url;
       try{url=decodeURIComponent(parsed.pathname);}catch{res.writeHead(400);res.end();return;}
       if(!['GET','HEAD'].includes(req.method)||url==='/health'||url==='/ws'){for(const listener of original)listener.call(server,req,res);return;}
+      const retired=retiredRoute({pathname:url,search:parsed.search,searchParams:parsed.searchParams});
+      if(retired){res.writeHead(307,{'Location':retired,'Cache-Control':'no-store'});res.end();return;}
       if(url==='/'||url==='/index.html'){
         const query=new URLSearchParams(parsed.search);
         if(!query.has('room'))query.set('room','RAILWAY-01');
@@ -40,8 +43,8 @@ export async function installDelivery(server,root){
       if(!meta){for(const listener of original)listener.call(server,req,res);return;}
       if(meta.type.startsWith('text/html')){
         body=await readFile(meta.path);
-        // Only the external script entry is wrapped. Page nodes/styles/game modules stay unchanged.
-        const text=body.toString().replace(/<script type="module" src="(\/explore(?:-map)?\.js[^"<>]*)"><\/script>/g,(_,entry)=>`<script type="module" src="/__delivery/delivery_boot.mjs?entry=${encodeURIComponent(entry)}"></script>`);
+        // Retire unverified prototype UI and wrap the external script entry.
+        const text=retirePrototypeHTML(body.toString()).replace(/<script type="module" src="(\/explore(?:-map)?\.js[^"<>]*)"><\/script>/g,(_,entry)=>`<script type="module" src="/__delivery/delivery_boot.mjs?entry=${encodeURIComponent(entry)}"></script>`);
         body=Buffer.from(text);meta={...meta,bytes:body.length,sha256:createHash('sha256').update(body).digest('hex'),encodings:undefined};
       }
       const chosen=encoding(req.headers['accept-encoding'],meta.encodings);

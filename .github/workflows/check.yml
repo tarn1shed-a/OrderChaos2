@@ -38,6 +38,7 @@ jobs:
       - run: python tools/quest_assets_tests.py
       - run: python tools/swf_ui_graphics_tests.py
       - run: python tools/login_ui_assets_tests.py
+      - run: python tools/role_ui_evidence_tests.py
       - run: python tools/terrain_materials_tests.py
       - run: python tools/terrain_lighting_tests.py
       - run: python tools/scene_sky_tests.py
@@ -113,7 +114,7 @@ jobs:
         with:
           node-version: '22'
       - run: node --test tools/local_mvp_tests.mjs
-      - run: node --test tools/static_delivery_tests.mjs tools/delivery_worker_tests.mjs tools/staged_loading_tests.mjs tools/click_input_tests.mjs tools/movement_trace_tests.mjs tools/entry_bridge_tests.mjs tools/entry_management_tests.mjs tools/trial_entry_tests.mjs
+      - run: node --test tools/static_delivery_tests.mjs tools/delivery_worker_tests.mjs tools/staged_loading_tests.mjs tools/click_input_tests.mjs tools/movement_trace_tests.mjs tools/entry_bridge_tests.mjs tools/entry_management_tests.mjs tools/trial_entry_tests.mjs tools/prototype_retirement_tests.mjs
       - run: python tools/mvp_capacity_tests.py
       - run: python tools/map_loading_evidence_tests.py
       - run: python tools/map_streaming_evidence_tests.py

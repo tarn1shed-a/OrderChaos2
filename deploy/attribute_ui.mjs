@@ -3,8 +3,8 @@
 import {sourceDrawing,sourceFrameLayout}from'/source-ui-svg.js';
 import{sourceHPFrame,sourceScrollRatio,attributeRoleValues}from'./attribute_state.mjs';
 const PREFIX='.CharacterAttrPanel.CharacterPanel.mc_content.';
-export function createAttributeUI({stop,beforeOpen,focusGame}){
-  let character,dialog,stage,page,frame,spec,loading,ratio=0,sequence=0;
+export function createAttributeUI({stop,beforeOpen,focusGame,preview}){
+  let character,dialog,stage,page,frame,spec,loading,ratio=0,sequence=0,portrait,previewKey='',previewTicket=0;
   const q=path=>page?.querySelector(`[data-source-path="${path}"]`);
   const text=(path,value)=>{const node=q(path)?.querySelector('[data-entry-text]');if(node)node.textContent=value===undefined?'':String(value);};
   const hide=path=>q(path)?.setAttribute('display','none');
@@ -34,8 +34,12 @@ export function createAttributeUI({stop,beforeOpen,focusGame}){
     page.querySelectorAll('[data-entry-text]').forEach(n=>n.textContent='');
     for(const[path,value]of Object.entries(spec.labels))text(path,value);
     hide('.CombatScorePanel');
-    // ModelRefresh unloads first; no native account GUID/camera is fabricated.
+    // Original ModelRefresh unloads first. The source slot stays at its source
+    // display-list depth; a read-only web identity supplies the cloned model.
     q('.CharacterDisplay')?.replaceChildren();
+    portrait=document.createElementNS('http://www.w3.org/2000/svg','image');
+    for(const[key,value]of Object.entries({x:0,y:0,width:6059,height:10307,preserveAspectRatio:'none'}))portrait.setAttribute(key,value);
+    q('.CharacterDisplay')?.append(portrait);
     for(const path of ['.player_class.ImageContains','.IconCombatScore.ImageContains',PREFIX+'Energy.valueBar','.NormalVigorPanel.valueBar','.NormalVigorPanel.buyVigor',PREFIX+'Exp.valueBar.vigorNormal',PREFIX+'Exp.valueBar.vigorDouble',PREFIX+'Exp.valueBar.expEndFlag'])hide(path);
     const content=q('.CharacterAttrPanel.CharacterPanel.mc_content');
     const baseTransform=content.getAttribute('transform')||'matrix(1 0 0 1 0 0)';
@@ -50,9 +54,22 @@ export function createAttributeUI({stop,beforeOpen,focusGame}){
       const button=q(path);button.setAttribute('role','button');button.setAttribute('tabindex','0');button.setAttribute('aria-label',spec.labels[path]);
       button.addEventListener('click',()=>pane(combat));button.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pane(combat);}});
     }
-    const resize=()=>stage.style.setProperty('--attribute-scale',String(Math.min(innerWidth/1136,innerHeight/640)));
+    const resize=()=>{stage.style.setProperty('--attribute-scale',String(Math.min(innerWidth/1136,innerHeight/640)));if(dialog.open)requestAnimationFrame(refreshPreview);};
     const observer=new ResizeObserver(resize);observer.observe(dialog);window.addEventListener('pagehide',()=>observer.disconnect(),{once:true});
-    dialog.addEventListener('close',focusGame);dialog.addEventListener('cancel',stop);resize();render();return true;
+    dialog.addEventListener('close',focusGame);dialog.addEventListener('cancel',event=>{event.preventDefault();stop();close();});resize();render();return true;
+  }
+  async function refreshPreview(){
+    if(!dialog?.open||!portrait||!character||!preview)return;
+    const rect=portrait.getBoundingClientRect();if(!rect.width||!rect.height)return;
+    const key=JSON.stringify([character.id,character.look,character.equipment,rect.width,rect.height]);
+    if(key===previewKey)return;
+    previewKey=key;const ticket=++previewTicket,role=structuredClone(character);
+    portrait.removeAttribute('href');
+    try{
+      const image=await preview(role,{width:rect.width,height:rect.height});
+      if(ticket!==previewTicket||!dialog.open)return;
+      if(image)portrait.setAttribute('href',image.url);else previewKey='';
+    }catch(error){console.error(error.message);} // Retry on reopen/look/size change, not every progress packet.
   }
   function render(){
     if(!page||!character)return;
@@ -76,8 +93,8 @@ export function createAttributeUI({stop,beforeOpen,focusGame}){
     if(!character)return;const ticket=++sequence;
     if(!loading)loading=init().catch(error=>{loading=null;console.error(error.message);return false;});
     if(!await loading||ticket!==sequence)return;
-    beforeOpen();stop();render();if(!dialog.open)dialog.showModal();stage.querySelector('button').focus();
+    beforeOpen();stop();render();if(!dialog.open)dialog.showModal();stage.querySelector('button').focus();requestAnimationFrame(refreshPreview);
   }
-  function close(){sequence++;if(dialog?.open)dialog.close();}
-  return {open,close,get isOpen(){return !!dialog?.open;},update(data){character=data;if(!data)close();else render();}};
+  function close(){sequence++;previewTicket++;previewKey='';portrait?.removeAttribute('href');if(dialog?.open)dialog.close();}
+  return {open,close,get isOpen(){return !!dialog?.open;},update(data){character=data;if(!data)close();else{render();if(dialog?.open)refreshPreview();}}};
 }

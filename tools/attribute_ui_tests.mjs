@@ -1,5 +1,5 @@
 import{test}from'node:test';import assert from'node:assert/strict';
-import{sourceHPFrame,sourceScrollRatio,attributeRoleValues}from'../deploy/attribute_state.mjs';
+import{sourceHPFrame,sourceScrollRatio,attributeRoleValues,previewColors}from'../deploy/attribute_state.mjs';
 import{readFileSync}from'node:fs';import{stageEntry}from'../deploy/stage_runtime.mjs';
 test('original HP display keeps its 2-percent minimum and 60 source frames, including zero max HP',()=>{
   assert.equal(sourceHPFrame(0,100),1);assert.equal(sourceHPFrame(50,100),30);assert.equal(sourceHPFrame(100,100),60);assert.equal(sourceHPFrame(150,100),60);assert.equal(sourceHPFrame(0,0),60);
@@ -10,6 +10,13 @@ test('original scroll controls move ten percent internally and stop at either en
 test('read-only role bridge leaves unavailable original properties absent rather than mapping attack into physical strength',()=>{
  const character=Object.freeze({name:'角色',level:2,hp:88,maxHp:100,stats:Object.freeze({armor:0,attack:20}),xp:30});const before=JSON.stringify(character);
  const values=attributeRoleValues(character,{value:30,max:60});assert.deepEqual(values,{name:'角色',level:'2',hp:'88 / 100',armor:'0',xp:'30 / 60'});assert.equal(JSON.stringify(character),before);assert(!('physicalStrength'in values));assert(!('combatScore'in values));assert(!('xp'in attributeRoleValues(character)));
+});
+test('preview packed colors keep original low-byte red and reject missing look references',()=>{
+ const profile={colors:{hair:{color1:{sourcePair:[0x12abef,0]}},skin:{color2:{sourcePair:[0xf05431,0]}}}};
+ const look=Object.freeze({hairColor:'color1',skinColor:'color2'}),before=JSON.stringify(profile),f=Math.fround;
+ assert.deepEqual(previewColors(profile,look),{hair:[239,171,18].map(v=>f(v*f(1/255))),skin:[49,84,240].map(v=>f(v*f(1/255))),eye:[0,0,0]});
+ assert.equal(JSON.stringify(profile),before);assert.deepEqual(previewColors(profile,null),{hair:[1,1,1],skin:[1,1,1],eye:[0,0,0]});
+ assert.throws(()=>previewColors(profile,{...look,hairColor:'missing'}));
 });
 test('character window uses the existing C-key adapter and does not restore prototype menus or names',t=>{
  let original;try{original=readFileSync(new URL('../analysis/raw/showcase-20261110/running-preview/prototype/public/explore-map.js',import.meta.url),'utf8');}catch{t.skip('Private source stays local');return;}

@@ -57,6 +57,16 @@ class OptimizedABCTests(unittest.TestCase):
         for raw in [b'',b'FWS'+bytes(20),b'CWS'+bytes(20)]:
             with self.assertRaises(ValueError):extract_abc(raw)
 
+    def test_only_unreachable_terminal_compiler_jumps_may_target_eof(self):
+        p=parse_abc(fixture())
+        self.assertEqual(disassemble(b'\x26\x48\x10\0\0\0',p)[-1]['targets'],[6])
+        for code in [b'\x10\0\0\0',b'\x26\x11\0\0\0',b'\x47\x10\xff\xff\xff']:
+            with self.subTest(code=code),self.assertRaises(ValueError):disassemble(code,p)
+        with self.assertRaises(ValueError):
+            disassemble(b'\x26\x48\x10\0\0\0',p,[(0,1,2,0,0)])
+        with self.assertRaisesRegex(ValueError,'exception target'):
+            disassemble(b'\x26\x48\x10\0\0\0',p,[(0,1,3,0,0)])
+
     def test_exact_named_block_in_multi_block_swf_rejects_prefixes_and_duplicate_names(self):
         raw=swf(['foo']);addition=tag(300,b'\x01\0\0\0Common/ASDefines\0'+fixture())
         def extend(data,extra):

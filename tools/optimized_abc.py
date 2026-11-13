@@ -173,8 +173,8 @@ OPS = {int(code, 16): (name, int(count)) for code, name, count in (part.split(':
 NAME_OPS = {4, 5, 0x45, 0x46, 0x4a, 0x4c, 0x4e, 0x4f, 0x59, 0x5d, 0x5e, 0x5f, 0x60, 0x61, 0x66, 0x68, 0x6a, 0x80, 0x86, 0xb2}
 
 
-def disassemble(code, abc):
-    r = _ABC(code); result = []; destinations = []
+def disassemble(code, abc, exceptions=()):
+    r = _ABC(code); result = []
     while r.at < len(code):
         at = r.at; opcode = r.byte()
         if opcode not in OPS:
@@ -204,9 +204,31 @@ def disassemble(code, abc):
                 raise ValueError('ABC instruction reference outside pool')
             args[0] = abc[pool][args[0]]
         result.append({'at': at, 'end': r.at, 'op': name, 'args': args, 'operands': operands, 'targets': targets})
-        destinations.extend(targets)
     boundaries = {item['at'] for item in result}
-    if any(target not in boundaries for target in destinations):
+    # The original Model3D compiler emits dead jumps after returnvalue to EOF.
+    # Accept only those unreachable terminal jumps, never a reachable exit or a
+    # target into an operand. This changes decoding, not the original bytecode.
+    by_at = {item['at']: item for item in result}
+    handlers = [entry[2] for entry in exceptions]
+    if any(target not in boundaries for target in handlers):
+        raise ValueError('ABC exception target is not an instruction')
+    # Conservatively treat every handler as an entry point, even if the
+    # protected range appears unreachable in this limited control-flow check.
+    reachable, pending = set(), ([0] if result else []) + handlers
+    while pending:
+        at = pending.pop()
+        if at in reachable or at not in by_at:
+            continue
+        reachable.add(at)
+        item = by_at[at]
+        if item['op'] in ('returnvalue', 'returnvoid', 'throw'):
+            continue
+        pending.extend(item['targets'])
+        if item['op'] not in ('jump', 'lookupswitch'):
+            pending.append(item['end'])
+    if any(target not in boundaries and not
+           (target == len(code) and item['op'] == 'jump' and item['at'] not in reachable)
+           for item in result for target in item['targets']):
         raise ValueError('ABC branch target is not an instruction')
     return result
 
@@ -222,4 +244,4 @@ def named_method(abc, class_name, method_name):
     mid = found[0]; body = abc['bodies'][mid]
     return {'methodId': mid, 'codeOffset': body['offset'], 'codeBytes': len(body['code']),
             'codeSHA256': hashlib.sha256(body['code']).hexdigest(),
-            'instructions': disassemble(body['code'], abc)}
+            'instructions': disassemble(body['code'], abc, body['exceptions'])}

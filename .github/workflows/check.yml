@@ -40,6 +40,7 @@ jobs:
       - run: python tools/login_ui_assets_tests.py
       - run: python tools/role_ui_evidence_tests.py
       - run: python tools/attribute_page_tests.py
+      - run: python tools/character_display_evidence_tests.py
       - run: python tools/terrain_materials_tests.py
       - run: python tools/terrain_lighting_tests.py
       - run: python tools/scene_sky_tests.py

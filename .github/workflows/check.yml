@@ -108,6 +108,7 @@ jobs:
       - run: python tools/temple_assembly_tests.py
       - run: python tools/map_entry_evidence_tests.py
       - run: python tools/tutorial_entry_clues_tests.py
+      - run: python tools/tutorial_waypoint_tests.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

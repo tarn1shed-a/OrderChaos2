@@ -8,7 +8,6 @@ import hashlib
 import json
 from pathlib import Path
 
-from analyze_native_resources import NativeImage
 from native_combat import descriptor_fields
 from source_physics import SourcePhysics
 from tutorial_map_geometry import local_output
@@ -256,6 +255,7 @@ class QuestRequestProbe(SourcePhysics):
 
 
 def main():
+    from analyze_native_resources import NativeImage
     cli=argparse.ArgumentParser(description=__doc__)
     cli.add_argument('--library',type=Path,required=True)
     cli.add_argument('--output',type=Path,required=True)

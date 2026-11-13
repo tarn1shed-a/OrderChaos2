@@ -11,7 +11,6 @@ import math
 import struct
 from pathlib import Path
 
-from analyze_native_resources import NativeImage
 from map_loading_evidence import Sources
 from skill_attachments import decode_ftable
 from source_physics import SourcePhysics
@@ -164,6 +163,7 @@ class QuestZoneProbe(SourcePhysics):
 
 
 def main():
+    from analyze_native_resources import NativeImage
     cli = argparse.ArgumentParser(description=__doc__)
     cli.add_argument('--library',type=Path,required=True)
     cli.add_argument('--source',type=Path,required=True)

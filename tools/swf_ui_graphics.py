@@ -22,8 +22,8 @@ def paths(edges,closed):
         result.append(' '.join(parts))
     return ' '.join(result)
 
-def shape(kind,raw):
-    if kind not in (2,32,83):raise ValueError('Unsupported IGM shape tag')
+def shape(kind,raw,*,extended=False):
+    if kind not in ((2,22,32,83) if extended else (2,32,83)):raise ValueError('Unsupported IGM shape tag')
     b=Bits(raw,2);bounds=b.rect();at=b.pos();winding=False
     if kind==83:
         edge_bounds=b.rect();at=b.pos();flags=raw[at];at+=1
@@ -37,7 +37,7 @@ def shape(kind,raw):
     def count():
         n=take(1)[0]
         if n==255:n=struct.unpack('<H',take(2))[0]
-        if n>16:raise ValueError('IGM paint count exceeds supported span')
+        if n>(1024 if extended else 16):raise ValueError('IGM paint count exceeds supported span')
         return n
     def color():return list(take(channels))+([255] if channels==3 else [])
     def matrix():
@@ -54,16 +54,20 @@ def shape(kind,raw):
             return {'kind':'linear' if typ==16 else 'radial','matrix':m,'spread':spread,'interpolation':interpolation,'stops':stops}
         if typ in (64,65,66,67):return {'kind':'bitmap','bitmapId':struct.unpack('<H',take(2))[0],'matrix':matrix(),'sourceType':typ}
         raise ValueError('Unsupported source fill style')
-    fills=[fill() for _ in range(count())];lines=[]
-    for _ in range(count()):
-        width=struct.unpack('<H',take(2))[0]
-        if kind==83:
-            bits=Bits(raw,at);start,join=bits.u(2),bits.u(2);has_fill,noh,nov,hint=[bits.u(1) for _ in range(4)];reserved=bits.u(5);no_close=bits.u(1);end=bits.u(2);at=bits.pos()
-            if reserved or start>2 or end>2 or join>2 or noh or nov or hint or start!=end:raise ValueError('Unsupported IGM line flags')
-            miter=struct.unpack('<H',take(2))[0]/256 if join==2 else 4
-            paint=fill() if has_fill else {'kind':'solid','color':color()}
-            lines.append({'width':width,'cap':start,'join':join,'miter':miter,'noClose':bool(no_close),'paint':paint})
-        else:lines.append({'width':width,'cap':0,'join':0,'miter':4,'noClose':False,'paint':{'kind':'solid','color':color()}})
+    def line_styles():
+        nonlocal at
+        result=[]
+        for _ in range(count()):
+            width=struct.unpack('<H',take(2))[0]
+            if kind==83:
+                bits=Bits(raw,at);start,join=bits.u(2),bits.u(2);has_fill,noh,nov,hint=[bits.u(1) for _ in range(4)];reserved=bits.u(5);no_close=bits.u(1);end=bits.u(2);at=bits.pos()
+                if reserved or start>2 or end>2 or join>2 or noh or nov or hint or start!=end:raise ValueError('Unsupported IGM line flags')
+                miter=struct.unpack('<H',take(2))[0]/256 if join==2 else 4
+                paint=fill() if has_fill else {'kind':'solid','color':color()}
+                result.append({'width':width,'cap':start,'join':join,'miter':miter,'noClose':bool(no_close),'paint':paint})
+            else:result.append({'width':width,'cap':0,'join':0,'miter':4,'noClose':False,'paint':{'kind':'solid','color':color()}})
+        return result
+    fills=[fill() for _ in range(count())];lines=line_styles();fill_offset=line_offset=0
     bits=Bits(raw,at);nf,nl=bits.u(4),bits.u(4);x=y=0;f0=f1=line=0;fe=[[] for _ in fills];le=[[] for _ in lines]
     for _ in range(100000):
         if bits.u(1):
@@ -83,10 +87,16 @@ def shape(kind,raw):
             flags=bits.u(5)
             if not flags:break
             if flags&1:size=bits.u(5);x,y=bits.s(size),bits.s(size)
-            if flags&2:f0=bits.u(nf)
-            if flags&4:f1=bits.u(nf)
-            if flags&8:line=bits.u(nl)
-            if flags&16:raise ValueError('Mid-shape styles are not supported')
+            if flags&2:v=bits.u(nf);f0=fill_offset+v if v else 0
+            if flags&4:v=bits.u(nf);f1=fill_offset+v if v else 0
+            if flags&8:v=bits.u(nl);line=line_offset+v if v else 0
+            if flags&16:
+                if not extended:raise ValueError('Mid-shape styles are not supported')
+                if kind==2:raise ValueError('Shape1 cannot introduce new styles')
+                bits.align();at=bits.pos();fill_offset=len(fills);line_offset=len(lines)
+                extra_fills=[fill() for _ in range(count())];extra_lines=line_styles()
+                fills.extend(extra_fills);lines.extend(extra_lines);fe.extend([] for _ in extra_fills);le.extend([] for _ in extra_lines)
+                bits=Bits(raw,at);nf,nl=bits.u(4),bits.u(4)
             if max(f0,f1)>len(fills) or line>len(lines):raise ValueError('Source style index outside arrays')
     else:raise ValueError('Source path exceeds reader bound')
     bits.align()

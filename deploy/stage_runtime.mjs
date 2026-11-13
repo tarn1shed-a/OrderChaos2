@@ -1,7 +1,7 @@
 // Guarded loading/transport/input overlay. The private source is never overwritten.
 import {createHash} from 'node:crypto';
 const BASE='ba9645330507b105d034902953b39eba47113aa46b0c38b592c5c6c9ae2a4377';
-export function stageEntry(source){
+export function stageEntry(source,{entryUI=false}={}){
   if(createHash('sha256').update(source).digest('hex')!==BASE)throw Error('Staged loader source identity differs');
   const replace=(from,to)=>{if(source.split(from).length!==2)throw Error('Staged loader anchor differs');source=source.replace(from,to);};
   source="import {createSceneStages} from '/__delivery/staged_scene.mjs';\nlet sceneStages;\n"+source;
@@ -35,5 +35,13 @@ export function stageEntry(source){
     'target = clickTarget({ x: (hit.point.x+origin.x-min[0])/(max[0]-min[0])*world.width, y: (hit.point.z+origin.z-min[2])/(max[2]-min[2])*world.height },snapshot.find(p=>p.id===selfId));');
   replace('if (target && me) { const dx=target.x-me.x, dy=target.y-me.y, d=Math.hypot(dx,dy); if(d<2)target=null;else{x=dx/d;y=dy/d;} }',
     'if (target && me) { const movement=clickMovement(target,me);if(movement){x=movement.x;y=movement.y;}else target=null; }');
+  if(entryUI){
+    source="import {createSourceEntry} from '/__delivery/entry_ui.mjs';\nlet sourceEntry;\n"+source;
+    replace('function openSession() {','function openSession(){if(sourceEntry)sourceEntry.open();else legacySession();}\nfunction legacySession() {');
+    replace("ready = true; $('join').disabled", "ready = true;sourceEntry?.ready(); $('join').disabled");
+    replace("$('session-dialog').close();$('session-open').hidden=true;", "$('session-dialog').close();sourceEntry?.hide();$('session-open').hidden=true;");
+    replace('movementTiming=createBrowserTiming(canvas);openSession();init();',
+      "sourceEntry=createSourceEntry({legacy:legacySession,connect:(name,credentials,profession)=>{if(!ready)return;$('profession').value=String(profession);connect(name,$('room').value,false,credentials);}});movementTiming=createBrowserTiming(canvas);openSession();init();");
+  }
   return source;
 }

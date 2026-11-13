@@ -45,7 +45,7 @@ def python_closure():
     return sorted('tools/' + name + '.py' for name in found)
 
 
-def payload():
+def payload(entry_assets=None):
     identity = json.loads((ROOT / 'tools/local_mvp_runtime.json').read_text())
     files = {}
 
@@ -68,6 +68,17 @@ def payload():
             raise ValueError('Converted assets cannot contain symlinks')
         if file.is_file():
             add(file.relative_to(RUNTIME).as_posix(), file.read_bytes())
+    if entry_assets is not None:
+        overlay=Path(entry_assets).resolve()
+        if not any(overlay.is_relative_to(ROOT/p)for p in ['analysis/raw','game-data','backups']):
+            raise ValueError('Recovered entry assets must come from an ignored folder')
+        proof=json.loads((overlay/'entry.json').read_text())
+        if proof.get('format')!='oc2-source-entry-ui-v1':raise ValueError('Unknown recovered entry profile')
+        expected={'entry.json',*(v['url'].rsplit('/',1)[-1]for v in proof['windows'].values()),*(v['url'].rsplit('/',1)[-1]for v in proof['assets'].values())}
+        if {p.name for p in overlay.iterdir()}!=expected:raise ValueError('Unlisted entry asset or missing drawing')
+        for file in sorted(overlay.iterdir()):
+            if file.is_symlink()or not file.is_file()or file.suffix not in ('.json','.svg','.png'):raise ValueError('Unsafe entry asset')
+            add('game-data/converted/source-entry/'+file.name,file.read_bytes())
     config = json.loads((RUNTIME / 'prototype/native-physics.json').read_text())
     if config['nativeSHA256'] != identity['nativeSHA256']:
         raise ValueError('Original native identity differs')
@@ -104,13 +115,13 @@ def payload():
     return files, manifest
 
 
-def package(output):
+def package(output,entry_assets=None):
     output = Path(output).resolve()
     if not any(output.is_relative_to(ROOT / name) for name in ['backups', 'analysis/raw']):
         raise ValueError('Migration archives must stay in ignored backups/ or analysis/raw/')
     if output.exists():
         raise ValueError('Preserve existing migration archives; choose a new filename')
-    files, manifest = payload()
+    files, manifest = payload(entry_assets)
     files['bundle-manifest.json'] = json.dumps(manifest, sort_keys=True, indent=2).encode()
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open('xb') as stream, gzip.GzipFile(filename='', mode='wb', fileobj=stream, mtime=0) as compressed, tarfile.open(fileobj=compressed, mode='w') as archive:
@@ -145,6 +156,7 @@ def build_context(archive, destination):
     sources += ['deploy/prepare_delivery.mjs', 'deploy/static_delivery.mjs',
                 'deploy/delivery_boot.mjs', 'deploy/delivery_worker.mjs', 'deploy/delivery_audit.mjs',
                 'deploy/stage_runtime.mjs', 'deploy/stage_plan.mjs', 'deploy/staged_scene.mjs', 'deploy/streaming_window.mjs']
+    sources=sorted(set(sources)|{'deploy/'+p.name for p in (ROOT/'deploy').iterdir()if p.is_file()and p.suffix in ('.mjs','.css')})
     if manifest['pythonFiles'] != {name: digest((ROOT / name).read_bytes()) for name in python_closure()}:
         raise ValueError('Physics host modules changed since packing')
     destination.mkdir(parents=True, mode=0o700)
@@ -163,10 +175,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'backups/deployment/oc2-runtime-20261113.tar.gz')
     parser.add_argument('--context', type=Path, help='Prepare a private CLI build context from the existing archive')
+    parser.add_argument('--entry-assets', type=Path, help='Append a verified recovered entry overlay without changing the existing runtime')
     args = parser.parse_args()
     if args.context:
         result = build_context(args.output, args.context)
         args.context.with_suffix('.receipt.json').write_text(json.dumps(result, indent=2))
     else:
-        result = package(args.output)
+        result = package(args.output,args.entry_assets)
     print(json.dumps(result, indent=2))

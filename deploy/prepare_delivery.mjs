@@ -9,9 +9,9 @@ import {fileURLToPath} from 'node:url';
 import {stageEntry} from './stage_runtime.mjs';
 import {stagePlan} from './stage_plan.mjs';
 
-export const TYPES={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.png':'image/png','.woff':'font/woff','.glsl':'text/plain; charset=utf-8','.rgba':'application/octet-stream','.glb':'model/gltf-binary'};
+export const TYPES={'.svg':'image/svg+xml','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.png':'image/png','.woff':'font/woff','.glsl':'text/plain; charset=utf-8','.rgba':'application/octet-stream','.glb':'model/gltf-binary'};
 const sha=raw=>createHash('sha256').update(raw).digest('hex');
-const compressible=new Set(['.json','.js','.mjs','.css','.html','.glsl','.rgba']);
+const compressible=new Set(['.json','.js','.mjs','.css','.html','.glsl','.rgba','.svg']);
 
 export async function prepare(root,{stage=false}={}){
   const runtime=resolve(root,'analysis/raw/portable/running-preview');
@@ -30,10 +30,13 @@ export async function prepare(root,{stage=false}={}){
     files['/vendor/'+name]={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.js']};
   }
   if(stage){
-    const path=resolve(destination,'staged-entry.js'),raw=Buffer.from(stageEntry(await readFile(files['/explore-map.js'].path,'utf8')));
+    const entryUI=Boolean(files['/assets/source-entry/entry.json']);
+    const path=resolve(destination,'staged-entry.js'),raw=Buffer.from(stageEntry(await readFile(files['/explore-map.js'].path,'utf8'),{entryUI}));
     await writeFile(path,raw);files['/explore-map.js']={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.js']};
     for(const name of ['staged_scene.mjs','streaming_window.mjs','click_input.mjs','browser_timing.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES['.mjs']};}
+    if(entryUI)for(const name of ['entry_ui.mjs','entry_ui.css']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
+      files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES[extname(name)]};}
   }
   const urls=Object.keys(files).sort(),sidecars=new Map();let cursor=0;
   async function worker(){while(cursor<urls.length){

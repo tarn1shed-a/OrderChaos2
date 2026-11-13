@@ -7,6 +7,7 @@ import {createHash} from 'node:crypto';
 import {installDelivery} from './static_delivery.mjs';
 import {writeFileSync} from 'node:fs';
 import {observeServer} from './observe_server.mjs';
+import {installEntryRead} from './entry_read.mjs';
 
 const root=resolve(new URL('../',import.meta.url).pathname);
 const runtime=resolve(root,'analysis/raw/portable/running-preview');
@@ -33,6 +34,7 @@ let game;
 try {
   game=createGameServer({maxPlayersPerRoom:maxPlayers,saveFile:'/data/saves/characters.json',gameplay,motion:null,mapWindowMotion:motion,navigation:null});
   await installDelivery(game.server,root);
+  installEntryRead(game.server,'/data/saves/characters.json');
   await new Promise((ok,fail)=>{game.server.once('error',fail);game.server.listen(port,'0.0.0.0',()=>{game.server.off('error',fail);ok();});});
 } catch(error) { if(game)await game.close();else await motion.close();throw error; }
 console.log(JSON.stringify({listening:port,host:'0.0.0.0',saveFile:'/data/saves/characters.json',maxPlayers,sourceNative:true}));

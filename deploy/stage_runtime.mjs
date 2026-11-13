@@ -7,6 +7,10 @@ export function stageEntry(source,{entryUI=false}={}){
   replace("import { RESOURCE_WORLD } from './world.js';","import { RESOURCE_WORLD } from '/__delivery/trial-world.js';");
   // Retire the prototype camp panel; keep inert backing nodes for reviewed bindings.
   replace('function setCampPanel(open) {','function setCampPanel(open) {\n  open=false;');
+  replace("document.title='原新手地图 · 地形与模型核对';","document.title='混沌与秩序2';");
+  replace("$('load-note').textContent = '进入营地 · 空格攻击 · 1 火球术 · 2 冰霜爆破';","$('load-note').hidden=true;");
+  replace("$('load-note').textContent = '空格 / F 普攻 · 可在右上技能栏中自定义技能键位';","$('load-note').hidden=true;");
+  replace("$('load-note').textContent = `${error.message}。请先运行资源转换步骤，详见项目说明。`;","$('load-note').hidden=false;$('load-note').textContent='加载失败，请刷新重试。';");
   source="import {createSceneStages} from '/__delivery/staged_scene.mjs';\nlet sceneStages;\n"+source;
   source="import {clickTarget,clickMovement} from '/__delivery/click_input.mjs';\n"+source;
   source="import {createBrowserTiming} from '/__delivery/browser_timing.mjs';\n"+source;

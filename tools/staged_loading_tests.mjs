@@ -53,8 +53,9 @@ test('loader overlay refuses unknown or modified game source',()=>assert.throws(
 test('verified entry retains gameplay and key movement outside declared adapters',async t=>{
   let original;try{original=await readFile(new URL('../analysis/raw/showcase-20261110/running-preview/prototype/public/explore-map.js',import.meta.url),'utf8');}catch{t.skip('Private historical runtime not in Git');return;}
   const changed=stageEntry(original);assert(changed.includes('sceneStages.start()'));
-  const withoutTiming=changed.replace('movementTiming?.receive(msg);','');
-  for(const [start,end]of [['function updateCharacter(', 'async function texture('],['function updateRoster()', 'function inputBlocked()']])assert.equal(withoutTiming.slice(withoutTiming.indexOf(start),withoutTiming.indexOf(end)),original.slice(original.indexOf(start),original.indexOf(end)));
+  const withoutTiming=changed.replace('movementTiming?.receive(msg);','').replaceAll("$('load-note').hidden=true;",'');
+  const withoutRetiredHint=original.replace("$('load-note').textContent = '空格 / F 普攻 · 可在右上技能栏中自定义技能键位';",'');
+  for(const [start,end]of [['function updateCharacter(', 'async function texture('],['function updateRoster()', 'function inputBlocked()']])assert.equal(withoutTiming.slice(withoutTiming.indexOf(start),withoutTiming.indexOf(end)),withoutRetiredHint.slice(withoutRetiredHint.indexOf(start),withoutRetiredHint.indexOf(end)));
   const calculation=original.slice(original.indexOf('  if (!connected || document.hidden) return;',original.indexOf('setInterval(() => {')),original.indexOf('}, 50);\nsetInterval(() => { if(connected&&!document.hidden)'));
   const [before,after]=calculation.split('  if (target && me)');
   assert(changed.includes(before));assert(changed.includes(after.slice(after.indexOf('\n'))));

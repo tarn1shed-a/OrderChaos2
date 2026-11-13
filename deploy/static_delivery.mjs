@@ -19,7 +19,7 @@ export async function installDelivery(server,root){
   const metadata={...index,files:Object.fromEntries(Object.entries(index.files).map(([u,m])=>[u,{sha256:m.sha256,bytes:m.bytes,type:m.type}]))};
   const generated=new Map();
   generated.set('/__delivery/index.json',Buffer.from(JSON.stringify(metadata)));
-  for(const name of ['delivery_boot.mjs','delivery_worker.mjs'])generated.set('/__delivery/'+name,await readFile(resolve(root,'deploy',name)));
+  for(const name of ['delivery_boot.mjs','delivery_worker.mjs','retired_ui.css'])generated.set('/__delivery/'+name,await readFile(resolve(root,'deploy',name)));
   const generatedEncodings=new Map();
   for(const [url,body]of generated)if(body.length>1024){
     const [br,gz]=await Promise.all([promisify(brotliCompress)(body,{params:{[constants.BROTLI_PARAM_QUALITY]:4}}),promisify(gzip)(body)]);
@@ -39,7 +39,7 @@ export async function installDelivery(server,root){
         res.writeHead(307,{'Location':'/explore-map.html?'+query.toString(),'Cache-Control':'no-store'});res.end();return;
       }
       let meta=index.files[url],body=generated.get(url);
-      if(body)meta={bytes:body.length,sha256:createHash('sha256').update(body).digest('hex'),type:url.endsWith('.json')?'application/json':'text/javascript; charset=utf-8',encodings:generatedEncodings.get(url)};
+      if(body)meta={bytes:body.length,sha256:createHash('sha256').update(body).digest('hex'),type:url.endsWith('.json')?'application/json':url.endsWith('.css')?'text/css; charset=utf-8':'text/javascript; charset=utf-8',encodings:generatedEncodings.get(url)};
       if(!meta){for(const listener of original)listener.call(server,req,res);return;}
       if(meta.type.startsWith('text/html')){
         body=await readFile(meta.path);
@@ -51,7 +51,7 @@ export async function installDelivery(server,root){
       if(!chosen){res.writeHead(406,{'Vary':'Accept-Encoding'});res.end();return;}
       const variant=chosen==='identity'?meta:meta.encodings[chosen];
       const etag='"'+meta.sha256+'-'+chosen+'"';
-      const headers={'Content-Type':meta.type,'Cache-Control':'public, max-age=0, must-revalidate','ETag':etag,'Vary':'Accept-Encoding','X-Content-Type-Options':'nosniff','Content-Security-Policy':CSP,'X-OC2-Content-SHA256':meta.sha256};
+      const headers={'Content-Type':meta.type,'Cache-Control':meta.type.startsWith('text/html')?'no-store':'public, max-age=0, must-revalidate','ETag':etag,'Vary':'Accept-Encoding','X-Content-Type-Options':'nosniff','Content-Security-Policy':CSP,'X-OC2-Content-SHA256':meta.sha256};
       if(url==='/__delivery/delivery_worker.mjs')headers['Service-Worker-Allowed']='/';
       if(chosen!=='identity')headers['Content-Encoding']=chosen;
       const tags=(req.headers['if-none-match']||'').split(',').map(s=>s.trim().replace(/^W\//,''));

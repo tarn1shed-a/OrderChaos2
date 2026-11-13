@@ -1,0 +1,2 @@
+/* Compatibility bindings are never a game panel, even if legacy code toggles a child. */
+#retired-runtime-bindings { display: none !important; }

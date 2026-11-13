@@ -1,0 +1,8 @@
+.source-attribute{position:fixed;inset:0;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;padding:0;border:0;background:transparent;overflow:hidden;color:#fff}
+.source-attribute::backdrop{background:rgba(0,0,0,var(--attribute-modal-alpha,.35))}
+.source-attribute-stage{position:absolute;left:50%;top:50%;width:1136px;height:640px;transform:translate(-50%,-50%) scale(var(--attribute-scale,1));transform-origin:center}
+.attribute-page{position:absolute;display:block}
+.source-attribute text[data-font-source*="League"]{font-family:EntryGothic,EntryText}
+.source-attribute text[data-font-source*="Alegreya"]{font-family:EntryDisplay,EntryText}
+.source-attribute [role=button]{cursor:pointer;outline:none}
+.attribute-back{position:absolute;border:0;padding:0;background:none;color:inherit;font-family:EntryText;cursor:pointer;overflow:visible}

@@ -31,7 +31,7 @@ def digest(raw):return hashlib.sha256(raw).hexdigest()
 def matrix(m):return 'matrix('+ ' '.join(map(str,m))+')'
 def rgba(c):return 'rgb('+','.join(map(str,c[:3]))+')'
 
-def recover_login_ui(extract,output,management=False):
+def recover_login_ui(extract,output,management=False,attributes=False):
  out=Path(output);out.mkdir(parents=True,exist_ok=True);loaded={};assets={};warnings=[]
  def load(path):
   if path not in loaded:
@@ -40,10 +40,12 @@ def recover_login_ui(extract,output,management=False):
   return loaded[path]
  names=['library','QuickLogin','CharacterChooseCharacter','LoginMsgBox']
  if management:names+=['CharacterChooseRace','CharacterChooseClass','CharacterChoosePart','CharacterChooseVillage']
+ if attributes:names+=['AttributePage','WindowStack']
  docs={n:document(load('ui/Flash/'+n+'.swf'),'ui/Flash/'+n+'.swf',n!='library') for n in names};lib=docs['library']
  rows=_ini_blocks(load('ui/Config/interface_common_2.ini'))
  configs={n:next(v for v in rows if v.get('name')==n)for n in ['QuickLogin','ChooseCharacter','LoginMsgBox']}
  if management:configs.update({n:next(v for v in rows if v.get('name')==n)for n in ['CharacterSelection','CharacterChooseClass','CharacterChoosePart','CharacterChooseVillage']})
+ if attributes:configs.update({n:next(v for v in rows if v.get('name')==n)for n in ['AttributePage','BaseInfo']})
  if any(float(v['scale'])!=1 for v in configs.values()):raise ValueError('Original entry scale changed')
  main=load('ui/Flash/mainUI.swf');manager=parse_abc(extract_named_abc(main,'Common/Window/WindowManager'))
  reset=named_method(manager,'Common.Window::WindowManager','Common.Window:WindowManager::resetUI')
@@ -72,6 +74,10 @@ def recover_login_ui(extract,output,management=False):
    for trait in cls['traits']:
     if 'method' not in trait:continue
     m=named_method(abc,cls['name'],trait['name']);methods[cls['name']+'.'+trait['name']]={k:v for k,v in m.items()if k!='instructions'}
+ attribute=None
+ if attributes:
+  from attribute_page import recover_attribute_profile
+  attribute=recover_attribute_profile(load,docs,strings,english,chinese)
  fonts={}
  for doc in docs.values():
   fonts[doc['path']]={}
@@ -87,13 +93,18 @@ def recover_login_ui(extract,output,management=False):
   raw=load(path);im=Image.open(io.BytesIO(raw));im.verify();filename=digest(raw)[:20]+'.png';(out/filename).write_bytes(raw)
   assets[path]={'url':'/assets/source-entry/'+filename,'sourceSHA256':digest(raw),'bytes':len(raw)}
   return assets[path]['url']
- def draw(doc,cid,path,defs,depth=0):
+ def draw(doc,cid,path,defs,depth=0,frame=None):
   if depth>20:raise ValueError('Entry drawing recursion exceeds bound')
   record=doc['records'].get(cid)
   if not record:raise ValueError('Missing original entry character')
   g=element('g',{'data-source-path':path,'data-source-id':cid,'data-source-file':doc['path']})
   if record[0]==39:
-   placements=sprite_frames(doc,cid)[0];active=[]
+   if attribute and path in attribute['animatedFrames'] and frame is None:
+    for number in range(1,attribute['animatedFrames'][path]+1):
+     item=draw(doc,cid,path,defs,depth,number);item.set('data-attribute-frame',str(number));item.set('display','inline'if number==1 else'none');g.append(item)
+    return g
+   selected=frame or (attribute['iconFrames'].get(path,1)if attribute else 1)
+   placements=sprite_frames(doc,cid)[selected-1];active=[]
    for p in placements:
     dd,ii=resolve(doc,p,lib);sub=draw(dd,ii,path+'.'+p.get('name',str(ii)),defs,depth+1);sub.set('transform',matrix(p['matrixTwips']))
     c=p['colorTransform']
@@ -152,6 +163,7 @@ def recover_login_ui(extract,output,management=False):
  windows={}
  window_specs=[('QuickLogin',18,'QuickLogin'),('CharacterChooseCharacter',35,'ChooseCharacter'),('LoginMsgBox',24,'LoginMsgBox')]
  if management:window_specs += [('CharacterChooseRace',27,'CharacterSelection'),('CharacterChooseClass',34,'CharacterChooseClass'),('CharacterChoosePart',22,'CharacterChoosePart'),('CharacterChooseVillage',32,'CharacterChooseVillage')]
+ if attributes:window_specs += [('AttributePage',106,'AttributePage'),('WindowStack',23,'BaseInfo')]
  for name,cid,config in window_specs:
   doc=docs[name];svg=element('svg',{'viewBox':'0 0 1136 640','preserveAspectRatio':'xMidYMid meet'});defs=element('defs');svg.append(defs)
   wrapper=element('g',{'transform':'scale(0.05)','data-entry-window':name});wrapper.append(draw(doc,cid,'',defs));svg.append(wrapper)
@@ -176,15 +188,16 @@ def recover_login_ui(extract,output,management=False):
  result={'format':'oc2-source-entry-ui-v1','stage':[1136,640],'windows':windows,'strings':strings,'assets':assets,'logo':logo,'methods':methods,
   'limits':['Original account services unavailable. Web role credentials and connection are a separate, authorized adapter.','Original selection-world background, full character preview, creation/slot purchase/transfer/deletion and original account responses are not restored.','SVG text/filter rasterization and browser scaling are not proven pixel-identical to Flash. No substitute background artwork is generated.'],
   'warnings':warnings,'sources':{p:{'bytes':len(b),'sha256':digest(b)}for p,b in loaded.items()}}
+ if attribute:result['attributePage']=attribute
  (out/'entry.json').write_text(json.dumps(result,ensure_ascii=False,indent=2));return result
 
 def main():
- cli=argparse.ArgumentParser(description=__doc__);cli.add_argument('--output',type=Path,required=True);cli.add_argument('--management',action='store_true');args=cli.parse_args();root=Path(__file__).resolve().parents[1]
+ cli=argparse.ArgumentParser(description=__doc__);cli.add_argument('--output',type=Path,required=True);cli.add_argument('--management',action='store_true');cli.add_argument('--attributes',action='store_true');args=cli.parse_args();root=Path(__file__).resolve().parents[1]
  if not any(args.output.resolve().is_relative_to(root/p)for p in ['analysis/raw','game-data','backups']):cli.error('Original entry assets must stay in ignored folders')
  archives={}
  def read(path):
   pack='conf.bin'if path.startswith('ui/Config/')else'tables.bin'if path.startswith('tables/')else'ui.bin'
   if pack not in archives:archives[pack]=ResourceArchive(DEFAULT_SOURCE/pack)
   return archives[pack].read(path)
- r=recover_login_ui(read,args.output,management=args.management);print(json.dumps({'windows':list(r['windows']),'assets':len(r['assets']),'sources':len(r['sources']),'output':str(args.output)},ensure_ascii=False))
+ r=recover_login_ui(read,args.output,management=args.management,attributes=args.attributes);print(json.dumps({'windows':list(r['windows']),'assets':len(r['assets']),'sources':len(r['sources']),'output':str(args.output)},ensure_ascii=False))
 if __name__=='__main__':main()

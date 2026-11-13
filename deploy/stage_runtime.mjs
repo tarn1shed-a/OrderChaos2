@@ -43,6 +43,12 @@ export function stageEntry(source,{entryUI=false}={}){
   replace('if (target && me) { const dx=target.x-me.x, dy=target.y-me.y, d=Math.hypot(dx,dy); if(d<2)target=null;else{x=dx/d;y=dy/d;} }',
     'if (target && me) { const movement=clickMovement(target,me);if(movement){x=movement.x;y=movement.y;}else target=null; }');
   if(entryUI){
+    source="import {createAttributeUI} from '/__delivery/attribute_ui.mjs';\nlet attributeUI;\n"+source;
+    replace('function inputBlocked(){return ', 'function inputBlocked(){return attributeUI?.isOpen||');
+    replace('  hud?.character(data);','  hud?.character(data);attributeUI?.update(data);');
+    replace('  inventoryUI?.update(null);','  inventoryUI?.update(null);attributeUI?.update(null);');
+    replace("if(e.code==='KeyB'||e.code==='KeyC'){", "if(e.code==='KeyC'){e.preventDefault();if(!e.repeat){if(attributeUI?.isOpen)attributeUI.close();else attributeUI?.open();}return;}\n  if(attributeUI?.isOpen)return;\n  if(e.code==='KeyB'){");
+    replace("const uiProfile=await loadOriginalUI(await json(assets.ui.url));hud=createRecoveredHUD(uiProfile.hud);", "const uiProfile=await loadOriginalUI(await json(assets.ui.url));hud=createRecoveredHUD(uiProfile.hud);\n    attributeUI=createAttributeUI({stop,focusGame:()=>canvas.focus({preventScroll:true}),beforeOpen:()=>{questBook?.close();skillBook?.close();inventoryUI?.close();hotbar?.close();setCampPanel(false);pointer=null;}});\n    const attributeStyle=document.createElement('link');attributeStyle.rel='stylesheet';attributeStyle.href='/__delivery/attribute_ui.css';document.head.append(attributeStyle);");
     source="import {createSourceEntry} from '/__delivery/entry_ui.mjs';\nlet sourceEntry;\n"+source;
     replace('function openSession() {','function openSession(){if(sourceEntry)sourceEntry.open();else legacySession();}\nfunction legacySession() {');
     replace("ready = true; $('join').disabled", "ready = true;sourceEntry?.ready(); $('join').disabled");

@@ -5,6 +5,7 @@
 !deploy/*.py
 !deploy/*.mjs
 !deploy/retired_ui.css
+!deploy/attribute_ui.css
 !deploy/package.json
 !deploy/package-lock.json
 # Present only in the generated, ignored CLI context; never add it to Git.

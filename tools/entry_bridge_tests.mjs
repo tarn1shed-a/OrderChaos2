@@ -28,6 +28,9 @@ test('HTTP bridge is same-origin, uncached, bounded and leaves the save byte-ide
  try{
   const options={method:'POST',headers:{'Content-Type':'application/json',origin:url},body:JSON.stringify({identities:[{characterId:id,resumeToken:token}]})};
   const r=await fetch(url+'/__entry/characters',options);assert.equal(r.status,200);assert.equal(r.headers.get('cache-control'),'no-store');assert.deepEqual(await r.json(),{characters:[{id,name:record.name,level:3,profession:2}]});
+  // A new device must see an empty result, never someone else's existing role.
+  const fresh=await fetch(url+'/__entry/characters',{...options,body:JSON.stringify({identities:[]})});
+  assert.deepEqual(await fresh.json(),{characters:[]});assert.deepEqual(await readFile(file),before);
   assert.equal((await fetch(url+'/__entry/characters',{...options,headers:{...options.headers,origin:'https://other.invalid'}})).status,403);
   assert.equal((await fetch(url+'/__entry/characters',{...options,body:'x'.repeat(17000)})).status,413);
   assert.equal((await fetch(url+'/__entry/characters')).status,405);

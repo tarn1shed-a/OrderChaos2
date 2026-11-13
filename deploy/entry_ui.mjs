@@ -16,6 +16,17 @@ export function createSourceEntry({connect,legacy}){
   const blocked=new Map();
   function hideRoot(){root.hidden=true;for(const[el,value]of blocked)el.inert=value;blocked.clear();}
   function fallback(){hideRoot();legacy();}
+  function setupWebCharacter(){
+    // Original creation/account flow is not restored. Reuse the existing web
+    // create/recovery form rather than presenting an unusable empty selection.
+    const dialog=document.getElementById('session-dialog');
+    const title=dialog?.querySelector('#session-title'),intro=dialog?.querySelector('#session-title + p'),eyebrow=dialog?.querySelector('.eyebrow');
+    if(title)title.textContent='创建或恢复试玩角色';
+    if(eyebrow)eyebrow.textContent='网页试玩适配';
+    if(intro)intro.textContent='此设备没有可用的试玩角色。填写名字创建自己的角色，或用恢复码继续已有角色。原版创角流程尚未恢复。';
+    root.dataset.entryRoleCount='0';
+    fallback();
+  }
   const q=(path,scope=screen)=>scope?.querySelector(`[data-source-path="${path}"]`);
   const hide=(path,scope=screen)=>{const el=q(path,scope);if(el){el.setAttribute('display','none');el.setAttribute('aria-hidden','true');}};
   const label=(path,value,scope=screen)=>{const el=q(path,scope)?.querySelector('[data-entry-text]');if(el)el.textContent=String(value).replace(/<[^>]+>/g,'');};
@@ -83,6 +94,7 @@ export function createSourceEntry({connect,legacy}){
       identities=savedEntryIdentities(localStorage);
       const response=await fetch('/__entry/characters',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identities}),cache:'no-store'});
       if(!response.ok)throw Error('读取已有试玩角色失败');roles=(await response.json()).characters;
+      if(!roles.length){setupWebCharacter();return;}
       await show('CharacterChooseCharacter');hide('._DeleteCharMC');hide('._RuneMC');hide('._FuncBtnMC');
       // Source InitPos anchors this panel to stageWidth minus its measured width.
       const panel=q('._CharacterMC');panel.setAttribute('transform',`translate(${(1136-panel.getBBox().width/20)*20} 0)`);

@@ -50,12 +50,14 @@ test('failed background resources never unlock an incomplete window or draw plac
   assert.equal(f.roots.length,2);assert.equal(f.created.length,2);assert.notEqual(f.canvas.dataset.loadingStage,'complete');
 });
 test('loader overlay refuses unknown or modified game source',()=>assert.throws(()=>stageEntry('unverified source'),/identity differs/));
-test('verified private entry overlay changes loading sections only',async t=>{
+test('verified entry retains gameplay and key movement outside declared adapters',async t=>{
   let original;try{original=await readFile(new URL('../analysis/raw/showcase-20261110/running-preview/prototype/public/explore-map.js',import.meta.url),'utf8');}catch{t.skip('Private historical runtime not in Git');return;}
   const changed=stageEntry(original);assert(changed.includes('sceneStages.start()'));
   for(const [start,end]of [['function updateCharacter(', 'async function texture('],['function updateRoster()', 'function inputBlocked()']])assert.equal(changed.slice(changed.indexOf(start),changed.indexOf(end)),original.slice(original.indexOf(start),original.indexOf(end)));
   const calculation=original.slice(original.indexOf('  if (!connected || document.hidden) return;',original.indexOf('setInterval(() => {')),original.indexOf('}, 50);\nsetInterval(() => { if(connected&&!document.hidden)'));
-  assert(changed.includes(calculation));assert(changed.includes('setInterval(publishMovement,50)'));assert(changed.includes('createSourceFramePresentation({delayMs:50})'));
+  const [before,after]=calculation.split('  if (target && me)');
+  assert(changed.includes(before));assert(changed.includes(after.slice(after.indexOf('\n'))));
+  assert(changed.includes('clickMovement(target,me)'));assert(changed.includes('setInterval(publishMovement,50)'));assert(changed.includes('createSourceFramePresentation({delayMs:50})'));
 });
 test('prepare adjacent request windows without expanding the visible window',()=>{
   const offsets=Array.from({length:25},(_,i)=>[i%5-2,Math.floor(i/5)-2]),tiles=Array.from({length:81},(_,i)=>[i%9-4,Math.floor(i/9)-4]);

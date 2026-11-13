@@ -1,10 +1,11 @@
-// Guarded loader-only overlay. The verified private source is never overwritten.
+// Guarded loading/transport/input overlay. The private source is never overwritten.
 import {createHash} from 'node:crypto';
 const BASE='ba9645330507b105d034902953b39eba47113aa46b0c38b592c5c6c9ae2a4377';
 export function stageEntry(source){
   if(createHash('sha256').update(source).digest('hex')!==BASE)throw Error('Staged loader source identity differs');
   const replace=(from,to)=>{if(source.split(from).length!==2)throw Error('Staged loader anchor differs');source=source.replace(from,to);};
   source="import {createSceneStages} from '/__delivery/staged_scene.mjs';\nlet sceneStages;\n"+source;
+  source="import {clickTarget,clickMovement} from '/__delivery/click_input.mjs';\n"+source;
   replace('terrainMeshes=await createSourceTerrain(THREE,renderTerrain,terrainMaterials,origin,texture,{profile:terrainLighting,context:bakedLighting});',
     'sceneStages=createSceneStages({canvas,scene,archiveObjects,terrain:renderTerrain,offsets:assets.mapWindow.originalRequestOffsets,radius:assets.mapWindow.radius,initial:localPosition(world.spawn.x,world.spawn.y).add(origin)});\n    terrainMeshes=await sceneStages.terrain(createSourceTerrain,THREE,renderTerrain,terrainMaterials,origin,texture,{profile:terrainLighting,context:bakedLighting});');
   replace('const staticModels = new Map();\n    for (const item of assets.scenery || []) {\n      if (!staticModels.has(item.model)) staticModels.set(item.model, await loadModel(item));\n      for (const inst of item.instances) {',
@@ -24,5 +25,9 @@ export function stageEntry(source){
   replace('keys.add(e.code);target=null;', 'keys.add(e.code);target=null;if(!e.repeat)publishMovement();');
   replace("window.addEventListener('keyup', e => keys.delete(e.code));", "window.addEventListener('keyup', e => {if(keys.delete(e.code))publishMovement();});");
   replace("joystickInput=value;if(value.active){target=null;keys.clear();}else if(connected)send({type:'input',x:0,y:0});", "const wasActive=joystickInput.active;joystickInput=value;if(value.active){target=null;keys.clear();if(!wasActive)publishMovement();}else if(connected)send({type:'input',x:0,y:0});");
+  replace('target = { x: (hit.point.x+origin.x-min[0])/(max[0]-min[0])*world.width, y: (hit.point.z+origin.z-min[2])/(max[2]-min[2])*world.height };',
+    'target = clickTarget({ x: (hit.point.x+origin.x-min[0])/(max[0]-min[0])*world.width, y: (hit.point.z+origin.z-min[2])/(max[2]-min[2])*world.height },snapshot.find(p=>p.id===selfId));');
+  replace('if (target && me) { const dx=target.x-me.x, dy=target.y-me.y, d=Math.hypot(dx,dy); if(d<2)target=null;else{x=dx/d;y=dy/d;} }',
+    'if (target && me) { const movement=clickMovement(target,me);if(movement){x=movement.x;y=movement.y;}else target=null; }');
   return source;
 }

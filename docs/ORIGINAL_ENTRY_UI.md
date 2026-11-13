@@ -52,3 +52,14 @@
 随后用户指出快速登录后的选角页仍偏在右侧。本次把同一网页居中约束应用到已有角色图标/实际文字和开始按钮，整体等比限制为最大 280×520 CSS 像素。原五行模板中，尚未恢复的创建槽位本来已隐藏，但原开始按钮仍保留在第五行下方，造成大片空隙；现在仅扣除隐藏模板的原行距，并将按钮与现有角色内容对齐。没有添加背景、画框、美术或角色功能，也不把这套网页居中/收紧称为原版布局。原选角三维背景和人物展示仍未接上，黑底不是已完成的原画面。实际桌面/窄屏切换甲乙、选中乙后按开始进入对应隔离角色通过，浏览列表期间测试存档全字节不变；正式角色和存档未操作。
 
 新设备入口修复验收：10 项入口/分阶段加载检查通过；独立 Linux 测试卷没有导入任何现有存档。两个不同来源的浏览器地址均从无角色缓存开始，经快速登录进入上述兼容表单，分别创建甲、乙并进入同一地图，各自小地图显示队友 1 人；测试存档为两个不同角色 ID。甲刷新后，原选角列表仅显示甲，按开始恢复成功，乙不被列出。首次浏览入口在主动提交前没有创建存档；两端 console 无 warning/error。此修改仅修入口，未改角色规则、地图、技能或原资源，未修改正式角色文件；自动续跑保持暂停。
+
+## 新增与删除控件复核
+
+用户指出两项不能缺少。原 `CharacterChooseCharacter.swf` 确有这些控件，网页此前将 `_NewCharacter`、整个 `_RuneMC` 与 `_DeleteCharMC` 隐藏，因此不能将功能缺失归因于原版没有入口。
+
+- 新增：`character_list_mc.Update` 读取原回包 `slot_count/data_count/lock_count/slot_price`，列表长度取开放与锁定槽位之和；五个可见模板不等于角色上限。`onCharacterListSet` 对空的开放槽显示 `_NewCharacter`、原 `icon_characteradd.png` 与 `GENERAL_MC_SELECT_CREATE`，锁定槽另走解锁分支。`onCreateClick` 把槽位序号交给 `Character_ChooseCharSwitch`。未取得原账号的槽位/购买回包，不能把网页自己的角色数量冒充这些字段。
+- 删除：`Window_ChooseCharacter.UpdateInfo` 在 `data_count > 0` 时显示 `_DeleteBtn`、`_DeleteText`，其图形在 `_RuneMC` 内；`onDeleteClick` 打开 `_DeleteCharMC`，传入当前选角序号。该方法 SHA256 为 `4f26b04f30ebfa6a7017ea7a306a0fe273c8d764adf8749ec6f74586695912a7`。
+- 确认：`delete_char_mc.Init`（SHA256 `8a019a06d127ee58f95503cabdf1b78a0e6a77b33c5b1344decc6bfae96d9751`）显示当前角色名/等级，并生成 `floor(random()*8000+1000)` 的四位数。`OnClickOK`（SHA256 `58cb26163feb90f514dec0899b8d4ebe7ab6749099d096cb97eb622e654c6766`）仅在输入文字与该数字一致时调用 `Character_ChooseCharDelete(index)`，空输入和不匹配分别使用原错误文案，取消只关闭窗口。以上为原客户端确认行为，不能当作服务器身份验证。
+- 原 ARM64 注册代码 `0x64ef38–0x64ef48` 将字符串 `Character_ChooseCharDelete`（`0x1e267c6`）绑定到 `0x70051c`。本次 GhidraMCP 对该地址返回 `FUNCTION_NOT_FOUND`，未声称已追完其服务端提交、失败回包与账号限制；原始指令及后续网络分支仍待核对。
+
+私有方法记录在 `analysis/raw/new-device-entry-20261113/`。本次只确认原流程与之前隐藏的原因；网页增加仍复用已标注的试玩表单，删除尚未接到当前存档，不宣称两项原版流程已恢复。未执行任何正式角色删除。

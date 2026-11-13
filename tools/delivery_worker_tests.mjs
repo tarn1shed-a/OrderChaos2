@@ -7,7 +7,7 @@ const script=await readFile(new URL('../deploy/delivery_worker.mjs',import.meta.
 const sha=value=>createHash('sha256').update(value).digest('hex');
 function platform(){
   const stores=new Map(),state={text:'first source bytes',downloads:0,indexRequests:0,denyCache:false,corrupt:false};
-  state.index=()=>({format:'oc2-delivery-v1',revision:sha(state.text),files:{'/assets/model.json':{bytes:Buffer.byteLength(state.text),sha256:sha(state.text),type:'application/json'}},plans:{'/explore-map.js':['/assets/model.json']}});
+  state.index=()=>({format:'oc2-delivery-v1',revision:sha(state.text),files:{'/assets/model.json':{bytes:Buffer.byteLength(state.text),sha256:sha(state.text),type:'application/json'}},plans:{'/explore-map.js':state.plan||['/assets/model.json']}});
   const caches={async open(name){if(state.denyCache)throw Error('Cache unavailable');if(!stores.has(name))stores.set(name,new Map());const store=stores.get(name);return{async match(key){return store.get(String(key))?.clone();},async put(key,response){store.set(String(key),response.clone());}};}};
   const fetch=async url=>{
     const path=new URL(typeof url==='string'?url:url.url,'https://local.test').pathname;
@@ -25,8 +25,14 @@ function worker(platform){
   async function get(id,path='/assets/model.json'){
     let response;handlers.fetch({clientId:id,request:new Request('https://local.test'+path),respondWith:p=>response=p});return response?await response:null;
   }
-  return{bind,get};
+  async function warm(id,phase){let done;const messages=[];handlers.message({source:{id},data:{type:'WARM',entry:'/explore-map.js',phase},ports:[{postMessage:v=>messages.push(v)}],waitUntil:p=>done=p});await done;return messages.at(-1);}
+  return{bind,get,warm};
 }
+test('background-only files are not prefetched until the entry-ready phase',async()=>{
+  const p=platform();p.state.plan={critical:[],background:['/assets/model.json']};const w=worker(p);await w.bind('phased');
+  assert.equal((await w.warm('phased')).completed,0);assert.equal(p.state.downloads,0);
+  const result=await w.warm('phased','background');assert.equal(result.completed,1);assert.equal(result.failed,0);assert.equal(p.state.downloads,1);
+});
 test('parallel same-byte requests download once and return original bytes',async()=>{
   const p=platform(),w=worker(p);await w.bind('client');const result=await Promise.all(Array.from({length:8},()=>w.get('client')));
   for(const response of result)assert.equal(await response.text(),p.state.text);

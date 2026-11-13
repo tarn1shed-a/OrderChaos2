@@ -2,9 +2,12 @@
 import http from 'node:http';
 import net from 'node:net';
 import {writeFileSync} from 'node:fs';
-const [port,targetPort,delay,path]=process.argv.slice(2);
+const [port,targetPort,delay,path,holdBackground='0']=process.argv.slice(2);
 for(const value of [port,targetPort])if(!/^\d+$/.test(value||'')||Number(value)<1024||Number(value)>65535)throw Error('Explicit local ports required');
 if(!/^\d+$/.test(delay||'')||Number(delay)>2000||!path?.includes('/analysis/raw/'))throw Error('Use a bounded delay and ignored report path');
+if(!/^\d+$/.test(holdBackground)||Number(holdBackground)>60000)throw Error('Background hold must be bounded');
+let background=new Set(),unlockAt=0;
+if(Number(holdBackground)){const index=await(await fetch(`http://127.0.0.1:${targetPort}/__delivery/index.json`)).json();background=new Set(index.plans['/explore-map.js'].background);}
 const stats={startedAt:Date.now(),requests:0,bytes:0,statuses:{},lastPaths:[],runs:[]};
 const observer=`(()=>{const check=()=>{const button=document.getElementById('join');if(!button||button.disabled)return;observer.disconnect();fetch('/__benchmark/ready',{method:'POST',body:JSON.stringify({navigationStart:performance.timeOrigin,readyMs:performance.now(),delivery:Object.fromEntries(Object.entries(document.documentElement.dataset).filter(([k])=>k.startsWith('delivery')))})});};const observer=new MutationObserver(check);observer.observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:['disabled']});check();})();`;
 const server=http.createServer((req,res)=>{
@@ -13,7 +16,7 @@ const server=http.createServer((req,res)=>{
   if(pathname==='/__benchmark/ready'&&req.method==='POST'){
     let body='';req.on('data',b=>{body+=b;if(body.length>4096)req.destroy();});req.on('end',()=>{try{const value=JSON.parse(body),run=stats.runs.at(-1);Object.assign(run,{...value,requests:stats.requests-run.requestStart,bytes:stats.bytes-run.byteStart,reportedAt:Date.now()});save();}catch{}res.writeHead(204);res.end();});return;
   }
-  if(pathname.endsWith('.html'))stats.runs.push({beganAt:Date.now(),requestStart:stats.requests,byteStart:stats.bytes});
+  if(pathname.endsWith('.html')){unlockAt=Date.now()+Number(holdBackground);stats.runs.push({beganAt:Date.now(),requestStart:stats.requests,byteStart:stats.bytes});}
   stats.requests++;stats.lastPaths.push(new URL(req.url,'http://localhost').pathname);stats.lastPaths=stats.lastPaths.slice(-10);
   setTimeout(()=>{
     const upstream=http.request({hostname:'127.0.0.1',port:Number(targetPort),method:req.method,path:req.url,headers:req.headers},incoming=>{
@@ -24,7 +27,7 @@ const server=http.createServer((req,res)=>{
       res.writeHead(incoming.statusCode,incoming.headers);
       incoming.on('data',bytes=>{stats.bytes+=bytes.length;});incoming.pipe(res);
     });upstream.on('error',()=>{res.writeHead(502);res.end();});req.pipe(upstream);
-  },Number(delay));
+  },Number(delay)+(background.has(pathname)?Math.max(0,unlockAt-Date.now()):0));
 });
 server.on('upgrade',(req,socket,head)=>{
   const upstream=net.connect(Number(targetPort),'127.0.0.1',()=>{

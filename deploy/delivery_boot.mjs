@@ -2,10 +2,11 @@
 const params=new URL(import.meta.url).searchParams,entry=new URL(params.get('entry')||'',location.origin);
 if(entry.origin!==location.origin||!['/explore-map.js','/explore.js'].includes(entry.pathname))throw Error('Invalid game entry');
 const diagnostics=document.documentElement.dataset;
+let backgroundWarm=()=>{};
 diagnostics.deliveryStarted=String(Date.now());diagnostics.deliveryStatus='starting';
 const readyObserver=new MutationObserver(()=>{
   const button=document.getElementById('join');if(!button||button.disabled)return;
-  diagnostics.deliveryReadyMs=String(Math.round(performance.now()));readyObserver.disconnect();
+  diagnostics.deliveryReadyMs=String(Math.round(performance.now()));readyObserver.disconnect();backgroundWarm();
 });
 readyObserver.observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:['disabled']});
 try{
@@ -25,6 +26,7 @@ try{
     if(value.done){diagnostics.deliveryPrefetchMs=String(value.milliseconds);diagnostics.deliveryPrefetchFailed=String(value.failed);warm.port1.close();}
   };
   worker.postMessage({type:'WARM',entry:entry.pathname},[warm.port2]);
+  backgroundWarm=()=>{const channel=new MessageChannel();channel.port1.onmessage=event=>{if(event.data.done){diagnostics.deliveryBackgroundFiles=String(event.data.completed);diagnostics.deliveryBackgroundFailed=String(event.data.failed);channel.port1.close();}};worker.postMessage({type:'WARM',entry:entry.pathname,phase:'background'},[channel.port2]);};
 }catch(error){diagnostics.deliveryStatus='fallback';diagnostics.deliveryFallback=error.message;}
 // Warm downloads continue in parallel. The original renderer determines readiness.
 await import(entry.href);

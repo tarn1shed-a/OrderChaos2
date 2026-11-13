@@ -55,10 +55,11 @@ self.addEventListener('message',event=>{
     try{
       if(event.data?.type==='BIND'){const index=await bind(id);port.postMessage({ok:true,revision:index.revision});return;}
       if(event.data?.type!=='WARM')return;
-      const index=await forClient(id),urls=index.plans[event.data.entry]||[];let cursor=0,completed=0,failed=0;
+      const index=await forClient(id),plan=index.plans[event.data.entry]||[],background=event.data.phase==='background';
+      const urls=Array.isArray(plan)?(background?[]:plan):(background?plan.background:plan.critical);let cursor=0,completed=0,failed=0;
       const started=Date.now();
       async function worker(){while(cursor<urls.length){const url=urls[cursor++];try{await resource(url,index.files[url]);}catch{failed++;}completed++;if(completed%32===0)port.postMessage({completed,total:urls.length,failed});}}
-      await Promise.all(Array.from({length:12},worker));port.postMessage({done:true,completed,total:urls.length,failed,milliseconds:Date.now()-started});
+      await Promise.all(Array.from({length:background?4:12},worker));port.postMessage({done:true,completed,total:urls.length,failed,milliseconds:Date.now()-started});
     }catch(error){port.postMessage({ok:false,error:error.message});}
   })());
 });

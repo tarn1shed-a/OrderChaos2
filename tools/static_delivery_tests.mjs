@@ -70,3 +70,12 @@ test('same-byte aliases safely share prepared sidecars',()=>{assert.deepEqual(in
 test('service worker scope is granted only to the delivery worker',async()=>{
   assert.equal((await request('/__delivery/delivery_worker.mjs')).headers['service-worker-allowed'],'/');assert.equal((await request('/explore-map.js')).headers['service-worker-allowed'],undefined);
 });
+test('public home and old index enter the current map and retain invitation settings',async()=>{
+  for(const path of ['/','/index.html']){
+    const r=await request(path);assert.equal(r.status,307);
+    assert.equal(r.headers.location,'/explore-map.html?room=RAILWAY-01&sourceProfile=APK_Default');
+    assert.equal(r.headers['cache-control'],'no-store');assert.equal(r.body.length,0);
+  }
+  const r=await request('/?room=FRIENDS-02&sourceProfile=GPU_4',{},'HEAD');
+  assert.equal(r.headers.location,'/explore-map.html?room=FRIENDS-02&sourceProfile=GPU_4');
+});

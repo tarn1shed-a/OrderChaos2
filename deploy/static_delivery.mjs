@@ -29,6 +29,12 @@ export async function installDelivery(server,root){
       const parsed=new URL(req.url,'http://localhost');let url;
       try{url=decodeURIComponent(parsed.pathname);}catch{res.writeHead(400);res.end();return;}
       if(!['GET','HEAD'].includes(req.method)||url==='/health'||url==='/ws'){for(const listener of original)listener.call(server,req,res);return;}
+      if(url==='/'||url==='/index.html'){
+        const query=new URLSearchParams(parsed.search);
+        if(!query.has('room'))query.set('room','RAILWAY-01');
+        if(!query.has('sourceProfile'))query.set('sourceProfile','APK_Default');
+        res.writeHead(307,{'Location':'/explore-map.html?'+query.toString(),'Cache-Control':'no-store'});res.end();return;
+      }
       let meta=index.files[url],body=generated.get(url);
       if(body)meta={bytes:body.length,sha256:createHash('sha256').update(body).digest('hex'),type:url.endsWith('.json')?'application/json':'text/javascript; charset=utf-8',encodings:generatedEncodings.get(url)};
       if(!meta){for(const listener of original)listener.call(server,req,res);return;}

@@ -1,9 +1,12 @@
-// Deployment transport/paths only. Reviewed game modules remain byte-identical.
+// Deployment transport/paths and opt-in timing only. Reviewed files are immutable;
+// a separately generated, SHA-guarded server copy adds observational timing hooks.
 import {readFileSync, existsSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {installDelivery} from './static_delivery.mjs';
+import {writeFileSync} from 'node:fs';
+import {observeServer} from './observe_server.mjs';
 
 const root=resolve(new URL('../',import.meta.url).pathname);
 const runtime=resolve(root,'analysis/raw/portable/running-preview');
@@ -19,7 +22,9 @@ if(!Number.isInteger(maxPlayers)||maxPlayers<1||maxPlayers>32)throw Error('Inval
 const base=pathToFileURL(runtime+'/prototype/');
 const {loadNativeWindowCollision}=await import(new URL('game/native-window-collision.mjs',base));
 const {loadGameplay}=await import(new URL('game/basic-attack.mjs',base));
-const {createGameServer}=await import(new URL('server.mjs',base));
+const observed=new URL('server-observed.mjs',base);
+writeFileSync(observed,observeServer(readFileSync(new URL('server.mjs',base),'utf8'),new URL('./movement_trace.mjs',import.meta.url).href));
+const {createGameServer}=await import(observed);
 const motion=loadNativeWindowCollision(new URL('native-physics.json',base));
 if(!motion?.sourceNative)throw Error('Original collision inputs are unavailable; no fallback');
 const gameplay=loadGameplay();

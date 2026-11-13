@@ -6,6 +6,12 @@ export function stageEntry(source){
   const replace=(from,to)=>{if(source.split(from).length!==2)throw Error('Staged loader anchor differs');source=source.replace(from,to);};
   source="import {createSceneStages} from '/__delivery/staged_scene.mjs';\nlet sceneStages;\n"+source;
   source="import {clickTarget,clickMovement} from '/__delivery/click_input.mjs';\n"+source;
+  source="import {createBrowserTiming} from '/__delivery/browser_timing.mjs';\n"+source;
+  replace('const send = data => {', 'let movementTiming;\nconst send = data => {');
+  replace('socket.send(JSON.stringify(data));','socket.send(JSON.stringify(movementTiming?.input(data)??data));');
+  replace('if (generation !== gen) return; const msg = JSON.parse(event.data);','if (generation !== gen) return; const msg = JSON.parse(event.data);movementTiming?.receive(msg);');
+  replace('openSession();init();','movementTiming=createBrowserTiming(canvas);openSession();init();');
+  replace('hdrRenderer.render(scene,camera,zone);canvas.dataset.sourcePostprocess=', 'hdrRenderer.render(scene,camera,zone);movementTiming?.rendered(presented.get(selfId));canvas.dataset.sourcePostprocess=');
   replace('terrainMeshes=await createSourceTerrain(THREE,renderTerrain,terrainMaterials,origin,texture,{profile:terrainLighting,context:bakedLighting});',
     'sceneStages=createSceneStages({canvas,scene,archiveObjects,terrain:renderTerrain,offsets:assets.mapWindow.originalRequestOffsets,radius:assets.mapWindow.radius,initial:localPosition(world.spawn.x,world.spawn.y).add(origin)});\n    terrainMeshes=await sceneStages.terrain(createSourceTerrain,THREE,renderTerrain,terrainMaterials,origin,texture,{profile:terrainLighting,context:bakedLighting});');
   replace('const staticModels = new Map();\n    for (const item of assets.scenery || []) {\n      if (!staticModels.has(item.model)) staticModels.set(item.model, await loadModel(item));\n      for (const inst of item.instances) {',

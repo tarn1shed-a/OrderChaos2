@@ -3,6 +3,7 @@ import {readFileSync, existsSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
+import {installDelivery} from './static_delivery.mjs';
 
 const root=resolve(new URL('../',import.meta.url).pathname);
 const runtime=resolve(root,'analysis/raw/portable/running-preview');
@@ -26,6 +27,7 @@ if(!gameplay)throw Error('Reviewed gameplay data unavailable');
 let game;
 try {
   game=createGameServer({maxPlayersPerRoom:maxPlayers,saveFile:'/data/saves/characters.json',gameplay,motion:null,mapWindowMotion:motion,navigation:null});
+  await installDelivery(game.server,root);
   await new Promise((ok,fail)=>{game.server.once('error',fail);game.server.listen(port,'0.0.0.0',()=>{game.server.off('error',fail);ok();});});
 } catch(error) { if(game)await game.close();else await motion.close();throw error; }
 console.log(JSON.stringify({listening:port,host:'0.0.0.0',saveFile:'/data/saves/characters.json',maxPlayers,sourceNative:true}));

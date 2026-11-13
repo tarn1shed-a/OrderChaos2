@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -148,6 +149,7 @@ def main():
         raise ValueError('This deployment volume already has an active server') from None
     archive, digest = archive_from_env()
     manifest = extract_verified(archive, digest, DEST)
+    subprocess.run(['node', str(ROOT / 'deploy/prepare_delivery.mjs')], check=True)
     Path('/data/saves').mkdir(exist_ok=True, mode=0o700)
     os.ftruncate(lock, 0)
     os.write(lock, json.dumps({'pid': os.getpid(), 'bundleSHA256': digest}).encode())

@@ -8,7 +8,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 from PIL import Image
 from resource_packs import ResourceArchive, DEFAULT_SOURCE
-from hud_assets import document, sprite_frames, resolve, _ini_blocks
+from hud_assets import document, sprite_frames, resolve, _ini_blocks, compose
 from optimized_abc import extract_abc, extract_named_abc, parse_abc, named_method
 from swf_ui_graphics import shape, text_style, display_tree, bounds
 from ui_assets import parse_font3
@@ -92,7 +92,18 @@ def recover_login_ui(extract,output):
     if 'filters'in p:warnings.append({'path':path,'unrestored':'source Flash text/bitmap filter rasterization','filters':p['filters']})
     if p.get('blendMode',1)not in (0,1):raise ValueError('Unsupported source entry blend mode')
     if 'clipDepth'in p:
-     key=unique();clip=element('clipPath',{'id':key});clip.append(sub);defs.append(clip);active.append((p['clipDepth'],key));continue
+     key=unique();clip=element('clipPath',{'id':key,'clipPathUnits':'userSpaceOnUse'})
+     # SVG clipPath accepts direct geometry; nested display-list groups are
+     # flattened with their exact affine matrices, never replaced by a new box.
+     def clipping(node,parent=(1,0,0,1,0,0)):
+      local=node.get('transform');m=compose(parent,list(map(float,local[7:-1].split())))if local else parent
+      if node.tag.rsplit('}',1)[-1]=='path':
+       leaf=ET.fromstring(ET.tostring(node));leaf.set('transform',matrix(m));leaf.set('fill-opacity','1');leaf.set('clip-rule',leaf.get('fill-rule','nonzero'));clip.append(leaf)
+      else:
+       for child in node:clipping(child,m)
+     clipping(sub)
+     if not len(clip):raise ValueError('Entry clipping geometry unavailable')
+     defs.append(clip);active.append((p['clipDepth'],key));continue
     active=[v for v in active if p['depth']<=v[0]]
     for _,key in active:
      wrap=element('g',{'clip-path':'url(#'+key+')'});wrap.append(sub);sub=wrap

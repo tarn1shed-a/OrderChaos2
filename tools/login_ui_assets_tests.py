@@ -19,6 +19,9 @@ class OriginalEntryTests(unittest.TestCase):
    self.assertEqual(r['windows']['CharacterChooseCharacter']['sourceRoot'],35);self.assertEqual(r['strings']['GENERAL_MC_SELECT_BTN_PLAY']['text'],'开始')
    for path,a in r['assets'].items():self.assertEqual((Path(td)/a['url'].rsplit('/',1)[-1]).read_bytes(),self.read(path))
    svg=(Path(td)/'CharacterChooseCharacter.svg').read_text();self.assertIn('item_4._ExistCharacter.SelectedEff',svg);self.assertIn('clipPath',svg);self.assertNotIn('<script',svg)
+   from xml.etree import ElementTree as E
+   clips=E.fromstring(svg).findall('.//{http://www.w3.org/2000/svg}clipPath');self.assertTrue(clips)
+   self.assertTrue(all(list(c)and all(v.tag.endswith('}path')for v in c)for c in clips))
  def test_changed_source_is_rejected_before_restoration(self):
   path='ui/Flash/QuickLogin.swf'
   with tempfile.TemporaryDirectory()as td:

@@ -12,8 +12,11 @@ export function createSourceEntry({connect,legacy}){
   const css=document.createElement('link');css.rel='stylesheet';css.href='/__delivery/entry_ui.css';document.head.append(css);
   const root=document.createElement('section');root.className='source-entry';root.hidden=true;root.setAttribute('aria-label','登录与角色选择');document.body.append(root);
   let manifest=null,screen=null,selected=null,roles=[],identities=[],isReady=false,busy=false;
+  const blocked=new Map();
+  function hideRoot(){root.hidden=true;for(const[el,value]of blocked)el.inert=value;blocked.clear();}
+  function fallback(){hideRoot();legacy();}
   const q=(path,scope=screen)=>scope?.querySelector(`[data-source-path="${path}"]`);
-  const hide=(path,scope=screen)=>{const el=q(path,scope);if(el)el.setAttribute('display','none');};
+  const hide=(path,scope=screen)=>{const el=q(path,scope);if(el){el.setAttribute('display','none');el.setAttribute('aria-hidden','true');}};
   const label=(path,value,scope=screen)=>{const el=q(path,scope)?.querySelector('[data-entry-text]');if(el)el.textContent=String(value).replace(/<[^>]+>/g,'');};
   const word=key=>manifest.strings[key].text.replace(/<[^>]+>/g,'');
   const button=(el,name,fn,disabled=false)=>{
@@ -28,12 +31,14 @@ export function createSourceEntry({connect,legacy}){
     await loaded;const profile=manifest.windows[name];const response=await fetch(profile.url);if(!response.ok)throw Error('Original entry drawing unavailable');
     const parsed=new DOMParser().parseFromString(await response.text(),'image/svg+xml');
     if(parsed.querySelector('parsererror,script,foreignObject'))throw Error('Invalid original entry drawing');
-    screen=document.importNode(parsed.documentElement,true);root.replaceChildren(screen);root.hidden=false;root.dataset.sourceScreen=name;
+    screen=document.importNode(parsed.documentElement,true);screen.setAttribute('role','group');root.replaceChildren(screen);root.hidden=false;root.dataset.sourceScreen=name;
+    for(const el of document.body.children)if(el!==root){if(!blocked.has(el))blocked.set(el,el.inert);el.inert=true;}
     const cfg=profile.config,[w,h]=profile.measuredSize||[0,0],x=Number(cfg.relativeposX)*(1136-w)+Number(cfg.offsetX),y=Number(cfg.relativeposY)*(640-h)+Number(cfg.offsetY);
     screen.querySelector('[data-entry-window]').setAttribute('transform',`translate(${x} ${y}) scale(0.05)`);
   }
   async function login(){
     await show('QuickLogin');hide('.m_Title');hide('.m_Line');hide('._GoogleBtn'); // original ASDefines.isPUB() returns false in this package
+    hide('.2380.ImageContains'); // Picture constructor hides its unassigned authoring placeholder
     hide('._QuickLogin');hide('._QuickLoginText'); // native auto-login preference is unavailable; no invented saved setting
     hide('._VersionText');hide('.m_Version'); // native account/runtime version response is not a web version
     for(const[path,key]of [['._QuickLoginBtn.title','GENERAL_QUICK_LOGIN'],['._FaceBookBtn.title','GENERAL_LOGIN_FACEBOOK_BTN'],['._GameCenterBtn.title','GENERAL_LOGIN_GAMECENTER_BTN']])label(path,word(key));
@@ -56,7 +61,7 @@ export function createSourceEntry({connect,legacy}){
       for(const row of screen.querySelectorAll('[data-source-path^="._CharacterMC._CharacterList.item_"]')){
         if(!/^\._CharacterMC\._CharacterList\.item_(?:\d+|pre\d+|post\d+)$/.test(row.getAttribute('data-source-path')))continue;
         const match=row.getAttribute('data-source-path').match(/item_(\d+)$/),index=match?Number(match[1]):-1,role=roles[index];
-        if(index<0||!role){row.setAttribute('display','none');continue;}
+        if(index<0||!role){row.setAttribute('display','none');row.setAttribute('aria-hidden','true');continue;}
         const prefix=row.getAttribute('data-source-path');hide(prefix+'._NewCharacter');hide(prefix+'._HighLight');
         label(prefix+'._ExistCharacter.txt_name',role.name);label(prefix+'._ExistCharacter.txt_level',word('GENERAL_MC_SELECT_LV')+role.level);
         for(const field of ['guild_name','ar_guild_name','ar_txt_level'])hide(prefix+'._ExistCharacter.'+field);
@@ -70,7 +75,7 @@ export function createSourceEntry({connect,legacy}){
         connect(selected.name,credentials,selected.profession);
       },!isReady||!selected);
       root.dataset.entryRoleCount=String(roles.length);
-    }catch(error){root.dataset.entryError=error.message;legacy();root.hidden=true;}finally{busy=false;}
+    }catch(error){root.dataset.entryError=error.message;fallback();}finally{busy=false;}
   }
   function select(role){
     selected=role;
@@ -79,8 +84,8 @@ export function createSourceEntry({connect,legacy}){
     }
   }
   return {
-    open(){login().catch(error=>{root.dataset.entryError=error.message;root.hidden=true;legacy();});},
-    hide(){root.hidden=true;},
+    open(){login().catch(error=>{root.dataset.entryError=error.message;fallback();});},
+    hide:hideRoot,
     ready(){isReady=true;const play=q('._CharacterMC._StartBtn');if(play&&selected){play.setAttribute('aria-disabled','false');play.setAttribute('tabindex','0');}}
   };
 }

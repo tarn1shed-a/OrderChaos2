@@ -26,7 +26,8 @@ export function installEntryRead(server,saveFile){
       const chunks=[];let bytes=0;
       for await(const chunk of req){bytes+=chunk.length;if(bytes>16384){reply(413,{error:'Request too large'});req.resume();return;}chunks.push(chunk);}
       const request=JSON.parse(Buffer.concat(chunks).toString());
-      const save=JSON.parse(await readFile(saveFile,'utf8'));
+      let save;
+      try{save=JSON.parse(await readFile(saveFile,'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;save={version:6,characters:[]};}
       reply(200,{characters:entryCharacters(save,request.identities)});
     }catch{reply(400,{error:'Unable to read saved roles'});}
   });

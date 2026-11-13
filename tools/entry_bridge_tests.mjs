@@ -32,5 +32,6 @@ test('HTTP bridge is same-origin, uncached, bounded and leaves the save byte-ide
   assert.equal((await fetch(url+'/__entry/characters',{...options,body:'x'.repeat(17000)})).status,413);
   assert.equal((await fetch(url+'/__entry/characters')).status,405);
   assert.deepEqual(await readFile(file),before);
+  await rm(file);const empty=await fetch(url+'/__entry/characters',options);assert.deepEqual(await empty.json(),{characters:[]});await assert.rejects(readFile(file),{code:'ENOENT'});
  }finally{await new Promise(ok=>server.close(ok));await rm(folder,{recursive:true});}
 });

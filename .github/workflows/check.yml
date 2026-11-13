@@ -38,6 +38,7 @@ jobs:
       - run: python tools/quest_assets_tests.py
       - run: python tools/swf_ui_graphics_tests.py
       - run: python tools/login_ui_assets_tests.py
+      - run: python tools/native_selection_scene_tests.py
       - run: python tools/terrain_materials_tests.py
       - run: python tools/terrain_lighting_tests.py
       - run: python tools/scene_sky_tests.py

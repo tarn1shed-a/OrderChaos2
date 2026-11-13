@@ -4,6 +4,7 @@ const BASE='ba9645330507b105d034902953b39eba47113aa46b0c38b592c5c6c9ae2a4377';
 export function stageEntry(source,{entryUI=false}={}){
   if(createHash('sha256').update(source).digest('hex')!==BASE)throw Error('Staged loader source identity differs');
   const replace=(from,to)=>{if(source.split(from).length!==2)throw Error('Staged loader anchor differs');source=source.replace(from,to);};
+  replace("import { RESOURCE_WORLD } from './world.js';","import { RESOURCE_WORLD } from '/__delivery/trial-world.js';");
   source="import {createSceneStages} from '/__delivery/staged_scene.mjs';\nlet sceneStages;\n"+source;
   source="import {clickTarget,clickMovement} from '/__delivery/click_input.mjs';\n"+source;
   source="import {createBrowserTiming} from '/__delivery/browser_timing.mjs';\n"+source;

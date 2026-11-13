@@ -4,8 +4,8 @@ export async function stagePlan(texts,closure){
   const manifestURL='/assets/source-temple-sampling/manifest.json';
   const read=url=>JSON.parse(texts.get(url));
   const manifest=read(manifestURL),terrain=read(manifest.mapWindow.url),base=read(manifest.map.url);
-  const world=texts.get('/world.js');
-  const match=world.match(/RESOURCE_WORLD = \{ \.\.\.WORLD, width: (\d+), height: (\d+),[^\n]*spawn: \{ x: (\d+), y: (\d+) \} \}/);
+  const world=texts.get('/__delivery/trial-world.js')||texts.get('/world.js');
+  const match=world.match(/RESOURCE_WORLD = \{ \.\.\.WORLD, width: (\d+), height: (\d+),[^\n]*spawn: \{ x: (-?[\d.]+), y: (-?[\d.]+) \} \}/);
   if(!match)throw Error('Staged entry coordinate binding differs');
   const [width,height,x,z]=match.slice(1).map(Number),center=[Math.floor(Math.fround(base.bounds.min[0]+x/width*(base.bounds.max[0]-base.bounds.min[0])))>>6,Math.floor(Math.fround(base.bounds.min[2]+z/height*(base.bounds.max[2]-base.bounds.min[2])))>>6];
   const {entry:visible,prepared:entry}=preparationWindow(terrain.sourceTiles.map(t=>t.tile),manifest.mapWindow.originalRequestOffsets,center);

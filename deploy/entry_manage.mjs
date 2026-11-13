@@ -8,14 +8,21 @@ import {entryNameError} from './entry_name.mjs';
 export function entryServer(source,traceURL){
   const observed=observeServer(source,traceURL),anchor='    server, rooms, combatRooms,';
   if(observed.split(anchor).length!==2)throw Error('Entry store anchor differs');
-  return observed.replace(anchor,anchor+'\n    entryStore:store,entryActive:activeCharacters,');
+  const spawn='x: restorePosition ? position.x : world.spawn.x + index * 35,';
+  if(observed.split(spawn).length!==2)throw Error('Entry placement anchor differs');
+  return observed.replace(anchor,anchor+'\n    entryStore:store,entryActive:activeCharacters,')
+    .replace(spawn,'x: restorePosition ? position.x : world.spawn.x + (sourceWindow?0:index * 35),');
 }
 
 export function trialRoleManager(store,active,{archive=record=>{
   if(!store.saveFile)return;
   const folder=join(dirname(store.saveFile),'deleted-roles');mkdirSync(folder,{recursive:true,mode:0o700});
   writeFileSync(join(folder,record.id+'-'+randomUUID()+'.json'),JSON.stringify(record,null,2),{flag:'wx',mode:0o600});
-},now=Date.now}={}){
+},now=Date.now,entryPosition=null,backupEntry=record=>{
+  if(!store.saveFile)return;
+  const folder=join(dirname(store.saveFile),'entry-backups');mkdirSync(folder,{recursive:true,mode:0o700});
+  writeFileSync(join(folder,record.id+'-'+randomUUID()+'.json'),JSON.stringify(record,null,2),{flag:'wx',mode:0o600});
+}}={}){
   const challenges=new Map();
   function own(identity){
     const record=store.records.get(identity?.characterId),token=identity?.resumeToken;
@@ -25,6 +32,18 @@ export function trialRoleManager(store,active,{archive=record=>{
   }
   function offline(record){if(active.has(record.id))throw Error('角色仍在线，请先退出游戏再删除');}
   return {
+    returnEntry(data){
+      const record=own(data);
+      if(data.anchor!=='cinematic7'||!entryPosition)throw Error('未知试玩起点');
+      if(active.has(record.id))throw Error('角色仍在线，请关闭原游戏页后重试');
+      const target=entryPosition();
+      if(!target||!['x','y','groundY'].every(k=>Number.isFinite(target[k])))throw Error('原落点碰撞尚未就绪');
+      const positions=record.positions,dirty=store.dirty,savedAt=store.savedAt;
+      backupEntry(structuredClone(record));
+      try{record.positions={...positions,resources:{...target}};store.dirty=true;store.flush();}
+      catch(error){record.positions=positions;store.dirty=dirty;store.savedAt=savedAt;throw error;}
+      return {returned:record.id,anchor:'cinematic7',originalFirstSpawn:false};
+    },
     create(data){
       // Only the avatar actually supported by the current preview may be created.
       // No substitute human/orc model, appearance or village/spawn is invented.
@@ -62,7 +81,7 @@ export function trialRoleManager(store,active,{archive=record=>{
 export function installEntryManagement(server,manager){
   const original=server.listeners('request');for(const listener of original)server.removeListener('request',listener);
   server.on('request',async(req,res)=>{
-    const path=new URL(req.url,'http://localhost').pathname,actions={'/__entry/create':'create','/__entry/delete-challenge':'challenge','/__entry/delete':'remove'};
+    const path=new URL(req.url,'http://localhost').pathname,actions={'/__entry/create':'create','/__entry/delete-challenge':'challenge','/__entry/delete':'remove','/__entry/return':'returnEntry'};
     if(!Object.hasOwn(actions,path)){for(const listener of original)listener.call(server,req,res);return;}
     const reply=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
     if(req.method!=='POST'||req.headers['content-type']?.split(';')[0]!=='application/json')return reply(405,{error:'请求无效'});

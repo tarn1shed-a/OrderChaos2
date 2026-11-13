@@ -149,10 +149,22 @@ export function createSourceEntry({connect}){
     const play=q('._CharacterMC._StartBtn');label('._CharacterMC._StartBtn.mc_label.txt_label',word('GENERAL_MC_SELECT_BTN_PLAY'));
     button(play,word('GENERAL_MC_SELECT_BTN_PLAY'),()=>{
       const credentials=identities.find(v=>v.characterId===selected?.id);if(!isReady||!credentials)return;
-      connect(selected.name,credentials,selected.profession);
+      startSelected(selected,credentials).catch(error=>connectionError(error.message));
     },!isReady||!selected);
     root.dataset.entryRoleCount=String(roles.length);
     screen.addEventListener('wheel',event=>{event.preventDefault();const next=Math.max(0,Math.min(listOffset+Math.sign(event.deltaY),Math.max(0,entries.length-5)));if(next!==listOffset){listOffset=next;renderChoose().catch(error=>connectionError(error.message));}},{passive:false});
+  }
+  async function startSelected(role,credentials){
+    if(busy)return;busy=true;
+    try{
+      const url=new URL(location.href);
+      if(url.searchParams.get('trialEntry')==='cinematic7'){
+        await api('return',{...credentials,anchor:'cinematic7'});
+        // One explicitly selected role, once; normal reload/reconnect restores saves.
+        url.searchParams.delete('trialEntry');history.replaceState(null,'',url);
+      }
+      connect(role.name,credentials,role.profession);
+    }finally{busy=false;}
   }
   async function deleteRole(){
     const role=selected,credentials=identities.find(v=>v.characterId===role?.id);if(!credentials)return;

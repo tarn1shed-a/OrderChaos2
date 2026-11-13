@@ -8,6 +8,7 @@ import {resolve,dirname,extname,posix} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {stageEntry} from './stage_runtime.mjs';
 import {stagePlan} from './stage_plan.mjs';
+import {stageTrialWorld} from './tutorial_entry.mjs';
 
 export const TYPES={'.svg':'image/svg+xml','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.png':'image/png','.woff':'font/woff','.glsl':'text/plain; charset=utf-8','.rgba':'application/octet-stream','.glb':'model/gltf-binary'};
 const sha=raw=>createHash('sha256').update(raw).digest('hex');
@@ -30,6 +31,10 @@ export async function prepare(root,{stage=false}={}){
     files['/vendor/'+name]={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.js']};
   }
   if(stage){
+    const entryManifest=JSON.parse(await readFile(files['/assets/source-temple-sampling/manifest.json'].path,'utf8'));
+    const terrain=JSON.parse(await readFile(files[entryManifest.map.url].path,'utf8'));
+    const worldPath=resolve(destination,'trial-world.js'),worldRaw=Buffer.from(stageTrialWorld(await readFile(files['/world.js'].path,'utf8'),{min:terrain.bounds.min,max:terrain.bounds.max,width:1280,height:1280}));
+    await writeFile(worldPath,worldRaw);files['/__delivery/trial-world.js']={path:worldPath,bytes:worldRaw.length,sha256:sha(worldRaw),type:TYPES['.js']};
     const entryUI=Boolean(files['/assets/source-entry/entry.json']);
     const path=resolve(destination,'staged-entry.js'),raw=Buffer.from(stageEntry(await readFile(files['/explore-map.js'].path,'utf8'),{entryUI}));
     await writeFile(path,raw);files['/explore-map.js']={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.js']};

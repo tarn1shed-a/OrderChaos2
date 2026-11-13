@@ -1,12 +1,11 @@
 @font-face{font-family:EntryText;src:url('/assets/ui/chineseText.woff') format('woff');font-display:swap}
 @font-face{font-family:EntryDisplay;src:url('/assets/ui/chineseDisplay.woff') format('woff');font-display:swap}
 @font-face{font-family:EntryGothic;src:url('/assets/ui/leagueGothic.woff') format('woff');font-display:swap}
-.source-entry{position:fixed;inset:0;z-index:10000;background:#000;overflow:hidden}
+.source-entry{position:fixed;inset:0;z-index:10000;background:#000;overflow:hidden;display:grid;place-items:center}
 .source-entry[hidden]{display:none}
 .source-entry>svg{display:block;width:100%;height:100%}
-.source-entry[data-source-screen="QuickLogin"]{display:grid;place-items:center}
-.source-entry[data-source-screen="QuickLogin"][hidden]{display:none}
 .source-entry[data-source-screen="QuickLogin"]>svg{width:min(360px,calc(100vw - 40px));height:min(540px,calc(100dvh - 48px))}
+.source-entry[data-source-screen="CharacterChooseCharacter"]>svg{width:min(280px,calc(100vw - 40px));height:min(520px,calc(100dvh - 48px))}
 .source-entry text[data-font-source*="League"]{font-family:EntryGothic,EntryText}
 .source-entry text[data-font-source*="Alegreya"]{font-family:EntryDisplay,EntryText}
 .source-entry [role=button]{cursor:pointer;outline:none}

@@ -1,4 +1,4 @@
-// Original drawings; centered login sizing is the user's explicit web layout preference.
+// Original drawings; centered entry sizing is the user's explicit web layout preference.
 // Existing web identities are a separate adapter.
 const NS='http://www.w3.org/2000/svg';
 export function savedEntryIdentities(storage){
@@ -36,13 +36,17 @@ export function createSourceEntry({connect,legacy}){
     // original bitmap in screen coordinates so that scale cannot flatten it.
     el.setAttribute('display','none');screen.append(img);
   }
-  function centerLogin(){
-    const inverse=screen.getScreenCTM().inverse(),points=[];
-    for(const el of [screen.querySelector('[data-entry-logo]'),...['._QuickLoginBtn','._GameCenterBtn','._FaceBookBtn'].map(path=>q(path))]){
+  function artworkBounds(elements,inverse=screen.getScreenCTM().inverse()){
+    const points=[];
+    for(const el of elements){
       const b=el.getBBox(),matrix=inverse.multiply(el.getScreenCTM());
       for(const[x,y]of [[b.x,b.y],[b.x+b.width,b.y],[b.x,b.y+b.height],[b.x+b.width,b.y+b.height]])points.push(new DOMPoint(x,y).matrixTransform(matrix));
     }
-    const x=Math.min(...points.map(p=>p.x)),y=Math.min(...points.map(p=>p.y)),w=Math.max(...points.map(p=>p.x))-x,h=Math.max(...points.map(p=>p.y))-y;
+    const x=Math.min(...points.map(p=>p.x)),y=Math.min(...points.map(p=>p.y));
+    return {x,y,w:Math.max(...points.map(p=>p.x))-x,h:Math.max(...points.map(p=>p.y))-y};
+  }
+  function fitArtwork(elements){
+    const {x,y,w,h}=artworkBounds(elements);
     // Fit the complete original artwork as one group; never stretch individual controls.
     screen.setAttribute('viewBox',`${x-12} ${y-12} ${w+24} ${h+24}`);
     screen.setAttribute('preserveAspectRatio','xMidYMid meet');
@@ -71,7 +75,7 @@ export function createSourceEntry({connect,legacy}){
       button(q('.'+name),word(name==='_FaceBookBtn'?'GENERAL_LOGIN_FACEBOOK_BTN':'GENERAL_LOGIN_GAMECENTER_BTN')+'（原账号登录不可用）',()=>{},true);
     }
     button(q('._QuickLoginBtn'),word('GENERAL_QUICK_LOGIN'),choose);
-    centerLogin();
+    fitArtwork([screen.querySelector('[data-entry-logo]'),...['._QuickLoginBtn','._GameCenterBtn','._FaceBookBtn'].map(path=>q(path))]);
   }
   async function choose(){
     if(busy)return;busy=true;
@@ -82,6 +86,7 @@ export function createSourceEntry({connect,legacy}){
       await show('CharacterChooseCharacter');hide('._DeleteCharMC');hide('._RuneMC');hide('._FuncBtnMC');
       // Source InitPos anchors this panel to stageWidth minus its measured width.
       const panel=q('._CharacterMC');panel.setAttribute('transform',`translate(${(1136-panel.getBBox().width/20)*20} 0)`);
+      const content=[];
       for(const row of screen.querySelectorAll('[data-source-path^="._CharacterMC._CharacterList.item_"]')){
         if(!/^\._CharacterMC\._CharacterList\.item_(?:\d+|pre\d+|post\d+)$/.test(row.getAttribute('data-source-path')))continue;
         const match=row.getAttribute('data-source-path').match(/item_(\d+)$/),index=match?Number(match[1]):-1,role=roles[index];
@@ -90,6 +95,7 @@ export function createSourceEntry({connect,legacy}){
         label(prefix+'._ExistCharacter.txt_name',role.name);label(prefix+'._ExistCharacter.txt_level',word('GENERAL_MC_SELECT_LV')+role.level);
         for(const field of ['guild_name','ar_guild_name','ar_txt_level'])hide(prefix+'._ExistCharacter.'+field);
         const icon={1:'warrior',2:'mage',3:'ranger',4:'monk',5:'demonslayer'}[role.profession];image(q(prefix+'._ExistCharacter.DisplayIcon'),manifest.assets['ui/icons/userinterface/class_'+icon+'_0.5x.png']?.url);
+        content.push(q(prefix+'._ExistCharacter.DisplayIcon'),...['txt_name','txt_level'].map(field=>q(prefix+'._ExistCharacter.'+field).querySelector('[data-entry-text]')));
         button(row,role.name,()=>select(role));
       }
       selected=roles[0]||null;select(selected);
@@ -98,7 +104,22 @@ export function createSourceEntry({connect,legacy}){
         const credentials=identities.find(v=>v.characterId===selected?.id);if(!isReady||!credentials)return;
         connect(selected.name,credentials,selected.profession);
       },!isReady||!selected);
+      const rows=[...screen.querySelectorAll('[data-source-path]')].filter(el=>/^\._CharacterMC\._CharacterList\.item_\d+$/.test(el.getAttribute('data-source-path')));
+      const visibleCount=Math.min(roles.length,rows.length);
+      if(visibleCount>0&&visibleCount<rows.length){
+        const inverse=play.parentElement.getScreenCTM().inverse();
+        const y=path=>new DOMPoint(0,0).matrixTransform(inverse.multiply(q(path).getScreenCTM())).y;
+        const stride=y('._CharacterMC._CharacterList.item_1')-y('._CharacterMC._CharacterList.item_0'),m=play.transform.baseVal.consolidate().matrix;
+        // Unavailable creation slots are hidden in this web bridge. Remove only
+        // their original row strides so they do not leave a large empty gap.
+        play.setAttribute('transform',`matrix(${m.a} ${m.b} ${m.c} ${m.d} ${m.e} ${m.f-(rows.length-visibleCount)*stride})`);
+      }
+      if(content.length){
+        const inverse=play.parentElement.getScreenCTM().inverse(),list=artworkBounds(content,inverse),start=artworkBounds([play],inverse),m=play.transform.baseVal.consolidate().matrix;
+        play.setAttribute('transform',`matrix(${m.a} ${m.b} ${m.c} ${m.d} ${m.e+list.x+list.w/2-start.x-start.w/2} ${m.f})`);
+      }
       root.dataset.entryRoleCount=String(roles.length);
+      fitArtwork([...content,play]);
     }catch(error){root.dataset.entryError=error.message;fallback();}finally{busy=false;}
   }
   function select(role){

@@ -79,10 +79,84 @@ class SourceTests(unittest.TestCase):
                     if quality:
                         self.assertIn(path + '_inside_s.phy', result['presenceProbes'])
 
-    def test_truncated_fourth_phy_never_turns_into_a_fabricated_floor(self):
+    def test_original_stream_retains_eleven_records_without_repairing_the_file(self):
+        from scene_collision import decode_phy
         path = 'model/scene_generator_temple_000/god_underground_palace02_02.bdae'
-        with self.assertRaisesRegex(RuntimeError, 'requested truncated bytes'):
-            self.engine.select(path, self.source)
+        raw = self.source.read(path.replace('.bdae', '.phy'))
+        self.assertEqual(len(raw), 4484)
+        # The generic decoder remains strict; only executed source evidence
+        # authorises the EOF prefix, not a changed header or fabricated shape.
+        with self.assertRaisesRegex(ValueError, 'Truncated PHY'):
+            decode_phy(raw)
+        for quality in (False, True):
+            result = self.engine.select(path, self.source, simplified=quality)
+            self.assertEqual(result['originalReturn'], 1)
+            self.assertEqual(result['shapeCount'], 11)
+            self.assertTrue(result['normalChainUnchanged'])
+            report = result['nativeStream']
+            self.assertEqual(report['sourceSHA256'],
+                             '13ad30bb3a43dc87a7c0419419135f6579e82379ee4032df670b00a40a8492f5')
+            self.assertEqual([report['declaredShapeCount'],report['retainedShapeCount'],
+                              report['bytesConsumed'],report['descriptorError']], [12,11,4484,1])
+        self.assertEqual(self.source.read(path.replace('.bdae', '.phy')), raw)
+
+    def test_native_eof_does_not_authorise_an_incomplete_shape(self):
+        raw = self.source.read('model/scene_generator_temple_000/god_underground_palace02_02.phy')
+        with self.assertRaisesRegex(ValueError, 'Truncated PHY|Trailing PHY'):
+            self.engine.read_phy(raw[:-1], 'partial-record-negative.phy')
+
+    def test_original_getter_returns_the_prefix_despite_descriptor_error(self):
+        from unicorn import UC_HOOK_CODE
+        from analyze_native_resources import NativeImage
+        from native_phy_stream import NativePHYStreamPhysics
+
+        class GetterProbe(NativePHYStreamPhysics):
+            PROVIDE = 0x30000810
+            def hook(self, uc, address, size, data):
+                if address == self.PROVIDE:
+                    self.set('X0', self.stream)
+                elif address == 0xa8674c:
+                    self.descriptors.append(self.get('X0'))
+                    return  # Observe the real reader without replacing it.
+                elif self.imports.get(address) in ('pthread_mutex_lock','pthread_mutex_unlock'):
+                    self.set('W0', 0)  # Single-thread inspection, not a live cache.
+                else:
+                    return super().hook(uc,address,size,data)
+                self.set('PC', self.get('X30'))
+
+        e = GetterProbe(NativeImage(NATIVE.read_bytes())); e.descriptors = []
+        for address in (e.PROVIDE, 0xa8674c):
+            e.uc.hook_add(UC_HOOK_CODE,e.hook,begin=address,end=address)
+        name = 'model/scene_generator_temple_000/god_underground_palace02_02.phy'
+        raw = self.source.read(name); stream, filename = e.memory_stream(raw,name)
+        e.uc.mem_write(e.filename,name.encode()+b'\0')
+        e.w(e.stream,'Q',0x2425a70)
+        # Host provider owns one reference; the getter must release only its own.
+        e.w(e.stream+8,'I',2); e.w(e.stream+0x10,'Q',stream)
+        e.w(e.stream+0x18,'Q',len(raw)); e.w(e.stream+0x20,'Q',filename)
+        provider=e.alloc(0x20); vtable=e.alloc(0x20)
+        e.w(provider,'Q',vtable); e.w(vtable+0x18,'Q',e.PROVIDE)
+        for address in range(0x25451f8,0x2545230,8):
+            e.w(address,'Q',provider if address==0x25451f8 else 0)
+        pointer=e.call(0xa862a4,{'X0':filename}); count=0
+        while pointer:
+            count+=1; self.assertLessEqual(count,12)
+            pointer=e.r(pointer+8,'Q')[0]
+        self.assertEqual(count,11)
+        self.assertEqual([e.r(p,'B')[0] for p in e.descriptors],[1])
+        self.assertEqual(e.r(e.stream+8,'I')[0],1)
+
+    def test_original_stream_short_read_and_eof_leave_unread_destination_bytes_unchanged(self):
+        e = self.engine
+        stream, _ = e.memory_stream(b'ABCD', 'stream-boundary-fixture')
+        target = e.alloc(8)
+        read = e.r(e.r(stream, 'Q')[0] + 0x18, 'Q')[0]
+        e.w(stream + 0x30, 'Q', 2); e.uc.mem_write(target, b'12345678')
+        self.assertEqual(e.call(read, {'X0':stream,'X1':target,'W2':4}), 2)
+        self.assertEqual(bytes(e.uc.mem_read(target,8)), b'CD345678')
+        self.assertEqual(e.r(stream + 0x30, 'Q')[0], 4)
+        self.assertEqual(e.call(read, {'X0':stream,'X1':target,'W2':4}), 0)
+        self.assertEqual(bytes(e.uc.mem_read(target,8)), b'CD345678')
 
 
 if __name__ == '__main__':

@@ -25,6 +25,17 @@ class SceneCollisionTests(unittest.TestCase):
     def test_truncation_trailing_bad_dimensions_indices_and_unsupported_types_reject(self):
         for raw in [box()[:39],poly()[:-1],box()+b'x',box(6),struct.pack('<I',0),box().replace(struct.pack('<f',4),struct.pack('<f',float('nan'))),poly()[:-8]+struct.pack('<4H',999,3,2,0)]:
             with self.assertRaises(ValueError):decode_phy(raw)
+    def test_explicit_retained_prefix_requires_a_complete_record_and_exact_eof(self):
+        raw=struct.pack('<I',2)+box()[4:]
+        with self.assertRaises(ValueError):decode_phy(raw)
+        p=decode_phy(raw,retained_at_eof=1)
+        self.assertEqual(p['declaredShapeCount'],2)
+        self.assertEqual(p['nativeRetainedAtEOF'],1)
+        self.assertEqual(p['shapes'],decode_phy(box())['shapes'])
+        for bad in [raw[:-1],raw+b'x']:
+            with self.assertRaises(ValueError):decode_phy(bad,retained_at_eof=1)
+        for count in [0,2,3,-1,1.5]:
+            with self.assertRaises(ValueError):decode_phy(raw,retained_at_eof=count)
     @unittest.skipUnless((DEFAULT_SOURCE/'model_phy.bin').is_file(),'Original collision shapes remain local')
     def test_source_compound_shapes_consume_all_bytes_without_guessing_unknown_types(self):
         archive=ResourceArchive(DEFAULT_SOURCE/'model_phy.bin')

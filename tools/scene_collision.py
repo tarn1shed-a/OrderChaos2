@@ -52,7 +52,13 @@ def apply_scene_transforms(reader, model):
     model['warnings'].append('Source geometry-node transforms are applied; original static material shaders are not evaluated.')
     return model
 
-def decode_phy(raw):
+def decode_phy(raw, *, retained_at_eof=None):
+    """Strict by default; an explicit native-retained prefix must end at EOF.
+
+    Only the original reader's executed result may supply retained_at_eof.
+    This describes existing records; it never rewrites the file/header or fills
+    a partial record. A generic parse failure must not choose this count.
+    """
     at=0
     def read(fmt):
         nonlocal at
@@ -62,6 +68,11 @@ def decode_phy(raw):
     def vector(v):return [v[0],v[2],-v[1]]
     count,=read('I')
     if not 0<count<=4096:raise ValueError('Invalid PHY shape count')
+    declared=count
+    if retained_at_eof is not None:
+        if not isinstance(retained_at_eof,int) or not 0<retained_at_eof<count:
+            raise ValueError('Invalid native retained count')
+        count=retained_at_eof
     shapes=[]
     for _ in range(count):
         begin=at;kind,flags=read('II')
@@ -79,4 +90,7 @@ def decode_phy(raw):
             record.update(vertices=vertices,faces=faces)
         shapes.append(record)
     if at!=len(raw):raise ValueError('Trailing PHY data')
-    return {'shapes':shapes,'sourceSHA256':hashlib.sha256(raw).hexdigest(),'bytesConsumed':at}
+    result={'shapes':shapes,'sourceSHA256':hashlib.sha256(raw).hexdigest(),'bytesConsumed':at}
+    if retained_at_eof is not None:
+        result.update(declaredShapeCount=declared,nativeRetainedAtEOF=retained_at_eof)
+    return result

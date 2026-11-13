@@ -81,7 +81,9 @@ def build(config, input_root, output, source=DEFAULT_SOURCE):
         row.update(sourcePHY=cases[0]['selected'],
                    admission='admittedBeforeTypeFactory',
                    insideCollisionEvidence='original-a85cb0-normal-chain-extra-inside-file-absent')
-        shape = decode_phy(sources.read(row['sourcePHY']))
+        stream = cases[0]['nativeStream']
+        shape = decode_phy(sources.read(row['sourcePHY']), retained_at_eof=(
+            stream['retainedShapeCount'] if stream['descriptorError'] else None))
         candidate['sources'][row['sourcePHY']] = shape
         candidate['instances'].append(row); rows.append(row)
         proven.append({'id': row['id'], 'model': row['model'], 'cases': cases})
@@ -99,6 +101,7 @@ def build(config, input_root, output, source=DEFAULT_SOURCE):
     collision = output / 'collision.json'
     collision.write_text(json.dumps(candidate, ensure_ascii=False, separators=(',', ':')))
     cfg.update(collision=str(collision), config=str(output / 'native-physics.json'),
+               nativeArchiveStream=True,
                python=sys.executable, worker=str(ROOT / 'tools/source_physics_worker.py'))
     (output / 'native-physics.json').write_text(json.dumps(cfg, indent=2) + '\n')
     report = {'format': 'oc2-inside-collision-candidate-v1',

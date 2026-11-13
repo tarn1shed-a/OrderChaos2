@@ -54,6 +54,7 @@
 !tools/source_diving.py
 !tools/source_layer_queue.py
 !tools/source_physics.py
+!tools/native_phy_stream.py
 !tools/source_physics_worker.py
 !tools/source_shore.py
 !tools/source_stop_queue.py

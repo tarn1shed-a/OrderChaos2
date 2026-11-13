@@ -10,12 +10,12 @@ import math
 from pathlib import Path
 
 from analyze_native_resources import NativeImage, NATIVE_SHA256
-from source_physics import SourcePhysics
+from native_phy_stream import NativePHYStreamPhysics
 from tutorial_map_geometry import local_output
 from tutorial_quest_chain import audit
 
 
-class DiagnosticPhysics(SourcePhysics):
+class DiagnosticPhysics(NativePHYStreamPhysics):
     """Attribute shapes to their actual load input, even if source IDs repeat."""
     def __init__(self, image):
         super().__init__(image)

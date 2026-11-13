@@ -5,6 +5,7 @@ non-null handle comes from the original PHY reader, never generated geometry.
 """
 import hashlib
 from source_physics import SourcePhysics
+from native_phy_stream import NativePHYStreamPhysics
 
 
 ROUTINES = {
@@ -14,7 +15,7 @@ ROUTINES = {
 }
 
 
-class InsidePhysicsProbe(SourcePhysics):
+class InsidePhysicsProbe(NativePHYStreamPhysics):
     EXISTS = SourcePhysics.EXIT + 0x800
 
     def __init__(self, image):
@@ -62,6 +63,7 @@ class InsidePhysicsProbe(SourcePhysics):
             raise ValueError('Additional PHY exists; chain merge needs separate verification')
         raw = sources.read(normal)
         head = self.read_phy(raw, normal)
+        stream_report = self.phy_read_reports[-1]
         original_links = self.links(head)
         self.handles = {normal: head}; self.present = {normal}
         self.reads = []; self.probes = []
@@ -81,6 +83,7 @@ class InsidePhysicsProbe(SourcePhysics):
                 'shapeCount': len(original_links), 'normalChainUnchanged': True,
                 'originalReturn': result & 255, 'insideInput': bool(inside),
                 'simplifiedInput': bool(simplified),
+                'nativeStream': stream_report,
                 'scope': 'original filename/fallback/inside branch; host archive-presence and parsed-resource handles'}
 
     def links(self, head):

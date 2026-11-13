@@ -20,26 +20,30 @@ def start(config):
     if cfg.get('layerQueue'):
         if not all(cfg.get(k)for k in ['stopQueue','animationBlending','diving','shoreTransitions']):raise ValueError('Layer queue requires verified stop/blend/shore/diving inputs')
         from source_layer_queue import SourceLayerQueue
-        engine=SourceLayerQueue(image)
+        engine_type=SourceLayerQueue
     elif cfg.get('stopQueue'):
         if not all(cfg.get(k)for k in ['animationBlending','diving','shoreTransitions']):raise ValueError('Stop queue requires original blending/shore/diving inputs')
         from source_stop_queue import SourceStopQueue
-        engine=SourceStopQueue(image)
+        engine_type=SourceStopQueue
     elif cfg.get('animationBlending'):
         if not cfg.get('diving')or not cfg.get('shoreTransitions'):raise ValueError('Animation binding requires original shore/diving inputs')
         from source_animation_blending import SourceAnimationBlending
-        engine=SourceAnimationBlending(image)
+        engine_type=SourceAnimationBlending
     elif cfg.get('shoreTransitions'):
         if not cfg.get('diving'):raise ValueError('Shore binding requires original diving inputs')
         from source_shore import SourceShore
-        engine=SourceShore(image)
+        engine_type=SourceShore
     elif cfg.get('diving'):
         from source_diving import SourceDiving
-        engine=SourceDiving(image)
+        engine_type=SourceDiving
     elif cfg.get('swimming'):
         from source_swimming import SourceSwimming
-        engine=SourceSwimming(image)
-    else:engine=SourcePhysics(image)
+        engine_type=SourceSwimming
+    else:engine_type=SourcePhysics
+    if cfg.get('nativeArchiveStream'):
+        from native_phy_stream import NativePHYStreamMixin
+        engine_type=type('SourceArchiveStreamPhysics',(NativePHYStreamMixin,engine_type),{})
+    engine=engine_type(image)
     terrain=json.loads(Path(cfg['terrain']).read_text());profile=json.loads(Path(cfg['collision']).read_text())
     lights=json.loads(Path(cfg['terrainLighting']).read_text());flags={tuple(r['tile']):r['runtimeFlags']for r in lights['tiles']}
     if cfg.get('sourceFiles'):

@@ -162,6 +162,8 @@ jobs:
       - run: python tools/source_species_worker_tests.py
       - run: node --test tools/source_avatar_state_tests.mjs tools/source_avatar_transport_tests.mjs
       - run: node --test tools/tutorial_terrain_groups_delivery_tests.mjs
+      - run: python tools/source_human_pose_worker_tests.py
+      - run: node --test tools/source_human_pose_transport_tests.mjs
       - run: python tools/selection_stage_delivery_tests.py
       - run: python tools/selection_stage_groups_delivery_tests.py
       - run: python tools/selection_scene_water_floor_group_copy_tests.py

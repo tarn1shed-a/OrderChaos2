@@ -26,8 +26,8 @@ def digest(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def python_closure():
-    pending, found = ['source_physics_worker'], set()
+def python_closure(entry='source_physics_worker'):
+    pending, found = [entry], set()
     while pending:
         name = pending.pop()
         if name in found:
@@ -155,6 +155,9 @@ def build_context(archive, destination):
                'deploy/acceptance.mjs', 'deploy/physics_acceptance.py', 'tools/preview/map-runtime-inside-overlay.mjs', 'tools/preview/character-panel-runtime-overlay.mjs', 'tools/preview/character-hotbar-overlay.mjs', 'tools/preview/source-scene-effect-overlay.mjs', 'tools/preview/source-scene-effect-fire10-overlay.mjs', 'deploy/character_hotbar.mjs', *python_closure()]
     sources += ['tools/preview/source-tutorial-sky-overlay.mjs']
     sources += ['tools/preview/tutorial_terrain_grouping_policy.js']
+    # Optional original human composition code. Its private inputs/configuration
+    # are not activated or appended to the unchanged base runtime archive.
+    sources += python_closure('source_human_pose_worker')
     sources += ['deploy/prepare_delivery.mjs', 'deploy/static_delivery.mjs',
                 'deploy/delivery_boot.mjs', 'deploy/delivery_worker.mjs', 'deploy/delivery_audit.mjs',
                 'deploy/stage_runtime.mjs', 'deploy/stage_plan.mjs', 'deploy/staged_scene.mjs', 'deploy/streaming_window.mjs']

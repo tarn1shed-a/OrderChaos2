@@ -38,6 +38,12 @@ jobs:
       - run: python tools/native_interaction_tests.py
       - run: python tools/quest_assets_tests.py
       - run: python tools/tutorial_quest_chain_tests.py
+      - run: python tools/tutorial_script_entry_tests.py
+      - run: python tools/tutorial_script_archive_tests.py
+      - run: python tools/tutorial_script_bdae_tests.py
+      - run: python tools/tutorial_script_quest_refs_tests.py
+      - run: python tools/tutorial_skill_script_tests.py
+      - run: python tools/tutorial_script_initialfeed_tests.py
       - run: python tools/tutorial_quest_request_tests.py
       - run: python tools/tutorial_quest_zone_tests.py
       - run: python tools/tutorial_elevator_tests.py

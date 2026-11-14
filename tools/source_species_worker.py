@@ -7,8 +7,6 @@ import hashlib
 import json
 import sys
 from pathlib import Path
-import source_physics_worker
-from source_species_queue import SourceSpeciesQueue
 
 WORKER_SHA256 = '736784c9841b0c771cf311459f4dbcd449fedab1ce88e0b931ac07f44d6b9e32'
 
@@ -17,6 +15,7 @@ def load_species_profiles(engine, cfg, root):
     value = cfg.get('sourceSpeciesProfiles')
     if not value:
         return {}
+    from source_species_queue import SourceSpeciesQueue
     if not isinstance(engine, SourceSpeciesQueue) or set(value) != {'path', 'sha256'}:
         raise ValueError('Explicit source queue and pinned profiles required')
     path = Path(value['path']).resolve()
@@ -60,7 +59,7 @@ def forget_source_actor(engine, identity):
 
 
 def staged_worker_source():
-    raw = Path(source_physics_worker.__file__).read_bytes()
+    raw = Path(__file__).with_name('source_physics_worker.py').read_bytes()
     if hashlib.sha256(raw).hexdigest() != WORKER_SHA256:
         raise ValueError('Reviewed physics worker identity differs')
     source = raw.decode()
@@ -84,6 +83,8 @@ def staged_worker_source():
 
 
 def start(config):
+    import source_physics_worker
+    from source_species_queue import SourceSpeciesQueue
     namespace = dict(vars(source_physics_worker))
     namespace.update(SourceSpeciesQueue=SourceSpeciesQueue,
                      load_species_profiles=load_species_profiles,

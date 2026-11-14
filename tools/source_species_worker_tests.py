@@ -16,6 +16,8 @@ PROFILES = ROOT/'analysis/raw/species-world-router-20261115/profiles-v1.json'
 
 class PublicTests(unittest.TestCase):
     def test_reviewed_worker_stays_unchanged_and_new_copy_compiles(self):
+        self.assertNotIn('capstone', sys.modules)
+        self.assertNotIn('source_physics_worker', sys.modules)
         before = (ROOT/'tools/source_physics_worker.py').read_bytes()
         source = staged_worker_source()
         compile(source, 'source-species-worker', 'exec')

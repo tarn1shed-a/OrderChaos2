@@ -131,6 +131,7 @@ jobs:
       - run: python tools/temple_assembly_tests.py
       - run: python tools/tutorial_temple_scene_tests.py
       - run: python tools/tutorial_temple_scene_lower_tests.py
+      - run: python tools/tutorial_temple_scene_selection_tests.py
       - run: python tools/map_entry_evidence_tests.py
       - run: python tools/tutorial_entry_clues_tests.py
       - uses: actions/setup-node@v4

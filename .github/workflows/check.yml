@@ -44,6 +44,7 @@ jobs:
       - run: python tools/tutorial_script_quest_refs_tests.py
       - run: python tools/tutorial_skill_script_tests.py
       - run: python tools/tutorial_script_initialfeed_tests.py
+      - run: python tools/tutorial_script_path_source_tests.py
       - run: python tools/tutorial_quest_request_tests.py
       - run: python tools/tutorial_quest_zone_tests.py
       - run: python tools/tutorial_elevator_tests.py

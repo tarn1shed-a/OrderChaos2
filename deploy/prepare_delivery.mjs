@@ -9,6 +9,7 @@ import {fileURLToPath} from 'node:url';
 import {stageEntry} from './stage_runtime.mjs';
 import {stagePlan} from './stage_plan.mjs';
 import {stageTrialWorld} from './tutorial_entry.mjs';
+import {stageInsideEntry,stageInsidePlan,INSIDE_MANIFEST} from '../tools/preview/map-runtime-inside-overlay.mjs';
 
 export const TYPES={'.svg':'image/svg+xml','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.png':'image/png','.woff':'font/woff','.glsl':'text/plain; charset=utf-8','.rgba':'application/octet-stream','.glb':'model/gltf-binary'};
 const sha=raw=>createHash('sha256').update(raw).digest('hex');
@@ -36,7 +37,10 @@ export async function prepare(root,{stage=false}={}){
     const worldPath=resolve(destination,'trial-world.js'),worldRaw=Buffer.from(stageTrialWorld(await readFile(files['/world.js'].path,'utf8'),{min:terrain.bounds.min,max:terrain.bounds.max,width:1280,height:1280}));
     await writeFile(worldPath,worldRaw);files['/__delivery/trial-world.js']={path:worldPath,bytes:worldRaw.length,sha256:sha(worldRaw),type:TYPES['.js']};
     const entryUI=Boolean(files['/assets/source-entry/entry.json']);
-    const path=resolve(destination,'staged-entry.js'),raw=Buffer.from(stageEntry(await readFile(files['/explore-map.js'].path,'utf8'),{entryUI}));
+    const path=resolve(destination,'staged-entry.js');
+    let entrySource=stageEntry(await readFile(files['/explore-map.js'].path,'utf8'),{entryUI});
+    if(files[INSIDE_MANIFEST])entrySource=stageInsideEntry(entrySource);
+    const raw=Buffer.from(entrySource);
     await writeFile(path,raw);files['/explore-map.js']={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.js']};
     for(const name of ['staged_scene.mjs','streaming_window.mjs','click_input.mjs','browser_timing.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES['.mjs']};}
@@ -79,7 +83,7 @@ export async function prepare(root,{stage=false}={}){
   const texts=new Map();
   for(const url of urls)if(['.json','.js','.mjs'].includes(extname(url)))texts.set(url,await readFile(files[url].path,'utf8'));
   const plans={};for(const entry of ['/explore-map.js','/explore.js'])if(files[entry])plans[entry]=closure(entry);
-  if(stage)plans['/explore-map.js']=await stagePlan(texts,closure);
+  if(stage)plans['/explore-map.js']=texts.has(INSIDE_MANIFEST)?await stageInsidePlan(stagePlan,texts,closure):await stagePlan(texts,closure);
   const index={format:'oc2-delivery-v1',revision,files:publicFiles,plans};
   const internal={...index,files};
   await writeFile(resolve(destination,'index.json'),JSON.stringify(internal));

@@ -41,6 +41,8 @@ jobs:
       - run: python tools/tutorial_quest_zone_tests.py
       - run: python tools/tutorial_elevator_tests.py
       - run: python tools/map_restoration_inventory_tests.py
+      - run: python tools/tutorial_inside_models_tests.py
+      - run: python tools/map_runtime_inside_delivery_tests.py
       - run: python tools/character_progression_tests.py
       - run: python tools/swf_ui_graphics_tests.py
       - run: python tools/login_ui_assets_tests.py

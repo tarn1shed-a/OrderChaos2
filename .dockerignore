@@ -14,6 +14,8 @@
 # Present only in the generated, ignored CLI context; never add it to Git.
 !deploy/private-runtime.tar.gz
 !tools/
+!tools/preview/
+!tools/preview/map-runtime-inside-overlay.mjs
 !tools/local_mvp_runtime.json
 !tools/requirements-native.txt
 !tools/requirements-resources.txt

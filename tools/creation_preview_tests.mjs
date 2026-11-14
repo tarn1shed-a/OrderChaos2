@@ -22,6 +22,11 @@ test('extended selection profile admits only the six reviewed append interfaces'
  const p={...profile,format:'oc2-source-creation-preview-delivery-v2',originalStaticInstances:151,originalDryChunks:192,originalWaterSurfaceChunks:152,originalWetFloorRestored:true,
   extensions:[['dry','water'],['flowers','flowers'],['grass','grass'],['waterfalls','waterfalls'],['waterSurface','water-surface'],['wetFloor','water-floor']].map(([kind,ns])=>({kind,url:`/assets/source-selection-${ns}/overlay.json`}))};
  assert.equal(validate(p),p);
+ const corrected={...p,format:'oc2-source-creation-preview-delivery-v3',originalGroupRepresentativeMaterialCopies:true,
+  extensions:p.extensions.map(e=>e.kind==='wetFloor'?{...e,url:'/assets/source-selection-water-floor-groups/overlay.json'}:e)};
+ assert.equal(validate(corrected),corrected);
+ assert.throws(()=>validate({...corrected,originalGroupRepresentativeMaterialCopies:false}));
+ assert.throws(()=>validate({...corrected,extensions:p.extensions}));
  for(const change of [{...p,originalStaticInstances:152},{...p,originalWetFloorRestored:false},{...p,extensions:p.extensions.slice(1)},
   {...p,extensions:[...p.extensions].reverse()},{...p,extensions:p.extensions.map((e,i)=>i?e:{...e,url:'/assets/source-selection-scene/manifest.json'})},
   {...profile,extensions:p.extensions}])assert.throws(()=>validate(change));
@@ -45,5 +50,7 @@ test('preview routing is opt-in and leaves the existing entry, world and saves u
  assert.equal(next.replace(addition,''),old);assert.throws(()=>stageEntry(original,{creationPreview:true}));
  const extended=stageEntry(original,{entryUI:true,creationPreview:true,creationProfile:'/assets/source-creation-stage/manifest-v2.json'});
  assert.equal(extended.replace("previewURL:'/assets/source-creation-stage/manifest-v2.json',",''),old);
+ const corrected=stageEntry(original,{entryUI:true,creationPreview:true,creationProfile:'/assets/source-creation-stage/manifest-v3.json'});
+ assert.equal(corrected.replace("previewURL:'/assets/source-creation-stage/manifest-v3.json',",''),old);
  assert.throws(()=>stageEntry(original,{entryUI:true,creationPreview:true,creationProfile:'https://external.invalid/profile'}));
 });

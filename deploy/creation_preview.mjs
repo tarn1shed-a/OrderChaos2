@@ -9,6 +9,7 @@ import {loadSourceCharacterPrograms,createSourceCharacterMaterial} from './attri
 
 export const CREATION_DELIVERY_FORMAT='oc2-source-creation-preview-delivery-v1';
 export const CREATION_EXTENDED_FORMAT='oc2-source-creation-preview-delivery-v2';
+export const CREATION_GROUP_FORMAT='oc2-source-creation-preview-delivery-v3';
 const extensions={
  dry:['/assets/source-selection-water/overlay.json','/selection_scene_water_material.js','createSelectionWaterDryAppend'],
  flowers:['/assets/source-selection-flowers/overlay.json','/selection_scene_flowers_material.js','createSelectionFlowersAppend'],
@@ -17,18 +18,21 @@ const extensions={
  waterSurface:['/assets/source-selection-water-surface/overlay.json','/selection_scene_water_surface.js','createSelectionWaterSurfaceAppend'],
  wetFloor:['/assets/source-selection-water-floor/overlay.json','/selection_scene_water_floor.js','createSelectionWaterFloorAppend'],
 };
+const correctedExtensions={...extensions,wetFloor:['/assets/source-selection-water-floor-groups/overlay.json',...extensions.wetFloor.slice(1)]};
 const safe=url=>typeof url==='string'&&url.startsWith('/assets/source-')&&!url.includes('..')&&!url.includes('//');
 export function validateCreationDelivery(p){
- if(![CREATION_DELIVERY_FORMAT,CREATION_EXTENDED_FORMAT].includes(p?.format)||p.mapId!==7||p.sourceSelectionRegion!==211||p.freshStartOnly!==true||
+ if(![CREATION_DELIVERY_FORMAT,CREATION_EXTENDED_FORMAT,CREATION_GROUP_FORMAT].includes(p?.format)||p.mapId!==7||p.sourceSelectionRegion!==211||p.freshStartOnly!==true||
   p.wholeCreationRestored!==false||p.createsPlayableRole!==false||p.stages?.length!==1||p.stages[0]!=='CharacterChooseRace'||
   !['stage','environment','scene','inside','stones'].every(k=>safe(p[k]))||
   Object.keys(p.previews||{}).sort().join(',')!=='0:0,0:1'||!Object.values(p.previews).every(v=>safe(v.baseURL)&&v.baseURL.endsWith('/')))
   throw Error('Original race-preview delivery scope differs');
- if(p.format===CREATION_EXTENDED_FORMAT&&(!Array.isArray(p.extensions)||
+ const routes=p.format===CREATION_GROUP_FORMAT?correctedExtensions:extensions;
+ if(p.format!==CREATION_DELIVERY_FORMAT&&(!Array.isArray(p.extensions)||
   p.extensions.map(e=>e.kind).join(',')!==Object.keys(extensions).join(',')||
-  p.extensions.some(e=>e.url!==extensions[e.kind]?.[0])||
+  p.extensions.some(e=>e.url!==routes[e.kind]?.[0])||
   p.originalStaticInstances!==151||p.originalDryChunks!==192||p.originalWaterSurfaceChunks!==152||p.originalWetFloorRestored!==true))
   throw Error('Original selection scene extensions differ');
+ if(p.format===CREATION_GROUP_FORMAT&&p.originalGroupRepresentativeMaterialCopies!==true)throw Error('Original material group copies missing');
  if(p.format===CREATION_DELIVERY_FORMAT&&p.extensions!==undefined)throw Error('Original v1 preview cannot activate new extensions');
  return p;
 }
@@ -84,11 +88,11 @@ export function createSourceCreationPreview(root,{profileURL}){
     parts.push(await createSelectionInsideAppend(THREE,insideProfile,{origin,lighting,json,texture,clock}));
     parts.push(await createSelectionStonesAppend(THREE,stonesProfile,{origin,lighting,json,texture}));
     for(const row of extra){
-     const[,module,name]=extensions[row.kind],api=await import(module);
+     const[,module,name]=(p.format===CREATION_GROUP_FORMAT?correctedExtensions:extensions)[row.kind],api=await import(module);
      const part=await api[name](THREE,row.profile,{origin,lighting,json,text,texture,clock});parts.push(part);extraParts.set(row.kind,part);
     }
     const assembly={staticInstances:parts.reduce((n,p)=>n+(p.instances||0),0),dryChunks:extraParts.get('dry')?.chunks||0,waterSurfaceChunks:extraParts.get('waterSurface')?.chunks||0,wetFloorChunks:extraParts.get('wetFloor')?.chunks||0,waterBorderChunks:extraParts.get('wetFloor')?.borderChunks||0};
-    if(p.format===CREATION_EXTENDED_FORMAT&&(assembly.staticInstances!==p.originalStaticInstances||assembly.dryChunks!==p.originalDryChunks||assembly.waterSurfaceChunks!==p.originalWaterSurfaceChunks||assembly.wetFloorChunks!==152||assembly.waterBorderChunks!==152))throw Error('Original selection assembly is incomplete');
+    if(p.format!==CREATION_DELIVERY_FORMAT&&(assembly.staticInstances!==p.originalStaticInstances||assembly.dryChunks!==p.originalDryChunks||assembly.waterSurfaceChunks!==p.originalWaterSurfaceChunks||assembly.wetFloorChunks!==152||assembly.waterBorderChunks!==152))throw Error('Original selection assembly is incomplete');
     for(const part of parts)scene.add(part.root);
     const track=createCreationCameraTrack(profile,{pose:profile.configuredInitialPose,group:-1});
     // Original CharacterChooseRace ENTER_RACE=0 -> panel table[0]=3.

@@ -47,7 +47,7 @@ export async function prepare(root,{stage=false}={}){
     const entryUI=Boolean(files['/assets/source-entry/entry.json']);
     const path=resolve(destination,'staged-entry.js');
     const creationPreview=Boolean(files['/assets/source-creation-stage/manifest.json']);
-    const creationProfile=files['/assets/source-creation-stage/manifest-v2.json']?'/assets/source-creation-stage/manifest-v2.json':'/assets/source-creation-stage/manifest.json';
+    const creationProfile=files['/assets/source-creation-stage/manifest-v3.json']?'/assets/source-creation-stage/manifest-v3.json':files['/assets/source-creation-stage/manifest-v2.json']?'/assets/source-creation-stage/manifest-v2.json':'/assets/source-creation-stage/manifest.json';
     let entrySource=stageEntry(await readFile(files['/explore-map.js'].path,'utf8'),{entryUI,creationPreview,creationProfile});
     if(files[INSIDE_MANIFEST])entrySource=stageInsideEntry(entrySource);
     if(files[CHARACTER_PANEL_MANIFEST])entrySource=stageCharacterHotbarEntry(stageCharacterPanelsEntry(entrySource));

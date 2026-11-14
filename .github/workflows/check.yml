@@ -160,6 +160,8 @@ jobs:
       - run: python tools/species_world_queue_tests.py
       - run: node --test tools/species_world_motion_tests.mjs
       - run: python tools/selection_stage_delivery_tests.py
+      - run: python tools/selection_stage_groups_delivery_tests.py
+      - run: python tools/selection_scene_water_floor_group_copy_tests.py
       - run: python tools/selection_scene_flowers_tests.py
       - run: python tools/selection_scene_waterfalls_tests.py
       - run: python tools/selection_scene_grass_tests.py

@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 const BASE='ba9645330507b105d034902953b39eba47113aa46b0c38b592c5c6c9ae2a4377';
 export function stageEntry(source,{entryUI=false,creationPreview=false,creationProfile='/assets/source-creation-stage/manifest.json'}={}){
   if(creationPreview&&!entryUI)throw Error('Recovered original entry is required for race preview');
-  if(!['/assets/source-creation-stage/manifest.json','/assets/source-creation-stage/manifest-v2.json'].includes(creationProfile))throw Error('Unverified original creation profile route');
+  if(!['/assets/source-creation-stage/manifest.json','/assets/source-creation-stage/manifest-v2.json','/assets/source-creation-stage/manifest-v3.json'].includes(creationProfile))throw Error('Unverified original creation profile route');
   if(createHash('sha256').update(source).digest('hex')!==BASE)throw Error('Staged loader source identity differs');
   const replace=(from,to)=>{if(source.split(from).length!==2)throw Error('Staged loader anchor differs');source=source.replace(from,to);};
   replace("import { RESOURCE_WORLD } from './world.js';","import { RESOURCE_WORLD } from '/__delivery/trial-world.js';");

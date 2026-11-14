@@ -12,9 +12,25 @@ export function entryServer(source,traceURL){
   if(observed.split(spawn).length!==2)throw Error('Entry placement anchor differs');
   const scene="        const scene = msg.scene || 'camp';";
   if(observed.split(scene).length!==2)throw Error('Entry scene anchor differs');
-  return observed.replace(anchor,anchor+'\n    entryStore:store,entryActive:activeCharacters,')
+  let result=observed.replace(anchor,anchor+'\n    entryStore:store,entryActive:activeCharacters,')
     .replace(spawn,'x: restorePosition ? position.x : world.spawn.x + (sourceWindow?0:index * 35),')
     .replace(scene,"        if(msg.lab!==undefined)return reject(ws,'本地碰撞测试入口已停用，请从正式地图入口进入');\n"+scene);
+  const replace=(from,to)=>{if(result.split(from).length!==2)throw Error('Runtime recovery anchor differs');result=result.replace(from,to);};
+  replace('createGameServer({ maxPlayersPerRoom=8,','createGameServer({ onRuntimeFailure=null, maxPlayersPerRoom=8,');
+  replace('  let storageError = null;','  let storageError = null, runtimeError = null;');
+  replace('        activeCharacters.set(ws.player.id, ws);','        ws.entryJoinedAt=Date.now();activeCharacters.set(ws.player.id, ws);');
+  replace("        res.writeHead(200, { 'Content-Type': 'application/json' });", "        res.writeHead(storageError||runtimeError?503:200, { 'Content-Type': 'application/json' });");
+  replace('ok: !storageError,','ok: !storageError&&!runtimeError,');
+  replace('  const storageFailure = error => {',`  const storageFailure = error => {
+    if(isPhysicsTransportFailure(error)){
+      if(runtimeError)return;
+      runtimeError=error;console.error(error.message);
+      for(const ws of activeCharacters.values())notice(ws,'场景计算暂时中断，服务正在恢复，请稍后重新进入');
+      onRuntimeFailure?.(error);return;
+    }`);
+  replace("      if (storageError) return reject(ws, '存档当前不可用，请检查服务器后重试');", "      if(runtimeError)return reject(ws,'场景服务正在恢复，请稍后重新进入');\n      if (storageError) return reject(ws, '存档当前不可用，请检查服务器后重试');");
+  replace('    if (storageError) return;','    if (storageError||runtimeError) return;');
+  return `import {isPhysicsTransportFailure} from ${JSON.stringify(new URL('./runtime_recovery.mjs',import.meta.url).href)};\n`+result;
 }
 
 export function trialRoleManager(store,active,{archive=record=>{

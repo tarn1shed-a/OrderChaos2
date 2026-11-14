@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>服务器玩家管理</title><link rel="stylesheet" href="/admin/admin.css"><script type="module" src="/admin/admin.js"></script></head>
+<body><main>
+<header><div><p class="eyebrow">ORDER & CHAOS 2 · SERVER</p><h1>服务器玩家</h1><p class="muted">在线状态与角色资料 · 只读</p></div><button id="logout" hidden>退出后台</button></header>
+<section id="login-panel" class="card login"><h2>管理后台登录</h2><p class="muted">使用服务器管理密码查看玩家资料。</p><form id="login"><label for="password">管理密码</label><input id="password" type="password" autocomplete="current-password" required><button type="submit">登录</button></form></section>
+<p id="message" role="status" aria-live="polite"></p>
+<section id="dashboard" hidden>
+<div class="stats"><article class="card"><span>在线玩家</span><strong id="online">—</strong></article><article class="card"><span>已存角色</span><strong id="total">—</strong></article><article class="card"><span>最近刷新 · 本地时间</span><strong id="updated" class="time">—</strong></article></div>
+<section class="card"><div class="toolbar"><h2>玩家列表</h2><div class="filters"><label class="check"><input id="only-online" type="checkbox">只看在线</label><input id="search" type="search" placeholder="搜索名字、角色 ID 或房间" aria-label="搜索玩家"><button id="refresh">刷新</button></div></div>
+<div class="table-wrap"><table><thead><tr><th>状态</th><th>角色</th><th>职业</th><th>等级</th><th>经验</th><th>生命</th><th>金币</th><th>房间</th><th>本次进入</th><th></th></tr></thead><tbody id="players"></tbody></table></div><p id="empty" class="muted" hidden>没有符合条件的角色。</p></section>
+<section id="detail" class="card" hidden><div class="toolbar"><h2 id="detail-title">角色详情</h2><button id="close-detail">收起</button></div><dl id="detail-fields"></dl></section>
+<p class="muted footnote">每 5 秒刷新在线状态。经验等数值来自当前服务器存档；此后台不修改角色。</p>
+</section></main></body></html>

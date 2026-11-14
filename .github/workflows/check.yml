@@ -134,6 +134,10 @@ jobs:
         with:
           node-version: '22'
       - run: python tools/character_equipped_tests.py
+      - run: python tools/tutorial_scene_effects_tests.py
+      - run: python tools/tutorial_scene_effects_lifecycle_tests.py
+      - run: python tools/tutorial_scene_effects_admission_tests.py
+      - run: python tools/tutorial_scene_effects_fire10_tests.py
       - run: node --test tools/local_mvp_tests.mjs
       - run: node --test tools/self_name_tests.mjs
       - run: node --test tools/runtime_recovery_tests.mjs

@@ -18,6 +18,8 @@
 !tools/preview/map-runtime-inside-overlay.mjs
 !tools/preview/character-panel-runtime-overlay.mjs
 !tools/preview/character-hotbar-overlay.mjs
+!tools/preview/source-scene-effect-overlay.mjs
+!tools/preview/source-scene-effect-fire10-overlay.mjs
 !tools/local_mvp_runtime.json
 !tools/requirements-native.txt
 !tools/requirements-resources.txt

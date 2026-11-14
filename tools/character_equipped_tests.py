@@ -6,10 +6,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from character_equipped_evidence import ROOT,RAW,LIBRARY,recover,load_tables
-from character_equipped_probe import CharacterEquippedProbe
 from resource_packs import DEFAULT_SOURCE
 
+ROOT=Path(__file__).resolve().parents[1]
+RAW=ROOT/'analysis/raw/character-equipped-20261114'
+LIBRARY=ROOT/'analysis/raw/ghidra-mcp-20261110/input/libOrderChaos2.so'
 NODE=shutil.which('node')or'/Users/kevin/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node'
 
 
@@ -61,6 +62,8 @@ class OriginalEquippedTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from analyze_native_resources import NativeImage
+        from character_equipped_evidence import recover,load_tables
+        from character_equipped_probe import CharacterEquippedProbe
         RAW.mkdir(parents=True,exist_ok=True);cls.temp=tempfile.TemporaryDirectory(prefix='test-',dir=RAW)
         cls.report=recover(Path(cls.temp.name)/'evidence');cls.tables,_=load_tables();cls.probe=CharacterEquippedProbe(NativeImage(LIBRARY.read_bytes()))
 

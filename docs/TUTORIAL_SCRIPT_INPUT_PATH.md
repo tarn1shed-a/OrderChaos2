@@ -40,6 +40,8 @@ Java的实际指令是字符串引用比较，不能简化为 `isEmpty` 或 `equ
 
 最初 `/Users/kevin/Public/com.gameloft.android.ANMP.GloftO2HM/files/InitialFeed.dat` 与项目当前文件是两个独立路径，均1084字节，逐字节一致，SHA256均为 `a794b8e66758bdfd0baa09dd472c31034a5c16360f7ac38d5441bf093f3e5c55`。原APK成员和现有GBMP索引没有同名候选；不能因此排除动态名字或未提供的外部内容。完整路径核查与原DEX复制过程留在私有origin证据中。
 
+OBB路径另有本版本限制：[原 `RetrieveObbPath()`](TUTORIAL_SCRIPT_OBB_PATH.md) 实际返回字面 `NA`。原App确有具名main/patch挂载尝试，但标准Android/obb只能列为额外资料候选，不能据未找到两个文件就认定缺包导致主线失败。该原Java方法没有现场执行观察，也不排除其它原生全局setter覆盖。
+
 原默认FS需要分清：已打开流缓存、按组查找的挂载归档、最后的散装文件打开是不同来源。缓存命中不等于改名，也不能凭空创建一条成功流；具体缓存生产者及可选hotfix挂载见 [缓存和挂载入口](TUTORIAL_SCRIPT_STREAM_REGISTRATION.md)。尚未观察到 `InitialFeed.dat` 命中哪个活动归档或缓存，不能将候选覆盖顺序当成实际选中结果。
 
 ## 与完整主线之间的剩余缺口

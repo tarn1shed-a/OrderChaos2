@@ -14,6 +14,7 @@ import {createRuntimeRecovery} from './runtime_recovery.mjs';
 import {installAdmin} from './admin_server.mjs';
 import {createMapInspector,stageInspectorServer} from './map_inspector.mjs';
 import {applyPositionRepair} from './role_position_repair.mjs';
+import {stageSourceAvatarServer} from './source_avatar_server.mjs';
 
 const root=resolve(new URL('../',import.meta.url).pathname);
 const runtime=resolve(root,'analysis/raw/portable/running-preview');
@@ -30,7 +31,7 @@ const base=pathToFileURL(runtime+'/prototype/');
 const {loadNativeWindowCollision}=await import(new URL('game/native-window-collision.mjs',base));
 const {loadGameplay}=await import(new URL('game/basic-attack.mjs',base));
 const observed=new URL('server-observed.mjs',base);
-writeFileSync(observed,stageInspectorServer(entryServer(readFileSync(new URL('server.mjs',base),'utf8'),new URL('./movement_trace.mjs',import.meta.url).href)));
+writeFileSync(observed,stageInspectorServer(stageSourceAvatarServer(entryServer(readFileSync(new URL('server.mjs',base),'utf8'),new URL('./movement_trace.mjs',import.meta.url).href))));
 const {createGameServer}=await import(observed);
 const motion=configureTrialEntry(loadNativeWindowCollision(new URL('native-physics.json',base)));
 if(!motion?.sourceNative)throw Error('Original collision inputs are unavailable; no fallback');

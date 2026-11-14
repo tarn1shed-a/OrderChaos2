@@ -1,6 +1,7 @@
 // Existing web credentials only. Read atomically saved JSON; never create/touch a role.
 import {readFile} from 'node:fs/promises';
 import {createHash,timingSafeEqual} from 'node:crypto';
+import {sourceAvatar} from './source_avatar_state.mjs';
 export function entryCharacters(save,identities){
   if(save.version!==6||!Array.isArray(save.characters))throw Error('Unsupported saved roles');
   if(!Array.isArray(identities)||identities.length>32)throw Error('Invalid role request');
@@ -11,7 +12,8 @@ export function entryCharacters(save,identities){
     if(!c||seen.has(c.id)||! /^[0-9a-f]{64}$/.test(c.tokenHash))continue;
     const actual=createHash('sha256').update(identity.resumeToken).digest();
     if(!timingSafeEqual(actual,Buffer.from(c.tokenHash,'hex')))continue;
-    seen.add(c.id);result.push({id:c.id,name:c.name,level:c.level,profession:c.profession});
+    seen.add(c.id);result.push({id:c.id,name:c.name,level:c.level,profession:c.profession,
+      ...(Object.hasOwn(c,'sourceAvatar')?{sourceAvatar:sourceAvatar(c.sourceAvatar)}:{})});
   }
   return result;
 }

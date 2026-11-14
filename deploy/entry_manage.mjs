@@ -4,6 +4,7 @@ import {mkdirSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {observeServer} from './observe_server.mjs';
 import {entryNameError} from './entry_name.mjs';
+import {sourceAvatar} from './source_avatar_state.mjs';
 
 export function entryServer(source,traceURL){
   const observed=observeServer(source,traceURL),anchor='    server, rooms, combatRooms,';
@@ -37,7 +38,7 @@ export function trialRoleManager(store,active,{archive=record=>{
   if(!store.saveFile)return;
   const folder=join(dirname(store.saveFile),'deleted-roles');mkdirSync(folder,{recursive:true,mode:0o700});
   writeFileSync(join(folder,record.id+'-'+randomUUID()+'.json'),JSON.stringify(record,null,2),{flag:'wx',mode:0o600});
-},now=Date.now,entryPosition=null,backupEntry=record=>{
+},now=Date.now,entryPosition=null,sourceAvatarDraft=null,backupEntry=record=>{
   if(!store.saveFile)return;
   const folder=join(dirname(store.saveFile),'entry-backups');mkdirSync(folder,{recursive:true,mode:0o700});
   writeFileSync(join(folder,record.id+'-'+randomUUID()+'.json'),JSON.stringify(record,null,2),{flag:'wx',mode:0o600});
@@ -66,14 +67,17 @@ export function trialRoleManager(store,active,{archive=record=>{
     create(data){
       // Only the avatar actually supported by the current preview may be created.
       // No substitute human/orc model, appearance or village/spawn is invented.
-      if(data.race!==2||data.gender!==1)throw Error('此种族或性别的角色外观尚未接入，未创建角色');
+      const chosen=sourceAvatarDraft?.({race:data.race,gender:data.gender,profession:data.profession})||null;
+      if((data.race!==2||data.gender!==1)&&!chosen)throw Error('此种族或性别的角色外观尚未接入，未创建角色');
+      if(chosen&&store.sourceAvatarPersistence!==true)throw Error('角色种族存档接线尚未就绪，未创建角色');
       if(![1,2,3,4,5].includes(data.profession))throw Error('职业无效');
       const name=data.name;
       const error=entryNameError(name);if(error)throw Error(error);
       const entries=[...store.records],dirty=store.dirty,savedAt=store.savedAt;
       try{
-        const identity=store.resolveCharacter(name,undefined,undefined,data.profession);
-        return {character:{id:identity.record.id,name:identity.record.name,level:identity.record.level,profession:identity.record.profession},resumeToken:identity.resumeToken};
+        const identity=store.resolveCharacter(name,undefined,undefined,data.profession,...(chosen?[sourceAvatar(chosen)]:[]));
+        return {character:{id:identity.record.id,name:identity.record.name,level:identity.record.level,profession:identity.record.profession,
+          ...(chosen?{sourceAvatar:sourceAvatar(identity.record.sourceAvatar)}:{})},resumeToken:identity.resumeToken};
       }catch(error){store.records.clear();for(const[id,value]of entries)store.records.set(id,value);store.dirty=dirty;store.savedAt=savedAt;throw error;}
     },
     challenge(identity){

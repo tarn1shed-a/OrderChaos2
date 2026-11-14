@@ -18,13 +18,21 @@ test('race-preview admission rejects unavailable stages, models, worlds and exte
  for(const change of [null,{}, {...profile,mapId:5},{...profile,createsPlayableRole:true},{...profile,stages:['CharacterChoosePart']},{...profile,wholeCreationRestored:true},
   {...profile,scene:'https://external.invalid/model.json'},{...profile,stage:'/assets/source-creation-stage/../other.json'},{...profile,previews:{...profile.previews,'2:0':profile.previews['0:0']}}])assert.throws(()=>validate(change));
 });
+test('extended selection profile admits only the six reviewed append interfaces',()=>{
+ const p={...profile,format:'oc2-source-creation-preview-delivery-v2',originalStaticInstances:151,originalDryChunks:192,originalWaterSurfaceChunks:152,originalWetFloorRestored:true,
+  extensions:[['dry','water'],['flowers','flowers'],['grass','grass'],['waterfalls','waterfalls'],['waterSurface','water-surface'],['wetFloor','water-floor']].map(([kind,ns])=>({kind,url:`/assets/source-selection-${ns}/overlay.json`}))};
+ assert.equal(validate(p),p);
+ for(const change of [{...p,originalStaticInstances:152},{...p,originalWetFloorRestored:false},{...p,extensions:p.extensions.slice(1)},
+  {...p,extensions:[...p.extensions].reverse()},{...p,extensions:p.extensions.map((e,i)=>i?e:{...e,url:'/assets/source-selection-scene/manifest.json'})},
+  {...profile,extensions:p.extensions}])assert.throws(()=>validate(change));
+});
 test('preview host has no character mutation endpoint and keeps unsupported role stages outside admission',()=>{
  assert(!source.includes('WebSocket'));assert(!source.includes("method:'POST'"));assert(!source.includes('localStorage'));
  assert(source.includes("screen!=='CharacterChooseRace'"));
  const css=readFileSync(new URL('../deploy/entry_ui.css',import.meta.url),'utf8');assert(css.includes('object-fit:contain'));assert(css.includes('pointer-events:none'));
 });
 test('race-only preparation does not become a map-entry gate or prefetch unrelated character textures',()=>{
- const original={critical:['/explore-map.js','/assets/source-creation-stage/manifest.json','/assets/source-selection-scene/manifest.json','/__delivery/entry_ui.mjs'],background:['/assets/source-temple-sampling/far.png','/assets/source-creation-human-female/assets/body.png'],scope:{unchanged:true}};
+ const original={critical:['/explore-map.js','/assets/source-creation-stage/manifest.json','/assets/source-selection-scene/manifest.json','/__delivery/entry_ui.mjs'],background:['/assets/source-temple-sampling/far.png','/assets/source-creation-human-female/assets/body.png','/selection_scene_water_surface.js','/assets/source-selection-water-surface/overlay.json'],scope:{unchanged:true}};
  const before=JSON.stringify(original),actual=creationPreviewPlan(original,[...original.critical,...original.background]);
  assert.deepEqual(actual.critical,['/explore-map.js','/__delivery/entry_ui.mjs']);assert.deepEqual(actual.background,['/assets/source-temple-sampling/far.png']);assert.equal(JSON.stringify(original),before);
  assert.equal(actual.scope.unchanged,true);assert.equal(actual.scope.creationPreviewChangesPlayableRaces,false);
@@ -35,4 +43,7 @@ test('preview routing is opt-in and leaves the existing entry, world and saves u
  const original=readFileSync(path,'utf8'),old=stageEntry(original,{entryUI:true}),next=stageEntry(original,{entryUI:true,creationPreview:true});
  const addition="previewURL:'/assets/source-creation-stage/manifest.json',";
  assert.equal(next.replace(addition,''),old);assert.throws(()=>stageEntry(original,{creationPreview:true}));
+ const extended=stageEntry(original,{entryUI:true,creationPreview:true,creationProfile:'/assets/source-creation-stage/manifest-v2.json'});
+ assert.equal(extended.replace("previewURL:'/assets/source-creation-stage/manifest-v2.json',",''),old);
+ assert.throws(()=>stageEntry(original,{entryUI:true,creationPreview:true,creationProfile:'https://external.invalid/profile'}));
 });

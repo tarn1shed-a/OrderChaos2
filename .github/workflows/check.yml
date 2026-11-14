@@ -159,6 +159,13 @@ jobs:
       - run: node --test tools/creation_stage_tests.mjs tools/creation_preview_tests.mjs tools/character_creation_preview_proposal_tests.mjs
       - run: python tools/species_world_queue_tests.py
       - run: node --test tools/species_world_motion_tests.mjs
+      - run: python tools/selection_stage_delivery_tests.py
+      - run: python tools/selection_scene_flowers_tests.py
+      - run: python tools/selection_scene_waterfalls_tests.py
+      - run: python tools/selection_scene_grass_tests.py
+      - run: python tools/selection_scene_water_tests.py
+      - run: python tools/selection_scene_water_surface_tests.py
+      - run: python tools/selection_scene_water_floor_tests.py
       - run: node --test tools/runtime_recovery_tests.mjs
       - run: node --test tools/admin_tests.mjs
       - run: node --test tools/map_inspector_tests.mjs

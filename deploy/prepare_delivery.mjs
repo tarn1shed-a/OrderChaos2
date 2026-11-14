@@ -17,6 +17,7 @@ import {stageFire10Entry,stageFire10Plan,FIRE10_MANIFEST} from '../tools/preview
 import {stageUnstuckEntry} from './unstuck_entry.mjs';
 import {stageInspectorEntry} from './map_inspector_ui.mjs';
 import {stageTutorialSkyEntry,stageTutorialSkyPlan,SKY_MANIFEST} from '../tools/preview/source-tutorial-sky-overlay.mjs';
+import {creationPreviewPlan} from './creation_plan.mjs';
 
 export const TYPES={'.svg':'image/svg+xml','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.png':'image/png','.woff':'font/woff','.glsl':'text/plain; charset=utf-8','.rgba':'application/octet-stream','.glb':'model/gltf-binary'};
 const sha=raw=>createHash('sha256').update(raw).digest('hex');
@@ -45,7 +46,8 @@ export async function prepare(root,{stage=false}={}){
     await writeFile(worldPath,worldRaw);files['/__delivery/trial-world.js']={path:worldPath,bytes:worldRaw.length,sha256:sha(worldRaw),type:TYPES['.js']};
     const entryUI=Boolean(files['/assets/source-entry/entry.json']);
     const path=resolve(destination,'staged-entry.js');
-    let entrySource=stageEntry(await readFile(files['/explore-map.js'].path,'utf8'),{entryUI});
+    const creationPreview=Boolean(files['/assets/source-creation-stage/manifest.json']);
+    let entrySource=stageEntry(await readFile(files['/explore-map.js'].path,'utf8'),{entryUI,creationPreview});
     if(files[INSIDE_MANIFEST])entrySource=stageInsideEntry(entrySource);
     if(files[CHARACTER_PANEL_MANIFEST])entrySource=stageCharacterHotbarEntry(stageCharacterPanelsEntry(entrySource));
     if(files[SCENE_EFFECT_MANIFEST])entrySource=stageSceneEffectsEntry(entrySource);
@@ -62,6 +64,7 @@ export async function prepare(root,{stage=false}={}){
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES['.mjs']};}
     if(entryUI)for(const name of ['entry_ui.mjs','entry_ui.css','entry_name.mjs','attribute_ui.mjs','attribute_state.mjs','attribute_ui.css','attribute_preview.mjs','self_name.mjs','character_hotbar.mjs','map_inspector_ui.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES[extname(name)]};}
+    if(creationPreview){const path=resolve(root,'deploy/creation_preview.mjs'),raw=await readFile(path);files['/__delivery/creation_preview.mjs']={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.mjs']};}
     if(files['/assets/source-unstuck/unstuck.json'])for(const name of ['unstuck_ui.mjs','unstuck_ui.css','unstuck_state.mjs','unstuck_return.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES[extname(name)]};}
   }
@@ -110,6 +113,7 @@ export async function prepare(root,{stage=false}={}){
     plans['/explore-map.js']={...plan,background:[...new Set([...plan.background,...added])],scope:{...plan.scope,originalUnstuckUI:true,unstuckDestination:'cinematic7-host-adapter'}};
   }
   if(stage&&files[SKY_MANIFEST])plans['/explore-map.js']=stageTutorialSkyPlan(plans['/explore-map.js'],texts);
+  if(stage&&files['/assets/source-creation-stage/manifest.json'])plans['/explore-map.js']=creationPreviewPlan(plans['/explore-map.js'],urls);
   const index={format:'oc2-delivery-v1',revision,files:publicFiles,plans};
   const internal={...index,files};
   await writeFile(resolve(destination,'index.json'),JSON.stringify(internal));

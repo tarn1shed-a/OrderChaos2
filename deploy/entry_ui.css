@@ -4,6 +4,10 @@
 .source-entry{position:fixed;inset:0;z-index:10000;background:#000;overflow:hidden;display:grid;place-items:center}
 .source-entry[hidden]{display:none}
 .source-entry>svg{display:block;width:100%;height:100%}
+.source-entry>svg{position:relative;z-index:1}
+.source-creation-preview{position:absolute;inset:0;margin:auto;width:100%;height:100%;object-fit:contain;pointer-events:none}
+.source-creation-preview[hidden]{display:none}
+.source-entry>.source-entry-field{z-index:2}
 .source-entry[data-source-screen="QuickLogin"]>svg{width:min(360px,calc(100vw - 40px));height:min(540px,calc(100dvh - 48px))}
 .source-entry[data-source-screen="CharacterDelete"]>svg{width:min(400px,calc(100vw - 40px));height:min(640px,calc(100dvh - 48px))}
 .source-entry[data-source-screen="LoginMsgBox"]>svg{width:min(630px,calc(100vw - 40px));height:min(370px,calc(100dvh - 48px))}

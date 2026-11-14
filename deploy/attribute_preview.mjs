@@ -13,7 +13,7 @@ export const ATTRIBUTE_PREVIEW={
  light:[-.6875166296958923,.6875166296958923,.2337557077407837],
  format:'oc2-source-model3d-first-frame-v1',
 };
-const TYPES=new Set(['lt_cull_pal_normal_skin_solid.bdae','lt_cull_pal_normal_solid.bdae','lt_pal_normal_solid.bdae','lt_pal_normal_trans.bdae','lt_cull_pal_normal_skin_trans.bdae','lt_pal_normal_skin_trans.bdae']);
+const TYPES=new Set(['lt_cull_pal_normal_skin_solid.bdae','lt_cull_pal_normal_solid.bdae','lt_pal_normal_solid.bdae','lt_pal_normal_trans.bdae','lt_cull_pal_normal_skin_trans.bdae','lt_pal_normal_skin_trans.bdae','lt_cull_pal_normal_trans.bdae']);
 let shaderPromise;
 async function sourceShaders(){
  if(!shaderPromise)shaderPromise=Promise.all(Object.entries(SHADERS).map(async([name,sha])=>{
@@ -33,8 +33,9 @@ export function previewGlobals(lighting){
  return paletteGlobals(t.colors.light_ambient.map(byte),t.colors.light_diffuse.map(byte),
   ['intensity_char_ambient','intensity_char_diffuse','intensity_char_specular'].map(k=>t.intensities[k]));
 }
-function material(THREE,entry,textures,programs,object,colors,globals,lighting){
+function material(THREE,entry,textures,programs,object,colors,globals,lighting,sourceLight=ATTRIBUTE_PREVIEW.light){
  if(!TYPES.has(entry.effectPath)||entry.sourceTechniqueName!=='tech0')throw Error('尚未恢复此人物预览材质');
+ if(!Array.isArray(sourceLight)||sourceLight.length!==3||!sourceLight.every(Number.isFinite))throw Error('原人物光方向缺失');
  const skin=entry.defines.includes('SKIN_COLOR'),u={},maps=Object.entries(entry.samplers);
  for(const [slot,url]of maps){
   const tex=textures.get(url);if(!tex||tex.flipY!==false||tex.colorSpace!==THREE.NoColorSpace)throw Error('原人物预览贴图未就绪');
@@ -57,7 +58,7 @@ function material(THREE,entry,textures,programs,object,colors,globals,lighting){
   defines,uniforms:u,side:entry.effectPath.startsWith('lt_cull_')?THREE.FrontSide:THREE.DoubleSide,
   transparent:false,blending:THREE.NoBlending,depthTest:true,depthWrite:true,depthFunc:THREE.LessEqualDepth,toneMapped:false});
  m.defaultAttributeValues={Tangent:[1,0,0],Binormal:[0,1,0]};
- const view=new THREE.Matrix4(),eye=new THREE.Vector3(),bone=new THREE.Matrix4(),light=new THREE.Vector3(...ATTRIBUTE_PREVIEW.light);
+ const view=new THREE.Matrix4(),eye=new THREE.Vector3(),bone=new THREE.Matrix4(),light=new THREE.Vector3(...sourceLight);
  m.userData.sourceAttributePreview=true;
  m.onBeforeRender=(_r,_s,camera)=>{
   const world=object.matrixWorld,inv=u.WorldInv.value.copy(world).invert();u.World.value.copy(world);
@@ -75,6 +76,9 @@ function material(THREE,entry,textures,programs,object,colors,globals,lighting){
  };
  return m;
 }
+// Shared original program/material transport; callers must supply their own
+// source-backed colors, light and scene context. Existing Model3D defaults stay.
+export {sourceShaders as loadSourceCharacterPrograms,material as createSourceCharacterMaterial};
 export async function renderAttributePreview(THREE,renderer,resources,createModel,role,lighting,{width,height}){
  if(!resources||!createModel)return null;
  if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1||Math.max(width,height)>renderer.capabilities.maxTextureSize)throw Error('人物预览尺寸无效');

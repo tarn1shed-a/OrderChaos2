@@ -9,13 +9,21 @@ export function savedEntryIdentities(storage){
     return Object.values(saved.characters).filter(v=>v&&typeof v.id==='string'&&typeof v.token==='string'&&/^[0-9a-f-]{36}$/.test(v.id)&&/^[0-9a-f]{64}$/.test(v.token)).slice(0,32).map(v=>({characterId:v.id,resumeToken:v.token}));
   }catch{return [];}
 }
-export function createSourceEntry({connect}){
+export function createSourceEntry({connect,previewURL=null}){
   const css=document.createElement('link');css.rel='stylesheet';css.href='/__delivery/entry_ui.css';document.head.append(css);
   const root=document.createElement('section');root.className='source-entry';root.hidden=true;root.setAttribute('aria-label','登录与角色选择');document.body.append(root);
   let manifest=null,screen=null,selected=null,roles=[],identities=[],isReady=false,busy=false,pendingError=null,listOffset=0;
   let draft={race:0,gender:0,cls:0,name:''};
+  let racePreview=null,previewPromise=null;
+  function hidePreview(){racePreview?.hide();}
+  function updateRacePreview(){
+    if(!previewURL)return;
+    const current={screen:root.dataset.sourceScreen,race:draft.race,gender:draft.gender};
+    if(!previewPromise)previewPromise=import('./creation_preview.mjs').then(({createSourceCreationPreview})=>racePreview=createSourceCreationPreview(root,{profileURL:previewURL}));
+    previewPromise.then(p=>{if(root.dataset.sourceScreen===current.screen&&draft.race===current.race&&draft.gender===current.gender&&!root.hidden)return p.show(current);}).catch(error=>{root.dataset.sourceCreationError=error.message;});
+  }
   const blocked=new Map();
-  function hideRoot(){root.hidden=true;for(const[el,value]of blocked)el.inert=value;blocked.clear();}
+  function hideRoot(){racePreview?.dispose();racePreview=null;previewPromise=null;root.hidden=true;for(const[el,value]of blocked)el.inert=value;blocked.clear();}
   const api=async(path,data)=>{const r=await fetch('/__entry/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),cache:'no-store'}),v=await r.json();if(!r.ok)throw Error(v.error||'请求失败');return v;};
   function remember(role,token){
     const saved=JSON.parse(localStorage.getItem('oc2.character-slots.v1')||'{"characters":{},"lastName":""}');
@@ -87,6 +95,7 @@ export function createSourceEntry({connect}){
     if(v.format!=='oc2-source-entry-ui-v1')throw Error('Original entry profile differs');manifest=v;return v;
   });
   async function show(name){
+    hidePreview();
     await loaded;const profile=manifest.windows[name];const response=await fetch(profile.url);if(!response.ok)throw Error('Original entry drawing unavailable');
     const parsed=new DOMParser().parseFromString(await response.text(),'image/svg+xml');
     if(parsed.querySelector('parsererror,script,foreignObject'))throw Error('Invalid original entry drawing');
@@ -220,10 +229,13 @@ export function createSourceEntry({connect}){
       for(const[which,value]of [['Male',0],['Female',1]]){
         q('._'+which+'Btn').setAttribute('display',draft.race===4?'none':'inline');q('._'+which+'Btn.SelectedEff').setAttribute('display',draft.gender===value?'inline':'none');
       }
+      updateRacePreview();
     };
     for(let i=0;i<5;i++){const path='._RaceList.Item_'+i;hide(path+'.IsLockedForSkill');image(q(path+'.DisplayIcon'),icon('race_'+raceNames[i]));button(q(path),word('GENERAL_CH_SELEC_'+raceTitles[i]),()=>{draft.race=i;if(i===4)draft.gender=0;update();});}
     for(const[which,value]of [['Male',0],['Female',1]]){hide('._'+which+'Btn.IsLockedForSkill');image(q('._'+which+'Btn.DisplayIcon'),icon(which.toLowerCase()));button(q('._'+which+'Btn'),word('GENERAL_CH_SELEC_'+(value?23:24)),()=>{draft.gender=value;update();});}
-    hide('._RaceDescMC._ScrollBar');update();
+    // Original txt_select_class -> ScrollPane -> UIComponent constructor
+    // hides its mc_bounds authoring rectangle (code SHA 24e6fc6e…279df6).
+    hide('._RaceDescMC._Detail.mc_bounds');hide('._RaceDescMC._ScrollBar');update();
   }
   async function profession(){
     await show('CharacterChooseClass');creationPositions('Class');navigation(race,appearance);

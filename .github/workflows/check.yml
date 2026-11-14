@@ -66,6 +66,8 @@ jobs:
       - run: python tools/tutorial_sky_candidate_tests.py
       - run: python tools/tutorial_sky_delivery_tests.py
       - run: python tools/creation_scene_camera_tests.py
+      - run: python tools/creation_stage_tests.py
+      - run: python tools/creation_preview_delivery_tests.py
       - run: python tools/scene_sky_frame_tests.py
       - run: python tools/scene_sky_draw_tests.py
       - run: python tools/scene_sky_collection_tests.py
@@ -154,6 +156,7 @@ jobs:
       - run: python tools/tutorial_scene_effects_fire10_tests.py
       - run: node --test tools/local_mvp_tests.mjs
       - run: node --test tools/self_name_tests.mjs
+      - run: node --test tools/creation_stage_tests.mjs tools/creation_preview_tests.mjs tools/character_creation_preview_proposal_tests.mjs
       - run: node --test tools/runtime_recovery_tests.mjs
       - run: node --test tools/admin_tests.mjs
       - run: node --test tools/map_inspector_tests.mjs

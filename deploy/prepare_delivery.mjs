@@ -14,6 +14,7 @@ import {stageCharacterPanelsEntry,stageCharacterPanelsPlan,CHARACTER_PANEL_MANIF
 import {stageCharacterHotbarEntry} from '../tools/preview/character-hotbar-overlay.mjs';
 import {stageSceneEffectsEntry,stageSceneEffectsPlan,SCENE_EFFECT_MANIFEST} from '../tools/preview/source-scene-effect-overlay.mjs';
 import {stageFire10Entry,stageFire10Plan,FIRE10_MANIFEST} from '../tools/preview/source-scene-effect-fire10-overlay.mjs';
+import {stageUnstuckEntry} from './unstuck_entry.mjs';
 
 export const TYPES={'.svg':'image/svg+xml','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.png':'image/png','.woff':'font/woff','.glsl':'text/plain; charset=utf-8','.rgba':'application/octet-stream','.glb':'model/gltf-binary'};
 const sha=raw=>createHash('sha256').update(raw).digest('hex');
@@ -47,11 +48,14 @@ export async function prepare(root,{stage=false}={}){
     if(files[CHARACTER_PANEL_MANIFEST])entrySource=stageCharacterHotbarEntry(stageCharacterPanelsEntry(entrySource));
     if(files[SCENE_EFFECT_MANIFEST])entrySource=stageSceneEffectsEntry(entrySource);
     if(files[FIRE10_MANIFEST])entrySource=stageFire10Entry(entrySource);
+    if(files['/assets/source-unstuck/unstuck.json'])entrySource=stageUnstuckEntry(entrySource);
     const raw=Buffer.from(entrySource);
     await writeFile(path,raw);files['/explore-map.js']={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.js']};
     for(const name of ['staged_scene.mjs','streaming_window.mjs','click_input.mjs','browser_timing.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES['.mjs']};}
     if(entryUI)for(const name of ['entry_ui.mjs','entry_ui.css','entry_name.mjs','attribute_ui.mjs','attribute_state.mjs','attribute_ui.css','attribute_preview.mjs','self_name.mjs','character_hotbar.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
+      files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES[extname(name)]};}
+    if(files['/assets/source-unstuck/unstuck.json'])for(const name of ['unstuck_ui.mjs','unstuck_ui.css','unstuck_state.mjs','unstuck_return.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES[extname(name)]};}
   }
   const urls=Object.keys(files).sort(),sidecars=new Map();let cursor=0;
@@ -94,6 +98,10 @@ export async function prepare(root,{stage=false}={}){
   if(stage&&texts.has(CHARACTER_PANEL_MANIFEST))plans['/explore-map.js']=stageCharacterPanelsPlan(plans['/explore-map.js']);
   if(stage&&texts.has(SCENE_EFFECT_MANIFEST))plans['/explore-map.js']=stageSceneEffectsPlan(plans['/explore-map.js'],texts);
   if(stage&&texts.has(FIRE10_MANIFEST))plans['/explore-map.js']=stageFire10Plan(plans['/explore-map.js'],texts);
+  if(stage&&files['/assets/source-unstuck/unstuck.json']){
+    const plan=plans['/explore-map.js'],added=urls.filter(url=>url.startsWith('/assets/source-unstuck/'));
+    plans['/explore-map.js']={...plan,background:[...new Set([...plan.background,...added])],scope:{...plan.scope,originalUnstuckUI:true,unstuckDestination:'cinematic7-host-adapter'}};
+  }
   const index={format:'oc2-delivery-v1',revision,files:publicFiles,plans};
   const internal={...index,files};
   await writeFile(resolve(destination,'index.json'),JSON.stringify(internal));

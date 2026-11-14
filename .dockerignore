@@ -6,6 +6,7 @@
 !deploy/*.mjs
 !deploy/retired_ui.css
 !deploy/attribute_ui.css
+!deploy/unstuck_ui.css
 !deploy/admin.html
 !deploy/admin.js
 !deploy/admin.css

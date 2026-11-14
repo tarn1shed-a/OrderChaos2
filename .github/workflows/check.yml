@@ -134,6 +134,13 @@ jobs:
       - run: python tools/tutorial_temple_scene_selection_tests.py
       - run: python tools/map_entry_evidence_tests.py
       - run: python tools/tutorial_entry_clues_tests.py
+      - run: python tools/original_unstuck_tests.py
+      - run: python tools/original_unstuck_inputs_tests.py
+      - run: python tools/unstuck_delivery_tests.py
+      - run: python tools/character_position_audit_tests.py
+      - run: python tools/tutorial_fall_recovery_tests.py
+      - run: python tools/tutorial_reentry_reset_tests.py
+      - run: python tools/tutorial_reentry_reset_caller_tests.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -150,6 +157,8 @@ jobs:
         if: ${{ hashFiles('analysis/raw/showcase-20261110/running-preview/prototype/public/hotbar-ui.js') != '' }}
         run: node --test tools/character_hotbar_tests.mjs
       - run: node --check deploy/character_hotbar.mjs
+      - run: node --check deploy/unstuck_ui.mjs
+      - run: node --test tools/unstuck_return_tests.mjs tools/unstuck_entry_tests.mjs tools/unstuck_state_tests.mjs
       - run: node --test tools/static_delivery_tests.mjs tools/delivery_worker_tests.mjs tools/staged_loading_tests.mjs tools/click_input_tests.mjs tools/movement_trace_tests.mjs tools/entry_bridge_tests.mjs tools/entry_management_tests.mjs tools/trial_entry_tests.mjs tools/prototype_retirement_tests.mjs tools/attribute_ui_tests.mjs
       - run: python tools/mvp_capacity_tests.py
       - run: python tools/map_loading_evidence_tests.py

@@ -43,6 +43,8 @@ jobs:
       - run: python tools/map_restoration_inventory_tests.py
       - run: python tools/tutorial_inside_models_tests.py
       - run: python tools/map_runtime_inside_delivery_tests.py
+      - run: python tools/tutorial_npc_tests.py
+      - run: python tools/tutorial_npc_additional_tests.py
       - run: python tools/character_progression_tests.py
       - run: python tools/character_learning_state_tests.py
       - run: python tools/character_attribute_updates_tests.py
@@ -131,6 +133,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: python tools/character_equipped_tests.py
       - run: node --test tools/local_mvp_tests.mjs
       - run: node --test tools/self_name_tests.mjs
       - run: node --test tools/runtime_recovery_tests.mjs

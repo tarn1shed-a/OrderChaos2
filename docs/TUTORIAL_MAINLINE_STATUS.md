@@ -12,6 +12,8 @@
 
 后续离线补证：原App有两个31320 OBB的条件挂载尝试，读器格式已确认；但**本APK的Java `RetrieveObbPath()` 仅返回 `NA`**。因此标准Android/obb位置只是候选，不能把缺OBB认作当前主线阻塞原因，也不能把取得OBB当作唯一下一步。三架构初值字节相同也未提供新的实际解码消费者；这些都没有恢复任务正文，见 [原OBB路径](TUTORIAL_SCRIPT_OBB_PATH.md)、[原归档读器](TUTORIAL_SCRIPT_OBB_READER.md) 和 [跨架构边界](TUTORIAL_SCRIPT_ABI_CROSSCHECK.md)。
 
+最新实际调用补证见 [客户端消费边界](TUTORIAL_SCRIPT_CLIENT_BOUNDARY.md)：原202专用目标标记会消费对象交互记录，独立更新通道为原 `opcode0x22 / GS2C_ObjInteractiveInfoList`。已经定位接收、GUID/对象门及记录复制，尚未取得这些状态的原生产条件。它没有让正式任务成立；主线完整验收门和“缺的别自己补”要求保持。
+
 ## 只保留与主线直接相关的分工
 
 | 负责人 | 本轮范围 | 不继续的范围 |

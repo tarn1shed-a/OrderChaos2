@@ -48,6 +48,8 @@ jobs:
       - run: python tools/tutorial_script_remaining_providers_probe.py --public-only
       - run: python tools/tutorial_script_obb_reader_probe.py --public-only
       - run: python -m py_compile tools/tutorial_script_obb_path_probe.py tools/tutorial_script_abi_crosscheck_probe.py
+      - name: Syntax of offline quest interaction source audit (original ELF stays private)
+        run: python -m py_compile tools/tutorial_quest_interactive_channel_probe.py
       - run: python tools/tutorial_quest_request_tests.py
       - run: python tools/tutorial_quest_zone_tests.py
       - run: python tools/tutorial_elevator_tests.py

@@ -1062,3 +1062,11 @@ M01 A2素材包：308文件、48,098,254字节；SHA256 bddc1cebec29cd5bb3d4fb1a
 - 原OBB读器的ZIP32样式尾22/目录46/本地30、原字节名字及method0/8 raw DEFLATE已离线核清；完整成员打开链未见PK/CRC校验，flags bit3的前置12B行为不能改写成标准后置descriptor。主代理独立复核20函数、14调用、14真槽和52操作；未执行虚假流或解压成功，未取得目录/任务正文。
 - 重要构建纠正：本APK的RetrieveObbPath只有const-string NA、return两条指令。标准Android/obb只是额外候选，不是已证现场路径或主线缺包原因。ARM64/ARMv7/x86虽各有两处相同16B初值，也未得到其它架构真实解码消费者；未另试key、假定雷电ABI或更换Ghidra程序。参见 [脚本加载专项](TUTORIAL_SCRIPT_LOADING.md) 的最新补件。
 - 采集工具的3份草稿仅暂存，Mac真实PowerShell/假ADB7项通过；Windows及真实设备未验，未提交或执行，Windows CI草案已撤下。它不是新手任务的一部分，不混入游戏或用其代替源码取证。原文件、存档与线上服务保持；本批只同步离线研究工具和说明。
+
+### 续项：原任务交互更新通道和实际客户端分支
+
+- 新核原启动 `4cdabc → c96bcc` 的批量表装载，以及 `c94954/c96bcc` 的244/241个真实虚槽40调用。quests/scripts都在统一表装载中，不能把加载scripts.tbl当成执行tutorial_quest202。无原启动或打开成功输入。
+- 同一重点下，NPC子代理核DataManager全局1015处直接引用、原.text ADR/ADRP及段内来源传播，23处额外路径另查10个原getter；未取得绕getter的新任务脚本消费者。主代理验118件清单、10个原getter体及3处实际字段读正例；跨函数别名、未建模运算和完整间接跳表边界保留，不宣称全客户端没有脚本。
+- 从原202立即数具体分支追到 `a32620` 的对象任务目标标记，再沿真实记录写者补到 `opcode0x22 → 589df8 → a403e8 → a4052c → 91a408`。原描述符/RTTI确定为 `GS2C_ObjInteractiveInfoList`，GUID/对象门和收到记录的复制有原代码依据；其目标图标为原tutorial_target.png，未把图标路径选择冒充交互批准。详见 [客户端消费边界](TUTORIAL_SCRIPT_CLIENT_BOUNDARY.md)。
+- 本批新增一个静态原代码审查工具，实际核10段原函数、消息登记、描述符及RTTI；未执行CPU/浏览器任务链。新证据保存于tutorial-script-execution-boundary-20261115，子代理原记录留tutorial-script-manager-inline-20261115；原资料不入Git。无游戏/画面/角色/存档/服务器/Docker/Railway变化，自动2仍暂停。
+- 下一具体入口是这条对象交互更新链的缓存生产和消费时序，以及 `499108/499290/4992c4` 的202专用原回调作用；不从名字或向量长度补阶段规则。不再因scripts表装载、图标显示或协议接收已核就报告主线可玩。真正的脚本正文、状态发送条件与任务批准仍未恢复。

@@ -63,6 +63,9 @@ jobs:
       - run: python tools/terrain_materials_tests.py
       - run: python tools/terrain_lighting_tests.py
       - run: python tools/scene_sky_tests.py
+      - run: python tools/tutorial_sky_candidate_tests.py
+      - run: python tools/tutorial_sky_delivery_tests.py
+      - run: python tools/creation_scene_camera_tests.py
       - run: python tools/scene_sky_frame_tests.py
       - run: python tools/scene_sky_draw_tests.py
       - run: python tools/scene_sky_collection_tests.py

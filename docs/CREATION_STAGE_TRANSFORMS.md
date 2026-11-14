@@ -44,6 +44,10 @@ node --test tools/creation_stage_tests.mjs tools/creation_preview_tests.mjs
 .venv/bin/python tools/creation_preview_delivery_tests.py -v
 ```
 
-8 项原代码检查、相机/矩阵桥接、入口守卫与私有打包检查，以及原 UI 中实际男女切换已通过。Linux 组合测试及 Railway 发布另记交接，未做时不计为上线。
+8 项原代码检查、相机/矩阵桥接、入口守卫与私有打包检查，以及原 UI 中实际男女切换已通过。隔离 Linux 已通过双连接移动/装备广播、重启后的身份/位置/物品恢复，以及正式入口的男女模型实际绘制；测试容器随后停止。
+
+源码 `2b4ab2429415d9853b3f9672f91f1dbaa19167ef` 已同步 main，feature CI `43606434893` / main CI `43608064123` 均成功。Railway 最终 Git 部署 `4be922b3-d0c1-4098-88b9-c14865634755` SUCCESS，公开 revision `14ff0efa…ff35544` 与 Linux 相同。220 份新增预览素材实际下载 SHA 全匹配；线上原页面已实际看到男女模型、无 warning/error。12 个角色完整存档在发布、迁区和只读浏览器检查后逐字节相同。
+
+本轮发现实际容器和磁盘已回到美国西部，按既有迁区授权迁回新加坡；最终同时核对活动部署、容器 `RAILWAY_REPLICA_REGION` 和原逻辑磁盘的真实 region，不能只依据仓库里的声明。首次 CLI 上传漏用 `--no-gitignore`，私有包被排除，部署 `e1f4045a…` 在启动检查处拒绝；修正私有白名单上下文的上传后恢复，未创建空档或替代服务。此问题与模型/角色数据无关，失败记录保留。细节见 [迁区记录](SINGAPORE_MIGRATION.md)。
 
 后续复用时先区分三个层次：配置文字如何被原代码消费；这个阶段实际选择哪个 display/相机组；网页怎样传递已确认的输出。相同配置中的 `45` 未必是角度，`5.5` 未必按浮点读；同一模型的不同地图摆放也不能共用另一张地图的 DAT。这些消费方式须在复用前重新核对。

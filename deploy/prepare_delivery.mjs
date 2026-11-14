@@ -15,6 +15,7 @@ import {stageCharacterHotbarEntry} from '../tools/preview/character-hotbar-overl
 import {stageSceneEffectsEntry,stageSceneEffectsPlan,SCENE_EFFECT_MANIFEST} from '../tools/preview/source-scene-effect-overlay.mjs';
 import {stageFire10Entry,stageFire10Plan,FIRE10_MANIFEST} from '../tools/preview/source-scene-effect-fire10-overlay.mjs';
 import {stageUnstuckEntry} from './unstuck_entry.mjs';
+import {stageInspectorEntry} from './map_inspector_ui.mjs';
 
 export const TYPES={'.svg':'image/svg+xml','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.png':'image/png','.woff':'font/woff','.glsl':'text/plain; charset=utf-8','.rgba':'application/octet-stream','.glb':'model/gltf-binary'};
 const sha=raw=>createHash('sha256').update(raw).digest('hex');
@@ -49,11 +50,12 @@ export async function prepare(root,{stage=false}={}){
     if(files[SCENE_EFFECT_MANIFEST])entrySource=stageSceneEffectsEntry(entrySource);
     if(files[FIRE10_MANIFEST])entrySource=stageFire10Entry(entrySource);
     if(files['/assets/source-unstuck/unstuck.json'])entrySource=stageUnstuckEntry(entrySource);
+    if(entryUI)entrySource=stageInspectorEntry(entrySource);
     const raw=Buffer.from(entrySource);
     await writeFile(path,raw);files['/explore-map.js']={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.js']};
     for(const name of ['staged_scene.mjs','streaming_window.mjs','click_input.mjs','browser_timing.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES['.mjs']};}
-    if(entryUI)for(const name of ['entry_ui.mjs','entry_ui.css','entry_name.mjs','attribute_ui.mjs','attribute_state.mjs','attribute_ui.css','attribute_preview.mjs','self_name.mjs','character_hotbar.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
+    if(entryUI)for(const name of ['entry_ui.mjs','entry_ui.css','entry_name.mjs','attribute_ui.mjs','attribute_state.mjs','attribute_ui.css','attribute_preview.mjs','self_name.mjs','character_hotbar.mjs','map_inspector_ui.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES[extname(name)]};}
     if(files['/assets/source-unstuck/unstuck.json'])for(const name of ['unstuck_ui.mjs','unstuck_ui.css','unstuck_state.mjs','unstuck_return.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES[extname(name)]};}

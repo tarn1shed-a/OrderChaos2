@@ -153,6 +153,7 @@ jobs:
       - run: node --test tools/self_name_tests.mjs
       - run: node --test tools/runtime_recovery_tests.mjs
       - run: node --test tools/admin_tests.mjs
+      - run: node --test tools/map_inspector_tests.mjs
       - name: Private source hotbar integration (run locally with reviewed runtime)
         if: ${{ hashFiles('analysis/raw/showcase-20261110/running-preview/prototype/public/hotbar-ui.js') != '' }}
         run: node --test tools/character_hotbar_tests.mjs

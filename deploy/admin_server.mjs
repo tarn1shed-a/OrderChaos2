@@ -21,7 +21,7 @@ export async function makeAdminPasswordHash(password,salt=randomBytes(16).toStri
  if(typeof password!=='string'||password.length<16||password.length>128||! /^[0-9a-f]{32}$/.test(salt))throw Error('Invalid administrator password');
  const hash=await derive(password,Buffer.from(salt,'hex'),32);return 'scrypt$'+salt+'$'+hash.toString('hex');
 }
-export function installAdmin(server,{store,active,passwordHash,secureCookies=true,now=Date.now}){
+export function installAdmin(server,{store,active,passwordHash,inspector=null,secureCookies=true,now=Date.now}){
  const enabled=adminPasswordConfigured(passwordHash),sessions=new Map(),attempts=new Map(),ttl=8*3600000;
  const original=server.listeners('request');for(const listener of original)server.removeListener('request',listener);
  const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',
@@ -48,8 +48,13 @@ export function installAdmin(server,{store,active,passwordHash,secureCookies=tru
     if(!identity(req))return reply(401,{error:'请先登录管理后台'});
     return reply(200,playerReport(store,active,now()));
    }
-   if(req.method!=='POST'||!['/__admin/login','/__admin/logout'].includes(path))return reply(405,{error:'请求无效'});
+   if(req.method!=='POST'||!['/__admin/login','/__admin/logout','/__admin/map-inspector'].includes(path))return reply(405,{error:'请求无效'});
    if(!req.headers.origin||new URL(req.headers.origin).host!==req.headers.host)return reply(403,{error:'请求来源无效'});
+   if(path==='/__admin/map-inspector'){
+    if(!identity(req))return reply(401,{error:'请先登录管理后台'});
+    if(!inspector)return reply(503,{error:'地图巡查尚未启用'});
+    return reply(200,inspector.identity());
+   }
    if(path==='/__admin/logout'){const token=identity(req);if(token)sessions.delete(token);return reply(200,{ok:true},{'Set-Cookie':cookie('')});}
    const address=req.socket.remoteAddress||'unknown',state=attempts.get(address)||{count:0,until:now()+60000};
    if(state.count>=5)return reply(429,{error:'尝试过于频繁，请一分钟后再试'});

@@ -12,3 +12,12 @@ test('authenticated session is HttpOnly/Secure, expires, and logout clears acces
  }finally{await s.close();}});
 test('disabled service and login throttling fail closed',async()=>{const disabled=await service({passwordHash:undefined});try{assert.equal((await disabled.request('/__admin/players')).status,503);assert.deepEqual(await(await disabled.request('/__admin/session')).json(),{enabled:false,authenticated:false});}finally{await disabled.close();}
  const s=await service();try{for(let i=0;i<5;i++)assert.equal((await s.request('/__admin/login',{password:'wrong'})).status,401);assert.equal((await s.request('/__admin/login',{password})).status,429);}finally{await s.close();}});
+test('map inspection credentials require a valid administrator cookie and same-origin POST',async()=>{
+ let issued=0;const s=await service({inspector:{identity(){issued++;return{characterId:'inspector',resumeToken:'private-test-token'};}}});
+ try{assert.equal((await s.request('/__admin/map-inspector',{})).status,401);assert.equal(issued,0);
+ const login=await s.request('/__admin/login',{password}),cookie=login.headers.get('set-cookie').split(';')[0];
+ assert.equal((await s.request('/__admin/map-inspector',{}, {cookie,origin:'https://foreign.invalid'})).status,403);
+ const response=await s.request('/__admin/map-inspector',{}, {cookie});assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');assert.equal(issued,1);
+ assert(!JSON.stringify(playerReport(s.store,s.active)).includes('private-test-token'));
+ }finally{await s.close();}
+});

@@ -10,6 +10,7 @@ import {stageEntry} from './stage_runtime.mjs';
 import {stagePlan} from './stage_plan.mjs';
 import {stageTrialWorld} from './tutorial_entry.mjs';
 import {stageInsideEntry,stageInsidePlan,INSIDE_MANIFEST} from '../tools/preview/map-runtime-inside-overlay.mjs';
+import {stageCharacterPanelsEntry,stageCharacterPanelsPlan,CHARACTER_PANEL_MANIFEST} from '../tools/preview/character-panel-runtime-overlay.mjs';
 
 export const TYPES={'.svg':'image/svg+xml','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.png':'image/png','.woff':'font/woff','.glsl':'text/plain; charset=utf-8','.rgba':'application/octet-stream','.glb':'model/gltf-binary'};
 const sha=raw=>createHash('sha256').update(raw).digest('hex');
@@ -40,6 +41,7 @@ export async function prepare(root,{stage=false}={}){
     const path=resolve(destination,'staged-entry.js');
     let entrySource=stageEntry(await readFile(files['/explore-map.js'].path,'utf8'),{entryUI});
     if(files[INSIDE_MANIFEST])entrySource=stageInsideEntry(entrySource);
+    if(files[CHARACTER_PANEL_MANIFEST])entrySource=stageCharacterPanelsEntry(entrySource);
     const raw=Buffer.from(entrySource);
     await writeFile(path,raw);files['/explore-map.js']={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.js']};
     for(const name of ['staged_scene.mjs','streaming_window.mjs','click_input.mjs','browser_timing.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
@@ -84,6 +86,7 @@ export async function prepare(root,{stage=false}={}){
   for(const url of urls)if(['.json','.js','.mjs'].includes(extname(url)))texts.set(url,await readFile(files[url].path,'utf8'));
   const plans={};for(const entry of ['/explore-map.js','/explore.js'])if(files[entry])plans[entry]=closure(entry);
   if(stage)plans['/explore-map.js']=texts.has(INSIDE_MANIFEST)?await stageInsidePlan(stagePlan,texts,closure):await stagePlan(texts,closure);
+  if(stage&&texts.has(CHARACTER_PANEL_MANIFEST))plans['/explore-map.js']=stageCharacterPanelsPlan(plans['/explore-map.js']);
   const index={format:'oc2-delivery-v1',revision,files:publicFiles,plans};
   const internal={...index,files};
   await writeFile(resolve(destination,'index.json'),JSON.stringify(internal));

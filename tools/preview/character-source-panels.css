@@ -1,0 +1,11 @@
+@font-face{font-family:EntryText;src:url('/assets/ui/chineseText.woff') format('woff');font-display:swap}
+@font-face{font-family:EntryDisplay;src:url('/assets/ui/chineseDisplay.woff') format('woff');font-display:swap}
+@font-face{font-family:EntryGothic;src:url('/assets/ui/leagueGothic.woff') format('woff');font-display:swap}
+html,body{margin:0;background:#000;color:#fff}
+.character-source-dialog{position:fixed;inset:0;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;padding:0;border:0;background:transparent;overflow:hidden;color:#fff;font-family:EntryText}
+.character-source-dialog::backdrop{background:rgba(0,0,0,var(--source-panel-modal-alpha,.35))}
+.character-source-stage{position:absolute;left:50%;top:50%;width:1136px;height:640px;transform:translate(-50%,-50%) scale(var(--source-panel-scale,1));transform-origin:center}
+.character-source-page{display:block}.character-source-dialog text[data-font-source*="League"]{font-family:EntryGothic,EntryText}.character-source-dialog text[data-font-source*="Alegreya"]{font-family:EntryDisplay,EntryText}
+.character-source-sidebar{pointer-events:none}.character-source-sidebar [role=button]{pointer-events:auto}
+.character-source-dialog [role=button]{cursor:pointer;outline:none}.character-source-dialog [role=button]:focus-visible{outline:1px solid #e4d5a1;outline-offset:2px}
+.character-source-back{position:absolute;border:0;padding:0;background:none;color:inherit;font-family:EntryText;cursor:pointer;overflow:visible}

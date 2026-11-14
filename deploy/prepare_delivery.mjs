@@ -11,6 +11,7 @@ import {stagePlan} from './stage_plan.mjs';
 import {stageTrialWorld} from './tutorial_entry.mjs';
 import {stageInsideEntry,stageInsidePlan,INSIDE_MANIFEST} from '../tools/preview/map-runtime-inside-overlay.mjs';
 import {stageCharacterPanelsEntry,stageCharacterPanelsPlan,CHARACTER_PANEL_MANIFEST} from '../tools/preview/character-panel-runtime-overlay.mjs';
+import {stageCharacterHotbarEntry} from '../tools/preview/character-hotbar-overlay.mjs';
 
 export const TYPES={'.svg':'image/svg+xml','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.png':'image/png','.woff':'font/woff','.glsl':'text/plain; charset=utf-8','.rgba':'application/octet-stream','.glb':'model/gltf-binary'};
 const sha=raw=>createHash('sha256').update(raw).digest('hex');
@@ -41,12 +42,12 @@ export async function prepare(root,{stage=false}={}){
     const path=resolve(destination,'staged-entry.js');
     let entrySource=stageEntry(await readFile(files['/explore-map.js'].path,'utf8'),{entryUI});
     if(files[INSIDE_MANIFEST])entrySource=stageInsideEntry(entrySource);
-    if(files[CHARACTER_PANEL_MANIFEST])entrySource=stageCharacterPanelsEntry(entrySource);
+    if(files[CHARACTER_PANEL_MANIFEST])entrySource=stageCharacterHotbarEntry(stageCharacterPanelsEntry(entrySource));
     const raw=Buffer.from(entrySource);
     await writeFile(path,raw);files['/explore-map.js']={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.js']};
     for(const name of ['staged_scene.mjs','streaming_window.mjs','click_input.mjs','browser_timing.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES['.mjs']};}
-    if(entryUI)for(const name of ['entry_ui.mjs','entry_ui.css','entry_name.mjs','attribute_ui.mjs','attribute_state.mjs','attribute_ui.css','attribute_preview.mjs','self_name.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
+    if(entryUI)for(const name of ['entry_ui.mjs','entry_ui.css','entry_name.mjs','attribute_ui.mjs','attribute_state.mjs','attribute_ui.css','attribute_preview.mjs','self_name.mjs','character_hotbar.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES[extname(name)]};}
   }
   const urls=Object.keys(files).sort(),sidecars=new Map();let cursor=0;

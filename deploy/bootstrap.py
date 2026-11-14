@@ -35,6 +35,36 @@ def relative(name):
     return path
 
 
+def members_checked(bundle):
+    members = bundle.getmembers()
+    if len(members) > 20000 or sum(m.size for m in members) > MAX_EXPANDED:
+        raise ValueError('Private runtime archive exceeds limits')
+    names = set()
+    for member in members:
+        relative(member.name)
+        if not member.isfile() or member.name in names:
+            raise ValueError('Only unique regular files are accepted')
+        names.add(member.name)
+    if 'bundle-manifest.json' not in names:
+        raise ValueError('Missing private runtime manifest')
+    manifest = json.load(bundle.extractfile('bundle-manifest.json'))
+    if manifest.get('format') != FORMAT or manifest.get('localSavesImported') is not False:
+        raise ValueError('Private runtime member set or manifest differs')
+    return members, names, manifest
+
+
+def write_checked(bundle, member, manifest, stage):
+    target = stage / member.name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with bundle.extractfile(member) as source, target.open('xb') as output:
+        shutil.copyfileobj(source, output)
+    target.chmod(0o600)
+    if member.name != 'bundle-manifest.json':
+        expected = manifest['files'][member.name]
+        if target.stat().st_size != expected['bytes'] or sha(target) != expected['sha256']:
+            raise ValueError('Private runtime file identity differs: ' + member.name)
+
+
 def extract_verified(archive, digest, destination):
     if not re.fullmatch('[0-9a-f]{64}', digest or '') or sha(archive) != digest:
         raise ValueError('Private runtime archive SHA256 does not match')
@@ -43,30 +73,38 @@ def extract_verified(archive, digest, destination):
     with tempfile.TemporaryDirectory(prefix='unpack-', dir=destination.parent) as temporary:
         stage = Path(temporary)
         with tarfile.open(archive, 'r:gz') as bundle:
-            members = bundle.getmembers()
-            if len(members) > 20000 or sum(m.size for m in members) > MAX_EXPANDED:
-                raise ValueError('Private runtime archive exceeds limits')
-            names = set()
-            for member in members:
-                relative(member.name)
-                if not member.isfile() or member.name in names:
-                    raise ValueError('Only unique regular files are accepted')
-                names.add(member.name)
-            if 'bundle-manifest.json' not in names:
-                raise ValueError('Missing private runtime manifest')
-            manifest = json.load(bundle.extractfile('bundle-manifest.json'))
-            if manifest.get('format') != FORMAT or set(manifest['files']) != names - {'bundle-manifest.json'}:
+            members, names, manifest = members_checked(bundle)
+            if 'bundle-base.json' in names:
+                reference = json.load(bundle.extractfile('bundle-base.json'))
+                base_digest = reference.get('baseArchiveSHA256', '')
+                if (reference.get('format') != 'oc2-private-runtime-delta-v1' or
+                        not re.fullmatch('[0-9a-f]{64}', base_digest)):
+                    raise ValueError('Private runtime base reference differs')
+                base_archive = Path(archive).parent / (base_digest + '.tar.gz')
+                if not base_archive.is_file() or sha(base_archive) != base_digest:
+                    raise ValueError('Verified private runtime base is unavailable')
+                with tarfile.open(base_archive, 'r:gz') as base:
+                    old_members, old_names, old_manifest = members_checked(base)
+                    if 'bundle-base.json' in old_names or set(old_manifest['files']) != old_names - {'bundle-manifest.json'}:
+                        raise ValueError('Only one complete private base is accepted')
+                    old_files, new_files = old_manifest['files'], manifest['files']
+                    if (old_manifest['runtimeIdentity'] != manifest['runtimeIdentity'] or
+                            old_manifest['pythonFiles'] != manifest['pythonFiles'] or
+                            any(new_files.get(name) != meta for name, meta in old_files.items())):
+                        raise ValueError('Private delta cannot replace existing runtime files')
+                    if set(new_files) - set(old_files) != names - {'bundle-manifest.json', 'bundle-base.json'}:
+                        raise ValueError('Private delta member set differs')
+                    if (len(old_members) + len(members) > 20000 or
+                            sum(m.size for m in old_members) + sum(m.size for m in members) > MAX_EXPANDED):
+                        raise ValueError('Combined private runtime exceeds limits')
+                    for member in old_members:
+                        if member.name != 'bundle-manifest.json':
+                            write_checked(base, member, old_manifest, stage)
+            elif set(manifest['files']) != names - {'bundle-manifest.json'}:
                 raise ValueError('Private runtime member set differs')
             for member in members:
-                target = stage / member.name
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with bundle.extractfile(member) as source, target.open('xb') as output:
-                    shutil.copyfileobj(source, output)
-                target.chmod(0o600)
-                if member.name != 'bundle-manifest.json':
-                    expected = manifest['files'][member.name]
-                    if target.stat().st_size != expected['bytes'] or sha(target) != expected['sha256']:
-                        raise ValueError('Private runtime file identity differs: ' + member.name)
+                if member.name != 'bundle-base.json':
+                    write_checked(bundle, member, manifest, stage)
         pinned = json.loads((ROOT / 'tools/local_mvp_runtime.json').read_text())
         if manifest['runtimeIdentity'] != pinned:
             raise ValueError('Bundle targets a different reviewed runtime')

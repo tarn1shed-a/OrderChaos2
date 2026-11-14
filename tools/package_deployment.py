@@ -154,6 +154,7 @@ def build_context(archive, destination):
                'deploy/bootstrap.py', 'deploy/server.mjs', 'deploy/package.json', 'deploy/package-lock.json',
                'deploy/acceptance.mjs', 'deploy/physics_acceptance.py', 'tools/preview/map-runtime-inside-overlay.mjs', 'tools/preview/character-panel-runtime-overlay.mjs', 'tools/preview/character-hotbar-overlay.mjs', 'tools/preview/source-scene-effect-overlay.mjs', 'tools/preview/source-scene-effect-fire10-overlay.mjs', 'deploy/character_hotbar.mjs', *python_closure()]
     sources += ['tools/preview/source-tutorial-sky-overlay.mjs']
+    sources += ['tools/preview/tutorial_terrain_grouping_policy.js']
     sources += ['deploy/prepare_delivery.mjs', 'deploy/static_delivery.mjs',
                 'deploy/delivery_boot.mjs', 'deploy/delivery_worker.mjs', 'deploy/delivery_audit.mjs',
                 'deploy/stage_runtime.mjs', 'deploy/stage_plan.mjs', 'deploy/staged_scene.mjs', 'deploy/streaming_window.mjs']

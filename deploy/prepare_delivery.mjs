@@ -18,6 +18,7 @@ import {stageUnstuckEntry} from './unstuck_entry.mjs';
 import {stageInspectorEntry} from './map_inspector_ui.mjs';
 import {stageTutorialSkyEntry,stageTutorialSkyPlan,SKY_MANIFEST} from '../tools/preview/source-tutorial-sky-overlay.mjs';
 import {creationPreviewPlan} from './creation_plan.mjs';
+import {stageTutorialTerrainGroups,stageTutorialTerrainGroupsPlan,TERRAIN_GROUPS,TERRAIN_GROUPS_SHA,TERRAIN_GROUPS_HELPER} from './tutorial_terrain_groups.mjs';
 
 export const TYPES={'.svg':'image/svg+xml','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.png':'image/png','.woff':'font/woff','.glsl':'text/plain; charset=utf-8','.rgba':'application/octet-stream','.glb':'model/gltf-binary'};
 const sha=raw=>createHash('sha256').update(raw).digest('hex');
@@ -58,6 +59,13 @@ export async function prepare(root,{stage=false}={}){
     if(files[SKY_MANIFEST]){
       if(!files['/source-tutorial-sky.js'])throw Error('Original tutorial sky bridge is missing from the verified bundle');
       entrySource=stageTutorialSkyEntry(entrySource);
+    }
+    if(files[TERRAIN_GROUPS]){
+      if(files[TERRAIN_GROUPS].sha256!==TERRAIN_GROUPS_SHA)throw Error('Original tutorial material-group payload differs');
+      const helper=resolve(root,'tools/preview/tutorial_terrain_grouping_policy.js'),bytes=await readFile(helper);
+      if(sha(bytes)!=='c3bfe6de352b3707fde69719bb992d2dc36dbd08b123ba47fc0b920574ffae1f')throw Error('Reviewed terrain material-group bridge differs');
+      files[TERRAIN_GROUPS_HELPER]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES['.js']};
+      entrySource=stageTutorialTerrainGroups(entrySource);
     }
     const raw=Buffer.from(entrySource);
     await writeFile(path,raw);files['/explore-map.js']={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.js']};
@@ -115,6 +123,7 @@ export async function prepare(root,{stage=false}={}){
   }
   if(stage&&files[SKY_MANIFEST])plans['/explore-map.js']=stageTutorialSkyPlan(plans['/explore-map.js'],texts);
   if(stage&&files['/assets/source-creation-stage/manifest.json'])plans['/explore-map.js']=creationPreviewPlan(plans['/explore-map.js'],urls);
+  if(stage&&files[TERRAIN_GROUPS])plans['/explore-map.js']=stageTutorialTerrainGroupsPlan(plans['/explore-map.js']);
   const index={format:'oc2-delivery-v1',revision,files:publicFiles,plans};
   const internal={...index,files};
   await writeFile(resolve(destination,'index.json'),JSON.stringify(internal));

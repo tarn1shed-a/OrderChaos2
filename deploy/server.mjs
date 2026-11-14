@@ -42,7 +42,7 @@ try {
   installEntryRead(game.server,'/data/saves/characters.json');
   installNameDraw(game.server,createNameDrawer(root));
   installEntryManagement(game.server,trialRoleManager(game.entryStore,game.entryActive,{entryPosition:()=>trialEntryPosition(motion)}));
-  installAdmin(game.server,{store:game.entryStore,active:game.entryActive,passwordHash:process.env.OC2_ADMIN_PASSWORD_HASH,secureCookies:process.env.OC2_ADMIN_LOCAL_HTTP!=='1'});
+  installAdmin(game.server,{store:game.entryStore,active:game.entryActive,passwordHash:process.env.OC2_ADMIN_PASSWORD_HASH,secureCookies:process.env.OC2_ADMIN_LOCAL_HTTP!=='1',sourcePoint:(x,y)=>motion.point(x,y)});
   await new Promise((ok,fail)=>{game.server.once('error',fail);game.server.listen(port,'0.0.0.0',()=>{game.server.off('error',fail);ok();});});
 } catch(error) { if(game)await game.close();else await motion.close();throw error; }
 console.log(JSON.stringify({listening:port,host:'0.0.0.0',saveFile:'/data/saves/characters.json',maxPlayers,sourceNative:true}));

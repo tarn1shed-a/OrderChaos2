@@ -2,6 +2,8 @@ const $=id=>document.getElementById(id),professions={1:'战士',2:'法师',3:'�
 let report=null,selected=null,loading=false;
 const number=value=>Number.isFinite(value)?value.toLocaleString('zh-CN'):'—';
 const date=value=>{if(!value)return '—';const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString('zh-CN',{hour12:false}):'—';};
+const duration=value=>!Number.isFinite(value)?'—':`${Math.floor(value/3600)}时 ${Math.floor(value%3600/60)}分 ${Math.floor(value%60)}秒`;
+const client=value=>value?[value.browser,value.platform].filter(Boolean).join(' / ')||'—':'—';
 async function api(path,body){const response=await fetch('/__admin/'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),cache:'no-store'});const data=await response.json();if(!response.ok){if(response.status===401)showLogin();throw Error(data.error||'请求失败');}return data;}
 function showLogin(){report=null;selected=null;$('dashboard').hidden=true;$('login-panel').hidden=false;$('logout').hidden=true;$('players').replaceChildren();$('detail-fields').replaceChildren();$('password').value='';}
 function showDashboard(){$('dashboard').hidden=false;$('login-panel').hidden=true;$('logout').hidden=false;}
@@ -9,15 +11,17 @@ function detail(player){
  selected=player.id;$('detail').hidden=false;$('detail-title').textContent=player.name;
  const fields=[['角色 ID',player.id],['在线状态',player.online?'在线':'离线'],['职业',professions[player.profession]||'未知'],['等级 / 经验',number(player.level)+' / '+number(player.xp)],['生命',number(player.hp)+' / '+number(player.maxHp)],['金币 / 击杀',number(player.gold)+' / '+number(player.kills)],['房间 / 场景',player.online?player.room+' / '+player.scene:'—'],['本次进入',date(player.connectedAt)],['坐标',player.position?[player.position.x,player.position.height,player.position.y].map(v=>Number.isFinite(v)?v.toFixed(3):'—').join(', '):'—'],['背包物品总数',number(player.inventoryItems)],['装备',Object.entries(player.equipment).map(([slot,item])=>slot+': '+item).join('；')||'—'],['创建时间',date(player.createdAt)],['最近角色更新',date(player.updatedAt)]];
  $('detail-fields').replaceChildren(...fields.flatMap(([name,value])=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=name;dd.textContent=value;return[dt,dd];}));
+ const more=[['IP 地址',player.client?.ip||'—'],['地址来源',player.client?.ipSource==='railway-x-real-ip'?'Railway 边缘转发':player.client?.ipSource==='socket'?'直接连接':'—'],['浏览器 / 系统',client(player.client)],['User-Agent',player.client?.userAgent||'—'],['在线时长',duration(player.onlineSeconds)],['最近通信',date(player.lastPacketAt)],['连接往返',Number.isFinite(player.rttMs)?number(player.rttMs)+' ms':'—'],['世界坐标',player.worldPosition?[player.worldPosition.x,player.worldPosition.y,player.worldPosition.z].map(v=>Number.isFinite(v)?v.toFixed(3):'—').join(', '):'—'],['坐标状态',player.positionKind==='current'?'当前在线位置':player.positionKind==='saved'?'存档位置':'—'],['背包明细',Object.entries(player.inventory||{}).map(([item,count])=>item+' × '+number(count)).join('；')||'—']];
+ $('detail-fields').append(...more.flatMap(([name,value])=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=name;dd.textContent=value;return[dt,dd];}));
 }
 function render(){
- if(!report)return;$('online').textContent=number(report.online);$('total').textContent=number(report.total);$('updated').textContent=date(report.at);
- const search=$('search').value.trim().toLowerCase(),players=report.players.filter(p=>(!$('only-online').checked||p.online)&&[p.name,p.id,p.room||''].some(v=>v.toLowerCase().includes(search)));
+ if(!report)return;$('online').textContent=number(report.online);$('total').textContent=number(report.total);$('updated').textContent=date(report.at);$('rooms').textContent=number(report.server?.rooms);$('uptime').textContent=duration(report.server?.uptimeSeconds);$('memory').textContent='进程内存 '+number(report.server?.memoryMiB)+' MiB';
+ const search=$('search').value.trim().toLowerCase(),players=report.players.filter(p=>(!$('only-online').checked||p.online)&&[p.name,p.id,p.room||'',p.client?.ip||'',client(p.client)].some(v=>v.toLowerCase().includes(search)));
  $('players').replaceChildren(...players.map(player=>{
   const row=document.createElement('tr'),cell=value=>{const td=document.createElement('td');td.textContent=value;row.append(td);return td;};
   const badge=document.createElement('span');badge.className='badge'+(player.online?' online':'');badge.textContent=player.online?'在线':'离线';cell('').append(badge);
   const name=cell(''),strong=document.createElement('span'),id=document.createElement('span');strong.className='name';strong.textContent=player.name;id.className='id';id.textContent=player.id.slice(0,8);name.append(strong,id);
-  for(const value of [professions[player.profession]||'未知',number(player.level),number(player.xp),number(player.hp)+' / '+number(player.maxHp),number(player.gold),player.room||'—',date(player.connectedAt)])cell(value);
+  for(const value of [professions[player.profession]||'未知',number(player.level),number(player.xp),number(player.hp)+' / '+number(player.maxHp),number(player.gold),player.client?.ip||'—',client(player.client),player.room?.split(':').at(-1)||'—',duration(player.onlineSeconds),Number.isFinite(player.rttMs)?number(player.rttMs)+' ms':'—'])cell(value);
   const button=document.createElement('button');button.textContent='详情';button.addEventListener('click',()=>detail(player));cell('').append(button);return row;
  }));$('empty').hidden=players.length!==0;
  const player=report.players.find(p=>p.id===selected);if(player)detail(player);

@@ -18,6 +18,11 @@ export function entryServer(source,traceURL){
   const replace=(from,to)=>{if(result.split(from).length!==2)throw Error('Runtime recovery anchor differs');result=result.replace(from,to);};
   replace('createGameServer({ maxPlayersPerRoom=8,','createGameServer({ onRuntimeFailure=null, maxPlayersPerRoom=8,');
   replace('  let storageError = null;','  let storageError = null, runtimeError = null;');
+  replace("wss.emit('connection', ws)","wss.emit('connection', ws, req)");
+  replace("  wss.on('connection', ws => {", "  wss.on('connection', (ws,request) => {\n    ws.entryConnection=readConnectionInfo(request,{trustRailway:Boolean(process.env.RAILWAY_ENVIRONMENT_ID)});");
+  replace("    ws.on('pong', () => { ws.alive = true; });", "    ws.on('pong', () => { ws.alive = true;noteConnectionPong(ws); });");
+  replace("    ws.on('message', (buffer, binary) => {", "    ws.on('message', (buffer, binary) => {\n      ws.entryLastPacketAt=Date.now();");
+  replace('      ws.alive = false; ws.ping();','      ws.alive = false;ws.entryPingAt=Date.now();ws.ping();');
   replace('        activeCharacters.set(ws.player.id, ws);','        ws.entryJoinedAt=Date.now();activeCharacters.set(ws.player.id, ws);');
   replace("        res.writeHead(200, { 'Content-Type': 'application/json' });", "        res.writeHead(storageError||runtimeError?503:200, { 'Content-Type': 'application/json' });");
   replace('ok: !storageError,','ok: !storageError&&!runtimeError,');
@@ -30,7 +35,7 @@ export function entryServer(source,traceURL){
     }`);
   replace("      if (storageError) return reject(ws, '存档当前不可用，请检查服务器后重试');", "      if(runtimeError)return reject(ws,'场景服务正在恢复，请稍后重新进入');\n      if (storageError) return reject(ws, '存档当前不可用，请检查服务器后重试');");
   replace('    if (storageError) return;','    if (storageError||runtimeError) return;');
-  return `import {isPhysicsTransportFailure} from ${JSON.stringify(new URL('./runtime_recovery.mjs',import.meta.url).href)};\n`+result;
+  return `import {isPhysicsTransportFailure} from ${JSON.stringify(new URL('./runtime_recovery.mjs',import.meta.url).href)};\nimport{readConnectionInfo,noteConnectionPong}from ${JSON.stringify(new URL('./connection_info.mjs',import.meta.url).href)};\n`+result;
 }
 
 export function trialRoleManager(store,active,{archive=record=>{

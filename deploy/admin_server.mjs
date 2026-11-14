@@ -4,24 +4,32 @@ import {promisify} from 'node:util';
 import {readFile} from 'node:fs/promises';
 const derive=promisify(scrypt),COOKIE='oc2-admin-session';
 const fields=['id','name','profession','level','xp','gold','kills','hp','maxHp','createdAt','updatedAt'];
-export function playerReport(store,active,now=Date.now()){
+export function playerReport(store,active,now=Date.now(),sourcePoint=null){
  const players=[...store.records.values()].map(record=>{
   const ws=active.get(record.id),online=ws?.readyState===1;
   const view=Object.fromEntries(fields.map(key=>[key,record[key]??null]));
+  const stored=record.positions?.resources||record.positions?.camp,position=online&&ws.player?{x:ws.player.x,y:ws.player.y,height:ws.player.worldY??null}:stored?{x:stored.x,y:stored.y,height:stored.groundY??null}:null;
+  const client=online?ws.entryConnection:null;let worldPosition=null;
+  if(sourcePoint&&position&&(online?ws.scene==='resources':Boolean(record.positions?.resources))&&Number.isFinite(position.x)&&Number.isFinite(position.y)){const p=sourcePoint(position.x,position.y);if(Number.isFinite(p.x)&&Number.isFinite(p.z))worldPosition={x:p.x,y:position.height,z:p.z};}
   return {...view,online,room:online?ws.roomId:null,scene:online?ws.scene:null,
    connectedAt:online?ws.entryJoinedAt??null:null,
-   position:online&&ws.player?{x:ws.player.x,y:ws.player.y,height:ws.player.worldY??null}:null,
+   onlineSeconds:online&&Number.isFinite(ws.entryJoinedAt)?Math.max(0,Math.floor((now-ws.entryJoinedAt)/1000)):null,
+   lastPacketAt:online?ws.entryLastPacketAt??null:null,rttMs:online&&Number.isFinite(ws.entryRttMs)?ws.entryRttMs:null,
+   client:client?{ip:client.ip??null,ipSource:client.ipSource??null,browser:client.browser??null,platform:client.platform??null,userAgent:client.userAgent??null}:null,
+   position,positionKind:online?'current':position?'saved':null,worldPosition,
    equipment:Object.fromEntries(Object.entries(record.equipment||{}).filter(([slot,item])=>typeof slot==='string'&&typeof item==='string')),
+   inventory:Object.fromEntries(Object.entries(record.inventory||{}).filter(([item,count])=>typeof item==='string'&&Number.isFinite(count)&&count>=0)),
    inventoryItems:Object.values(record.inventory||{}).reduce((sum,count)=>sum+(Number.isFinite(count)&&count>0?count:0),0)};
  }).sort((a,b)=>Number(b.online)-Number(a.online)||String(a.name).localeCompare(String(b.name),'zh-CN'));
- return {at:now,savedAt:store.savedAt??null,online:players.filter(p=>p.online).length,total:players.length,players};
+ return {at:now,savedAt:store.savedAt??null,online:players.filter(p=>p.online).length,total:players.length,players,
+  server:{rooms:new Set(players.filter(p=>p.online).map(p=>p.room)).size,uptimeSeconds:Math.floor(process.uptime()),memoryMiB:Math.round(process.memoryUsage().rss/1048576)}};
 }
 export function adminPasswordConfigured(value){return typeof value==='string'&&/^scrypt\$[0-9a-f]{32}\$[0-9a-f]{64}$/.test(value);}
 export async function makeAdminPasswordHash(password,salt=randomBytes(16).toString('hex')){
  if(typeof password!=='string'||password.length<16||password.length>128||! /^[0-9a-f]{32}$/.test(salt))throw Error('Invalid administrator password');
  const hash=await derive(password,Buffer.from(salt,'hex'),32);return 'scrypt$'+salt+'$'+hash.toString('hex');
 }
-export function installAdmin(server,{store,active,passwordHash,secureCookies=true,now=Date.now}){
+export function installAdmin(server,{store,active,passwordHash,secureCookies=true,now=Date.now,sourcePoint=null}){
  const enabled=adminPasswordConfigured(passwordHash),sessions=new Map(),attempts=new Map(),ttl=8*3600000;
  const original=server.listeners('request');for(const listener of original)server.removeListener('request',listener);
  const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',
@@ -46,7 +54,7 @@ export function installAdmin(server,{store,active,passwordHash,secureCookies=tru
    if(!enabled)return reply(503,{error:'管理后台尚未启用'});
    if(req.method==='GET'&&path==='/__admin/players'){
     if(!identity(req))return reply(401,{error:'请先登录管理后台'});
-    return reply(200,playerReport(store,active,now()));
+    return reply(200,playerReport(store,active,now(),sourcePoint));
    }
    if(req.method!=='POST'||!['/__admin/login','/__admin/logout'].includes(path))return reply(405,{error:'请求无效'});
    if(!req.headers.origin||new URL(req.headers.origin).host!==req.headers.host)return reply(403,{error:'请求来源无效'});

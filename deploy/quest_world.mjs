@@ -21,6 +21,7 @@ const jsonCache=new Map(),textureCache=new Map(),textureLoader=new THREE.Texture
 async function json(url){if(!jsonCache.has(url))jsonCache.set(url,fetch(url).then(async r=>{if(!r.ok)throw Error('原资源未就绪');return r.json();}));return jsonCache.get(url);}
 async function texture(url){if(!textureCache.has(url))textureCache.set(url,textureLoader.loadAsync(url).then(t=>{t.colorSpace=THREE.NoColorSpace;t.flipY=false;t.needsUpdate=true;return t;}));return textureCache.get(url);}
 let renderer,scene,camera,origin,bounds,world,sourceMap,actorAssets,playerFactory,profile,questUI,questTracking,entry,skills;
+let npcProjection,npcMarkerSession=null,npcMarkerAttempt=-1,npcMarkerPending=null,npcPageLive=true,npcPageEpoch=0;
 let socket,identity,selfId,connected=false,ready=false,generation=0,players=[],questState=null,character=null;
 let cameraYaw=.65,cameraPitch=.58,cameraDistance=12,lastFrame=performance.now(),serverOffset=0;
 const focus=new THREE.Vector3(),avatars=new Map(),actors=new Map(),objects=new Map(),keys=new Set();
@@ -47,7 +48,31 @@ async function api(path,data={}){
   const v=await r.json();
   if(!connected||identity?.characterId!==caller||generation!==connection)throw Error('角色连接已变更，请重新打开任务。');
   if(!r.ok)throw Error(v.error||'任务请求失败');
-  if(v.state)applyQuestState(v.state);return v;
+  if(v.state)applyQuestState(v.state);
+  if(path==='query'&&v.info?.questId===461&&npcMarkerSession)npcProjection?.receiveQuery(npcMarkerSession,{...v,info:compatibleInfo(v.info)});
+  return v;
+}
+function refreshNPCMarker(){
+  if(!connected||!npcProjection||!npcMarkerSession||!questState||npcMarkerPending||npcMarkerAttempt===questState.revision)return;
+  const receiver=npcMarkerSession; npcMarkerAttempt=questState.revision;
+  const pending={receiver};npcMarkerPending=pending;
+  api('query',{questId:461}).catch(()=>{if(receiver===npcMarkerSession){npcMarkerSession=npcProjection.beginSession();if(questState)npcProjection.receiveState(npcMarkerSession,questState);}}).finally(()=>{
+    if(npcMarkerPending===pending){npcMarkerPending=null;refreshNPCMarker();}
+  });
+}
+async function initNPCMarker(){
+  if(document.documentElement.dataset.sourceNpcQuestMarker!=='1')return;
+  const {createOrdinaryNPCQuestProjection}=await import('/__delivery/ordinary_npc_projection.mjs');
+  const page=npcPageEpoch;if(!npcPageLive)return;
+  const host=actors.get('npc:6598');if(!host)return;
+  const assets=await json('/assets/source-ordinary-npc-head/profile.json');
+  const request=async url=>{const r=await fetch(url);if(!r.ok)throw Error('Original NPC icon unavailable');return r;};
+  const projection=await createOrdinaryNPCQuestProjection({THREE,actor:host.instance,data:await json(actorAssets.profile.npc.model),
+    camera,scene,sceneOrigin:origin.toArray(),assets,bytes:async url=>new Uint8Array(await(await request(url)).arrayBuffer()),text:async url=>(await request(url)).text(),
+    readHost:()=>({mapId:profile.mapId,sourceID:'npc:6598',entry:host.target.entry,displayed:host.instance.root.visible&&host.instance.root.parent===scene&&!host.instance.disposed})});
+  if(!npcPageLive||page!==npcPageEpoch||host.instance.disposed){projection.dispose();return;}
+  npcProjection=projection;
+  if(connected){npcMarkerSession=npcProjection.beginSession();npcMarkerAttempt=-1;refreshNPCMarker();}
 }
 function applyQuestState(state){
   if(!state||state.origin!=='compatible-quest-layer'||questState&&state.revision<questState.revision)return;questState=state;
@@ -57,6 +82,7 @@ function applyQuestState(state){
   for(const view of actors.values())view.target.disabled=completed.has(view.target.questId);
   $('field-quests').disabled=!connected||profile.quests.every(q=>completed.has(q.id));
   questTracking?.update(state);
+  if(npcMarkerSession)npcProjection?.receiveState(npcMarkerSession,state);refreshNPCMarker();
 }
 function compatibleInfo(info){
   // Explicit plain-item display adaptation; no native ActionID is fabricated.
@@ -107,7 +133,7 @@ function syncPlayers(at){
   }
   updateHUD(me());
 }
-function clearConnection(){connected=false;selfId=null;players=[];questState=null;skills?.disconnect();stop();questUI?.invalidate();
+function clearConnection(){npcProjection?.invalidate();npcMarkerSession=null;npcMarkerAttempt=-1;npcMarkerPending=null;connected=false;selfId=null;players=[];questState=null;skills?.disconnect();stop();questUI?.invalidate();
   questTracking?.clear();
   for(const a of avatars.values()){disposeCharacterAnimation(a.body);a.root.removeFromParent();}avatars.clear();
   for(const view of objects.values())view.instance.root.visible=false;
@@ -124,7 +150,7 @@ function connect(name,credentials,profession){
       if(msg.character?.sourceAvatar||msg.character?.appearance&&(msg.character.appearance.race!==2||msg.character.appearance.gender!==1)){
         denied=true;ws.close();entry.error('这个角色的原模型尚未接入当前地图，请选择已支持的角色。');openEntry();return;
       }
-      selfId=msg.id;world=msg.world;character=msg.character;identity={characterId:msg.character.id,resumeToken:msg.resumeToken};connected=true;entry.hide();skills?.sync();
+      selfId=msg.id;world=msg.world;character=msg.character;identity={characterId:msg.character.id,resumeToken:msg.resumeToken};connected=true;if(npcProjection){npcMarkerSession=npcProjection.beginSession();npcMarkerAttempt=-1;}entry.hide();skills?.sync();
       $('session-open').hidden=true;$('field-actions').hidden=false;$('touch-controls').hidden=false;$('field-interaction').disabled=false;$('field-quests').disabled=false;
       note('');canvas.focus({preventScroll:true});try{await api('state');}catch(error){note(error.message);}
     }else if(msg.type==='state'){
@@ -192,7 +218,7 @@ async function init(){
   focus.fromArray(profile.actors[0].position).sub(origin).add(new THREE.Vector3(0,1,0));
   $('field-quests').addEventListener('click',()=>openQuest());$('session-open').addEventListener('click',()=>{stop();openEntry();});
   $('reset-view').addEventListener('click',()=>{cameraYaw=.65;cameraPitch=.58;cameraDistance=12;});
-  ready=true;entry.ready();note('');requestAnimationFrame(draw);
+  ready=true;entry.ready();note('');void initNPCMarker().catch(error=>console.error('NPC task icon presentation unavailable:',error));requestAnimationFrame(draw);
 }
 function draw(now){
   const dt=Math.min(.1,(now-lastFrame)/1000);lastFrame=now;
@@ -203,7 +229,7 @@ function draw(now){
   for(const view of actors.values())view.instance.update(dt);
   const self=avatars.get(selfId);if(self)focus.lerp(self.root.position.clone().add(new THREE.Vector3(0,1,0)),1-Math.exp(-dt*10));
   camera.position.copy(focus).add(new THREE.Vector3(Math.sin(cameraYaw)*Math.cos(cameraPitch)*cameraDistance,Math.sin(cameraPitch)*cameraDistance,Math.cos(cameraYaw)*Math.cos(cameraPitch)*cameraDistance));camera.lookAt(focus);
-  sourceMap?.update();renderer.render(scene,camera);requestAnimationFrame(draw);
+  sourceMap?.update();npcProjection?.update();renderer.render(scene,camera);requestAnimationFrame(draw);
 }
 function pick(event){
   if(blocked())return;const r=canvas.getBoundingClientRect();pointerNDC.set((event.clientX-r.left)/r.width*2-1,1-(event.clientY-r.top)/r.height*2);raycaster.setFromCamera(pointerNDC,camera);
@@ -241,5 +267,5 @@ setInterval(()=>{
   const n=Math.hypot(x,y);if(n>1){x/=n;y/=n;}send({type:'input',x,y});
 },50);
 setInterval(()=>{if(connected&&!document.hidden)api('state').catch(()=>{});},1000);
-window.addEventListener('pagehide',()=>{generation++;clearTimeout(retryTimer);stop();skills?.dispose();socket?.close();questUI?.dispose();questTracking?.dispose();actorAssets?.dispose();sourceMap?.dispose();renderer?.dispose();});
+window.addEventListener('pagehide',()=>{npcPageLive=false;npcPageEpoch++;npcProjection?.dispose();npcProjection=null;npcMarkerSession=null;npcMarkerPending=null;generation++;clearTimeout(retryTimer);stop();skills?.dispose();socket?.close();questUI?.dispose();questTracking?.dispose();actorAssets?.dispose();sourceMap?.dispose();renderer?.dispose();});
 init().catch(error=>{console.error(error);note(error.message);entry?.error(error.message);openEntry();});

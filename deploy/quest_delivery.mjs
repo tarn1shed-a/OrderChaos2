@@ -3,6 +3,7 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {CHARACTER_CHOICE_SKILL_DEPENDENCIES} from './character_choice_skills.mjs';
+import {prepareNPCMarkerDelivery} from './npc_marker_delivery.mjs';
 
 export async function prepareQuestDelivery(root,destination,files,{creationProfile=null}={}){
   if(!files['/assets/ordinary-quests/profile.json'])return false;
@@ -15,6 +16,7 @@ export async function prepareQuestDelivery(root,destination,files,{creationProfi
     const raw=body||await readFile(path);files[url]={path,bytes:raw.length,sha256:createHash('sha256').update(raw).digest('hex'),type};
   }
   const skills=Boolean(files['/assets/character-source/panels.json']);
+  const npcMarker=await prepareNPCMarkerDelivery(root,files,add);
   if(skills)for(const url of CHARACTER_CHOICE_SKILL_DEPENDENCIES)if(!files[url])throw Error('Original skill directory delivery is incomplete: '+url);
   for(const name of ['quest_world.mjs','quest_ui.mjs','quest_tracking.mjs','character_choice_skills.mjs']){
     let path=resolve(root,'deploy',name);
@@ -32,7 +34,7 @@ export async function prepareQuestDelivery(root,destination,files,{creationProfi
   files['/__delivery/mission_program.mjs']=files['/mission_program.mjs'];
   // Start from the same original entry page, without restoring the old camp UI.
   const path=resolve(destination,'quests.html');
-  const tracking=(files['/assets/source-quest-tracking/tracking.json']?' data-source-quest-tracking="1"':'')+(skills?' data-source-character-skills="1"':'');
+  const tracking=(files['/assets/source-quest-tracking/tracking.json']?' data-source-quest-tracking="1"':'')+(skills?' data-source-character-skills="1"':'')+(npcMarker?' data-source-npc-quest-marker="1"':'');
   const raw=Buffer.from((await readFile(files['/explore-map.html'].path,'utf8')).replace('<html ',`<html${tracking} `)
     .replace(/<script type="module" src="[^"]*explore-map\.js[^"]*"><\/script>/,'<script type="module" src="/__delivery/quest_world.mjs"></script>'));
   if(!raw.includes(Buffer.from('/__delivery/quest_world.mjs')))throw Error('Ordinary world entry script anchor differs');

@@ -66,6 +66,12 @@ jobs:
       - run: python tools/tutorial_inside_models_tests.py
       - run: python tools/map_runtime_inside_delivery_tests.py
       - run: python tools/tutorial_npc_tests.py
+      - name: Original NPC872 and crocodile assets (original inputs excluded)
+        run: |
+          python tools/ordinary_npc872_tests.py --public-only
+          python tools/ordinary_crocodile_binding_tests.py --public-only
+          python tools/ordinary_638_animation_complete_tests.py --public-only
+          python -m py_compile tools/ordinary_npc872_candidate.py tools/ordinary_npc872_package.py tools/ordinary_crocodile_binding_probe.py tools/ordinary_638_animation_complete_probe.py tools/ordinary_crocodile_review_assets.py tools/ordinary_npc872_review.py tools/tutorial_npc_weapon_candidate.py
       - run: python tools/tutorial_npc_additional_tests.py
       - run: python tools/character_progression_tests.py
       - run: python tools/character_learning_state_tests.py
@@ -174,6 +180,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Source NPC872 and original638 sampler public boundaries
+        run: |
+          node tools/ordinary_npc872_tests.mjs --public-only
+          node tools/ordinary_638_animation_complete_tests.mjs --public-only
+          node --check tools/preview/ordinary-crocodile-review.mjs
+          node --check tools/preview/ordinary-crocodile-animated-review.mjs
+          node --check tools/preview/ordinary-npc872-review.mjs
       - run: python tools/character_equipped_tests.py
       - run: python tools/tutorial_scene_effects_tests.py
       - run: python tools/tutorial_scene_effects_lifecycle_tests.py

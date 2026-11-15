@@ -42,6 +42,11 @@ jobs:
       - run: python tools/localized_text_inventory_tests.py
       - run: python tools/mainline_chat_source_tests.py
       - run: python tools/mainline_chat_request_tests.py
+      - name: Offline mainline chat condition source tools (original inputs stay private)
+        run: |
+          python -m py_compile tools/ordinary_mainline_require_native_probe.py tools/ordinary_mainline_require_slot_filter.py
+          python tools/ordinary_mainline_require_native_probe.py --help
+          python tools/ordinary_mainline_require_slot_filter.py --help
       - run: python tools/ordinary_quest_map_tests.py
       - run: python tools/tutorial_script_entry_tests.py
       - run: python tools/tutorial_script_archive_tests.py

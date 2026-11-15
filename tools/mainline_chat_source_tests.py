@@ -38,7 +38,7 @@ class OriginalChatFlowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'descriptor differs'):
             source(Damaged())
 
-    def test_original_window_selection_including_presence_and_actor_gates(self):
+    def test_original_window_selection_count_list_actor_and_hero_gates(self):
         controls = selection_controls(self.image)
         self.assertEqual([v['eventBoundary']['constructor'] for v in controls],
                          ['0x64121c', '0x64121c', '0x644fd8', '0x64121c',

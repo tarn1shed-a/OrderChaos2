@@ -3,13 +3,19 @@
 import {createSelectionScene} from '/source-selection-scene.js';
 import {createSelectionInsideAppend} from '/selection_scene_inside_material.js';
 import {createSelectionStonesAppend} from '/selection_scene_stones_material.js';
-import {buildCreationRacePreview,creationPreviewKey} from '/character_creation_preview_proposal.mjs';
+import * as legacyCreationPreview from '/character_creation_preview_proposal.mjs';
 import {applyCreationStageTransform,createCreationStageCamera,createCreationCameraTrack} from '/source-creation-stage.mjs';
 import {loadSourceCharacterPrograms,createSourceCharacterMaterial} from './attribute_preview.mjs';
 
 export const CREATION_DELIVERY_FORMAT='oc2-source-creation-preview-delivery-v1';
 export const CREATION_EXTENDED_FORMAT='oc2-source-creation-preview-delivery-v2';
 export const CREATION_GROUP_FORMAT='oc2-source-creation-preview-delivery-v3';
+export const CREATION_RACES_FORMAT='oc2-source-creation-preview-delivery-v4';
+const raceSources={'1:0':{key:'mendel-male',display:2048,model:34},'1:1':{key:'mendel-female',display:2049,model:31},
+ '2:1':{key:'elf-female',display:2047,model:2},'3:0':{key:'orc-male',display:2050,model:28},
+ '3:1':{key:'orc-female',display:2051,model:30},'4:0':{key:'kartan',display:2052,model:29}};
+const corrected=format=>format===CREATION_GROUP_FORMAT||format===CREATION_RACES_FORMAT;
+const racePreviewAPI=()=>import('/character_creation_race_preview_v1.mjs');
 const extensions={
  dry:['/assets/source-selection-water/overlay.json','/selection_scene_water_material.js','createSelectionWaterDryAppend'],
  flowers:['/assets/source-selection-flowers/overlay.json','/selection_scene_flowers_material.js','createSelectionFlowersAppend'],
@@ -19,20 +25,51 @@ const extensions={
  wetFloor:['/assets/source-selection-water-floor/overlay.json','/selection_scene_water_floor.js','createSelectionWaterFloorAppend'],
 };
 const correctedExtensions={...extensions,wetFloor:['/assets/source-selection-water-floor-groups/overlay.json',...extensions.wetFloor.slice(1)]};
-const safe=url=>typeof url==='string'&&url.startsWith('/assets/source-')&&!url.includes('..')&&!url.includes('//');
+const safe=url=>typeof url==='string'&&/^\/assets\/source-[A-Za-z0-9_./-]+$/.test(url)&&!url.includes('..')&&!url.includes('//');
+// Legacy profiles must remain usable with their original immutable public
+// payload. These two-body guards require no additional private module.
+export function legacyCreationResourceURL(baseURL,path,documentURL=globalThis.location?.href){
+ const base=new URL(baseURL,documentURL);
+ if(!base.pathname.endsWith('/')||base.search||base.hash||typeof path!=='string'||!path||
+  !/^\/?[A-Za-z0-9_./-]+$/.test(path)||path.includes('..')||path.includes('//'))throw Error('Unsafe original preview resource path');
+ const result=new URL(path.replace(/^\//,''),base);
+ if(result.origin!==base.origin||!result.pathname.startsWith(base.pathname))throw Error('Original preview escapes private resource directory');
+ return result.href;
+}
+const legacyBodies={'0:0':{display:2038,model:1,path:'model/npc/character/human/male/oc2_human_m_body_01.bdae'},
+ '0:1':{display:2045,model:32,path:'model/npc/character/human/female/oc2_human_f_body_01.bdae'}};
+export function checkedLegacyCreationPreview(manifest,{race,gender}){
+ legacyCreationPreview.checkedCreationPreview(manifest,{race,gender});
+ const body=legacyBodies[`${race}:${gender}`];
+ if(!body||manifest.originalDisplayId!==body.display)throw Error('Original legacy preview display differs');
+}
+export function checkedLegacyCreationModel(manifest,data,{race,gender}){
+ checkedLegacyCreationPreview(manifest,{race,gender});
+ const body=legacyBodies[`${race}:${gender}`],s=data?.sourceCreation;
+ if(data?.source!==body.path||s?.displayId!==body.display||s.race!==race||s.gender!==gender||s.createdRole!==false||s.originalFloatWeightsPreserved!==true||
+  (Object.hasOwn(s,'sourceModelId')&&s.sourceModelId!==body.model)||JSON.stringify(s.visibleMeshIndices)!==JSON.stringify(manifest.visibleMeshIndices))
+  throw Error('Original legacy preview model does not match its stage costume');
+}
+const legacySecurity={creationPreviewResourceURL:legacyCreationResourceURL,checkedCreationPreview:checkedLegacyCreationPreview,checkedCreationModel:checkedLegacyCreationModel};
 export function validateCreationDelivery(p){
- if(![CREATION_DELIVERY_FORMAT,CREATION_EXTENDED_FORMAT,CREATION_GROUP_FORMAT].includes(p?.format)||p.mapId!==7||p.sourceSelectionRegion!==211||p.freshStartOnly!==true||
+ const keys=Object.keys(p?.previews||{}).sort(),races=p?.format===CREATION_RACES_FORMAT;
+ if(![CREATION_DELIVERY_FORMAT,CREATION_EXTENDED_FORMAT,CREATION_GROUP_FORMAT,CREATION_RACES_FORMAT].includes(p?.format)||p.mapId!==7||p.sourceSelectionRegion!==211||p.freshStartOnly!==true||
   p.wholeCreationRestored!==false||p.createsPlayableRole!==false||p.stages?.length!==1||p.stages[0]!=='CharacterChooseRace'||
   !['stage','environment','scene','inside','stones'].every(k=>safe(p[k]))||
-  Object.keys(p.previews||{}).sort().join(',')!=='0:0,0:1'||!Object.values(p.previews).every(v=>safe(v.baseURL)&&v.baseURL.endsWith('/')))
+  (!races&&keys.join(',')!=='0:0,0:1')||(races&&(!keys.includes('0:0')||!keys.includes('0:1')||keys.length<3||keys.some(k=>!['0:0','0:1',...Object.keys(raceSources)].includes(k))))||
+  !Object.values(p.previews).every(v=>safe(v.baseURL)&&v.baseURL.endsWith('/')))
   throw Error('Original race-preview delivery scope differs');
- const routes=p.format===CREATION_GROUP_FORMAT?correctedExtensions:extensions;
+ if(races&&(p.sourceRaceTraceSHA256!=='6c3c300912f2cc7021a3784c601a7229b327916ee89c9a34ac72390b82f680a8'||
+  !Array.isArray(p.additionalOriginalPreviews)||p.additionalOriginalPreviews.map(v=>v.key).sort().join(',')!==keys.filter(k=>raceSources[k]).join(',')||
+  p.additionalOriginalPreviews.some(v=>v.display!==raceSources[v.key]?.display||v.model!==raceSources[v.key]?.model||v.bodyKey!==raceSources[v.key]?.key)||
+  p.allNineRacePreviewsRestored!==false))throw Error('Original additional race-preview evidence differs');
+ const routes=corrected(p.format)?correctedExtensions:extensions;
  if(p.format!==CREATION_DELIVERY_FORMAT&&(!Array.isArray(p.extensions)||
   p.extensions.map(e=>e.kind).join(',')!==Object.keys(extensions).join(',')||
   p.extensions.some(e=>e.url!==routes[e.kind]?.[0])||
   p.originalStaticInstances!==151||p.originalDryChunks!==192||p.originalWaterSurfaceChunks!==152||p.originalWetFloorRestored!==true))
   throw Error('Original selection scene extensions differ');
- if(p.format===CREATION_GROUP_FORMAT&&p.originalGroupRepresentativeMaterialCopies!==true)throw Error('Original material group copies missing');
+ if(corrected(p.format)&&p.originalGroupRepresentativeMaterialCopies!==true)throw Error('Original material group copies missing');
  if(p.format===CREATION_DELIVERY_FORMAT&&p.extensions!==undefined)throw Error('Original v1 preview cannot activate new extensions');
  return p;
 }
@@ -88,7 +125,7 @@ export function createSourceCreationPreview(root,{profileURL}){
     parts.push(await createSelectionInsideAppend(THREE,insideProfile,{origin,lighting,json,texture,clock}));
     parts.push(await createSelectionStonesAppend(THREE,stonesProfile,{origin,lighting,json,texture}));
     for(const row of extra){
-     const[,module,name]=(p.format===CREATION_GROUP_FORMAT?correctedExtensions:extensions)[row.kind],api=await import(module);
+     const[,module,name]=(corrected(p.format)?correctedExtensions:extensions)[row.kind],api=await import(module);
      const part=await api[name](THREE,row.profile,{origin,lighting,json,text,texture,clock});parts.push(part);extraParts.set(row.kind,part);
     }
     const assembly={staticInstances:parts.reduce((n,p)=>n+(p.instances||0),0),dryChunks:extraParts.get('dry')?.chunks||0,waterSurfaceChunks:extraParts.get('waterSurface')?.chunks||0,wetFloorChunks:extraParts.get('wetFloor')?.chunks||0,waterBorderChunks:extraParts.get('wetFloor')?.borderChunks||0};
@@ -106,10 +143,21 @@ export function createSourceCreationPreview(root,{profileURL}){
  }
  function dropActor(){if(actor){actor.dispose();actor=null;}}
  async function loadActor(e,race,gender){
-  const base=e.p.previews[creationPreviewKey(race,gender)]?.baseURL;if(!base)return null;
-  const manifest=await json(base+'manifest.json'),data=await json(base+manifest.model.replace(/^\//,'')),textures=new Map();
-  await Promise.all([...new Set(manifest.materials.flatMap(row=>Object.values(row.samplers)))].map(async name=>textures.set(name,await e.texture(base+name.replace(/^\//,'')))));
-  const preview=buildCreationRacePreview({THREE:e.THREE,createMaterial:()=>new e.THREE.MeshBasicMaterial(),manifest,data,textures,race,gender});
+  // Existing public proposal bytes are immutable. The versioned additional
+  // API validates all incoming resources; v1-v3 retain the old actual factory.
+  const security=e.p.format===CREATION_RACES_FORMAT?await racePreviewAPI():legacySecurity;
+  const api=e.p.format===CREATION_RACES_FORMAT?security:legacyCreationPreview;
+  const base=e.p.previews[api.creationPreviewKey(race,gender)]?.baseURL;if(!base)return null;
+  const url=path=>security.creationPreviewResourceURL(base,path);
+  const manifest=await json(url('manifest.json'));
+  // Reject an unexpected identity before following any model/image reference.
+  security.checkedCreationPreview(manifest,{race,gender});
+  const modelURL=url(manifest.model),paths=[...new Set(manifest.materials.flatMap(row=>Object.values(row.samplers)))];
+  const images=paths.map(path=>[path,url(path)]); // Validate the complete closure before requesting it.
+  const data=await json(modelURL),textures=new Map();
+  security.checkedCreationModel(manifest,data,{race,gender});
+  await Promise.all(images.map(async([path,sourceURL])=>textures.set(path,await e.texture(sourceURL))));
+  const preview=api.buildCreationRacePreview({THREE:e.THREE,createMaterial:()=>new e.THREE.MeshBasicMaterial(),manifest,data,textures,race,gender});
   const materials=[],maps=[],rows=new Map(manifest.materials.map(row=>[row.index,row]));
   const release=()=>{preview.dispose();for(const m of materials)m.dispose();for(const t of maps)t.dispose();};
   try{
@@ -146,17 +194,21 @@ export function createSourceCreationPreview(root,{profileURL}){
  function hide(){serial++;active=false;canvas.hidden=true;cancelAnimationFrame(raf);dropActor();root.dataset.sourceCreationPreview='hidden';delete root.dataset.sourceCreationDisplay;delete root.dataset.sourceCreationDrawCalls;delete root.dataset.sourceCreationAssembly;}
  return {
   async show({screen,race,gender}){
-   hide();if(closed||screen!=='CharacterChooseRace'||!creationPreviewKey(race,gender))return;
+   hide();if(closed||screen!=='CharacterChooseRace')return;
    const token=serial;root.dataset.sourceCreationPreview='loading';
    try{
     const e=await initialise();if(token!==serial||closed)return;
+    // The original 53d3e8 switches the character wrapper; its selection scene
+    // is not destroyed when a race is selected. An unavailable web candidate
+    // must not leave a previous race on screen or remove the proven background.
+    root.prepend(canvas);canvas.hidden=false;active=true;lastTime=performance.now();raf=requestAnimationFrame(frame);
+    root.dataset.sourceCreationAssembly=JSON.stringify(e.assembly);
     const next=await loadActor(e,race,gender);
     if(token!==serial||closed){next?.dispose();return;}
-    if(!next)return;actor=next;e.scene.add(actor.root);
-    root.prepend(canvas);canvas.hidden=false;active=true;lastTime=performance.now();raf=requestAnimationFrame(frame);
+    if(!next){root.dataset.sourceCreationPreview='scene-only';return;}actor=next;e.scene.add(actor.root);
     root.dataset.sourceCreationPreview='ready';root.dataset.sourceCreationDisplay=String(next.manifest.originalDisplayId);
     root.dataset.sourceCreationAssembly=JSON.stringify(e.assembly);
-   }catch(error){if(token===serial&&!closed){canvas.hidden=true;root.dataset.sourceCreationPreview='unavailable';root.dataset.sourceCreationError=error.message;}}
+   }catch(error){if(token===serial&&!closed){if(!active)canvas.hidden=true;root.dataset.sourceCreationPreview=active?'scene-only':'unavailable';root.dataset.sourceCreationError=error.message;}}
   },
   hide,
   dispose(){hide();closed=true;canvas.remove();if(engine){for(const p of engine.parts)p.dispose();engine.renderer.dispose();}for(const t of loaderCache.values())t.then(v=>v.dispose()).catch(()=>{});loaderCache.clear();},

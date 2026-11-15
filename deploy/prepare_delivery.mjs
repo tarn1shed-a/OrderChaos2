@@ -90,7 +90,7 @@ export async function prepare(root,{stage=false}={}){
     if(files['/assets/source-unstuck/unstuck.json'])for(const name of ['unstuck_ui.mjs','unstuck_ui.css','unstuck_state.mjs','unstuck_return.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES[extname(name)]};}
   }
-  await prepareQuestDelivery(root,destination,files);
+  await prepareQuestDelivery(root,destination,files,{creationProfile:files['/assets/source-creation-stage/manifest.json']?selectCreationProfile(files):null});
   const urls=Object.keys(files).sort(),sidecars=new Map();let cursor=0;
   async function worker(){while(cursor<urls.length){
     const url=urls[cursor++],meta=files[url];

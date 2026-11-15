@@ -107,7 +107,7 @@ function syncPlayers(at){
   }
   updateHUD(me());
 }
-function clearConnection(){connected=false;selfId=null;players=[];questState=null;skills?.disconnect();stop();questUI?.close().catch(()=>{});
+function clearConnection(){connected=false;selfId=null;players=[];questState=null;skills?.disconnect();stop();questUI?.invalidate();
   questTracking?.clear();
   for(const a of avatars.values()){disposeCharacterAnimation(a.body);a.root.removeFromParent();}avatars.clear();
   for(const view of objects.values())view.instance.root.visible=false;

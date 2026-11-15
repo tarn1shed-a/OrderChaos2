@@ -45,8 +45,8 @@ export function createQuestController({query,action,program,programFactory,rende
       if(info.questId!==questId)throw Error('Quest query identity mismatch');
       current=info;vm=programFactory(program,info,{questId,isOpenedFromList:false,isAutoAccepted:false},
         {currentWindowLevel:0,modelWindow0:false,modelWindow1:false});
-      vm.open();await draw(token);return inspect();
-    }catch(error){if(token===epoch)reset();onError(error);throw error;}
+      vm.open();if(!await draw(token))return null;return inspect();
+    }catch(error){if(disposed||token!==epoch)return null;reset();onError(error);throw error;}
   }
   async function pressOK(){
     if(disposed||pending||!current||!vm?.inspect().okVisible||vm.inspect().grayVisible)return null;
@@ -54,18 +54,22 @@ export function createQuestController({query,action,program,programFactory,rende
     try{
       const fresh=validateQuestView(await query(old.questId));if(disposed||token!==epoch)return null;
       if(JSON.stringify(fresh)!==JSON.stringify(old)){
-        pending=false;await open(old.questId);return {sent:false,reason:'state-changed'};
+        pending=false;const refreshedEpoch=epoch+1;await open(old.questId);
+        if(disposed||epoch!==refreshedEpoch)return null;return {sent:false,reason:'state-changed'};
       }
       const before=vm.inspect().actions.length,next=vm.ok();
       const requested=next.actions.slice(before).some(v=>v.nativeCallback==='Hero_SendAcceptQuestN');
-      if(!requested){pending=false;await draw(token);return {sent:false,confirmation:true};}
+      if(!requested){pending=false;if(!await draw(token))return null;return {sent:false,confirmation:true};}
       const type=[5,6].includes(old.Status)?'accept':[8,9].includes(old.Status)?'complete':null;
       if(!type)throw Error('This source state has no actionable command');
       const result=await action({type,questId:old.questId,revision:old.revision,origin:QUEST_UI_ORIGIN});
+      if(disposed||token!==epoch)return null;
       if(result?.ok!==true)throw Error(result?.error||'Quest action rejected');
-      if(!disposed&&token===epoch)reset();return {sent:true,type,result};
+      reset();return {sent:true,type,result};
     }catch(error){
-      if(!disposed&&token===epoch){pending=false;await open(old.questId).catch(()=>{});}onError(error);throw error;
+      if(disposed||token!==epoch)return null;
+      pending=false;const recoveryEpoch=epoch+1;await open(old.questId).catch(()=>{});
+      if(disposed||epoch!==recoveryEpoch)return null;onError(error);throw error;
     }finally{if(token===epoch)pending=false;}
   }
   async function close(){
@@ -74,6 +78,8 @@ export function createQuestController({query,action,program,programFactory,rende
     await action({type:'cancel',questId:old.questId,revision:old.revision,origin:QUEST_UI_ORIGIN});return true;
   }
   return Object.freeze({open,pressOK,close,inspect,
+    // Session teardown is local invalidation, not a quest-cancel command.
+    invalidate(){if(disposed)return false;reset();return true;},
     dispose(){if(disposed)return;reset();disposed=true;}});
 }
 

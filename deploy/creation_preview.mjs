@@ -11,11 +11,14 @@ export const CREATION_DELIVERY_FORMAT='oc2-source-creation-preview-delivery-v1';
 export const CREATION_EXTENDED_FORMAT='oc2-source-creation-preview-delivery-v2';
 export const CREATION_GROUP_FORMAT='oc2-source-creation-preview-delivery-v3';
 export const CREATION_RACES_FORMAT='oc2-source-creation-preview-delivery-v4';
+export const CREATION_CONDITIONAL_FORMAT='oc2-source-creation-preview-delivery-v5';
 const raceSources={'1:0':{key:'mendel-male',display:2048,model:34},'1:1':{key:'mendel-female',display:2049,model:31},
  '2:1':{key:'elf-female',display:2047,model:2},'3:0':{key:'orc-male',display:2050,model:28},
  '3:1':{key:'orc-female',display:2051,model:30},'4:0':{key:'kartan',display:2052,model:29}};
-const corrected=format=>format===CREATION_GROUP_FORMAT||format===CREATION_RACES_FORMAT;
-const racePreviewAPI=()=>import('/character_creation_race_preview_v1.mjs');
+const conditionalSource={key:'elf-male',display:2046,model:33};
+const conditionalContract='51a825509778cec34f72369b3a57cb2cbcec2d5102954f2b5eb2b0ebc2c3dc3e';
+const corrected=format=>[CREATION_GROUP_FORMAT,CREATION_RACES_FORMAT,CREATION_CONDITIONAL_FORMAT].includes(format);
+const racePreviewAPI=format=>format===CREATION_CONDITIONAL_FORMAT?import('/character_creation_race_preview_v2.mjs'):import('/character_creation_race_preview_v1.mjs');
 const extensions={
  dry:['/assets/source-selection-water/overlay.json','/selection_scene_water_material.js','createSelectionWaterDryAppend'],
  flowers:['/assets/source-selection-flowers/overlay.json','/selection_scene_flowers_material.js','createSelectionFlowersAppend'],
@@ -52,17 +55,24 @@ export function checkedLegacyCreationModel(manifest,data,{race,gender}){
 }
 const legacySecurity={creationPreviewResourceURL:legacyCreationResourceURL,checkedCreationPreview:checkedLegacyCreationPreview,checkedCreationModel:checkedLegacyCreationModel};
 export function validateCreationDelivery(p){
- const keys=Object.keys(p?.previews||{}).sort(),races=p?.format===CREATION_RACES_FORMAT;
- if(![CREATION_DELIVERY_FORMAT,CREATION_EXTENDED_FORMAT,CREATION_GROUP_FORMAT,CREATION_RACES_FORMAT].includes(p?.format)||p.mapId!==7||p.sourceSelectionRegion!==211||p.freshStartOnly!==true||
+ const keys=Object.keys(p?.previews||{}).sort(),conditional=p?.format===CREATION_CONDITIONAL_FORMAT;
+ const races=p?.format===CREATION_RACES_FORMAT||conditional,sources=conditional?{...raceSources,'2:0':conditionalSource}:raceSources;
+ if(![CREATION_DELIVERY_FORMAT,CREATION_EXTENDED_FORMAT,CREATION_GROUP_FORMAT,CREATION_RACES_FORMAT,CREATION_CONDITIONAL_FORMAT].includes(p?.format)||p.mapId!==7||p.sourceSelectionRegion!==211||p.freshStartOnly!==true||
   p.wholeCreationRestored!==false||p.createsPlayableRole!==false||p.stages?.length!==1||p.stages[0]!=='CharacterChooseRace'||
   !['stage','environment','scene','inside','stones'].every(k=>safe(p[k]))||
-  (!races&&keys.join(',')!=='0:0,0:1')||(races&&(!keys.includes('0:0')||!keys.includes('0:1')||keys.length<3||keys.some(k=>!['0:0','0:1',...Object.keys(raceSources)].includes(k))))||
+  (!races&&keys.join(',')!=='0:0,0:1')||(races&&(!keys.includes('0:0')||!keys.includes('0:1')||keys.length<3||keys.some(k=>!['0:0','0:1',...Object.keys(sources)].includes(k))))||
   !Object.values(p.previews).every(v=>safe(v.baseURL)&&v.baseURL.endsWith('/')))
   throw Error('Original race-preview delivery scope differs');
  if(races&&(p.sourceRaceTraceSHA256!=='6c3c300912f2cc7021a3784c601a7229b327916ee89c9a34ac72390b82f680a8'||
-  !Array.isArray(p.additionalOriginalPreviews)||p.additionalOriginalPreviews.map(v=>v.key).sort().join(',')!==keys.filter(k=>raceSources[k]).join(',')||
-  p.additionalOriginalPreviews.some(v=>v.display!==raceSources[v.key]?.display||v.model!==raceSources[v.key]?.model||v.bodyKey!==raceSources[v.key]?.key)||
+  !Array.isArray(p.additionalOriginalPreviews)||p.additionalOriginalPreviews.map(v=>v.key).sort().join(',')!==keys.filter(k=>sources[k]).join(',')||
+  p.additionalOriginalPreviews.some(v=>v.display!==sources[v.key]?.display||v.model!==sources[v.key]?.model||v.bodyKey!==sources[v.key]?.key)||
   p.allNineRacePreviewsRestored!==false))throw Error('Original additional race-preview evidence differs');
+ if(conditional){
+  const c=p.conditionalOriginalPreviews;
+  if(keys.length!==9||!Array.isArray(c)||c.length!==1||c[0].key!=='2:0'||c[0].contractSHA256!==conditionalContract||
+   c[0].appearanceComplete!==false||c[0].sourceRequestSucceeded!==false||c[0].displayOnlyAfterHostReady!==true||
+   p.originalAndroidFinalAppearanceKnown!==false)throw Error('Conditional source-material readiness policy differs');
+ }else if(p.conditionalOriginalPreviews!==undefined)throw Error('Legacy profile cannot activate a conditional source policy');
  const routes=corrected(p.format)?correctedExtensions:extensions;
  if(p.format!==CREATION_DELIVERY_FORMAT&&(!Array.isArray(p.extensions)||
   p.extensions.map(e=>e.kind).join(',')!==Object.keys(extensions).join(',')||
@@ -145,8 +155,9 @@ export function createSourceCreationPreview(root,{profileURL}){
  async function loadActor(e,race,gender){
   // Existing public proposal bytes are immutable. The versioned additional
   // API validates all incoming resources; v1-v3 retain the old actual factory.
-  const security=e.p.format===CREATION_RACES_FORMAT?await racePreviewAPI():legacySecurity;
-  const api=e.p.format===CREATION_RACES_FORMAT?security:legacyCreationPreview;
+  const extended=e.p.format===CREATION_RACES_FORMAT||e.p.format==='oc2-source-creation-preview-delivery-v5';
+  const security=extended?await racePreviewAPI(e.p.format):legacySecurity;
+  const api=extended?security:legacyCreationPreview;
   const base=e.p.previews[api.creationPreviewKey(race,gender)]?.baseURL;if(!base)return null;
   const url=path=>security.creationPreviewResourceURL(base,path);
   const manifest=await json(url('manifest.json'));
@@ -156,8 +167,19 @@ export function createSourceCreationPreview(root,{profileURL}){
   const images=paths.map(path=>[path,url(path)]); // Validate the complete closure before requesting it.
   const data=await json(modelURL),textures=new Map();
   security.checkedCreationModel(manifest,data,{race,gender});
-  await Promise.all(images.map(async([path,sourceURL])=>textures.set(path,await e.texture(sourceURL))));
-  const preview=api.buildCreationRacePreview({THREE:e.THREE,createMaterial:()=>new e.THREE.MeshBasicMaterial(),manifest,data,textures,race,gender});
+  const conditional=manifest.format===security.ELF_CONDITIONAL_FORMAT;
+  const policy=conditional?security.checkedElfConditionalPolicy(manifest):null,ownedInputs=[];
+  const retained=policy?new Map(Object.entries(policy.samplers).map(([slot,input])=>[input.url,slot])):null;
+  const loaded=await Promise.allSettled(images.map(async([path,sourceURL])=>{
+   const texture=retained?.has(path)?await security.loadElfConditionalTexture(e.THREE,sourceURL,retained.get(path)):await e.texture(sourceURL);
+   if(retained?.has(path))ownedInputs.push(texture);
+   textures.set(path,texture);
+  }));
+  const rejected=loaded.find(result=>result.status==='rejected');
+  if(rejected){for(const texture of ownedInputs)texture.dispose();throw rejected.reason;}
+  let preview;
+  try{preview=api.buildCreationRacePreview({THREE:e.THREE,createMaterial:()=>new e.THREE.MeshBasicMaterial(),manifest,data,textures,race,gender});}
+  catch(error){for(const texture of ownedInputs)texture.dispose();throw error;}
   const materials=[],maps=[],rows=new Map(manifest.materials.map(row=>[row.index,row]));
   const release=()=>{preview.dispose();for(const m of materials)m.dispose();for(const t of maps)t.dispose();};
   try{
@@ -173,6 +195,7 @@ export function createSourceCreationPreview(root,{profileURL}){
      const samplers=new Map();
      for(const [slot,path]of Object.entries(row.samplers)){
       const t=textures.get(path).clone(),a=row.addressing[slot];maps.push(t);
+      if(conditional)security.inheritElfTextureReceipt(textures.get(path),t);
       t.wrapS=a.addressU===0?e.THREE.RepeatWrapping:e.THREE.ClampToEdgeWrapping;t.wrapT=a.addressV===0?e.THREE.RepeatWrapping:e.THREE.ClampToEdgeWrapping;t.needsUpdate=true;samplers.set(path,t);
      }
      const m=createSourceCharacterMaterial(e.THREE,row,samplers,programs,object,colors,e.fresh.sourceCharacterLight,e.lighting,e.profile.sourceControllerLight.direction);
@@ -181,7 +204,8 @@ export function createSourceCreationPreview(root,{profileURL}){
     object.material=list;object.castShadow=object.receiveShadow=false;
    }
    applyCreationStageTransform(preview.root,e.profile);
-   return {...preview,dispose:release};
+   const conditionalReady=conditional?security.completeElfConditionalPreview(e.THREE,{manifest,data,preview}):null;
+   return {...preview,conditionalReady,dispose:release};
   }catch(error){release();throw error;}
  }
  function frame(time){
@@ -191,7 +215,7 @@ export function createSourceCreationPreview(root,{profileURL}){
   root.dataset.sourceCreationDrawCalls=String(engine.renderer.info.render.calls);
   raf=requestAnimationFrame(frame);
  }
- function hide(){serial++;active=false;canvas.hidden=true;cancelAnimationFrame(raf);dropActor();root.dataset.sourceCreationPreview='hidden';delete root.dataset.sourceCreationDisplay;delete root.dataset.sourceCreationDrawCalls;delete root.dataset.sourceCreationAssembly;}
+ function hide(){serial++;active=false;canvas.hidden=true;cancelAnimationFrame(raf);dropActor();root.dataset.sourceCreationPreview='hidden';delete root.dataset.sourceCreationDisplay;delete root.dataset.sourceCreationDrawCalls;delete root.dataset.sourceCreationAssembly;delete root.dataset.sourceCreationConditionalReady;delete root.dataset.sourceCreationAppearanceComplete;delete root.dataset.sourceCreationMissingOverride;}
  return {
   async show({screen,race,gender}){
    hide();if(closed||screen!=='CharacterChooseRace')return;
@@ -207,6 +231,7 @@ export function createSourceCreationPreview(root,{profileURL}){
     if(token!==serial||closed){next?.dispose();return;}
     if(!next){root.dataset.sourceCreationPreview='scene-only';return;}actor=next;e.scene.add(actor.root);
     root.dataset.sourceCreationPreview='ready';root.dataset.sourceCreationDisplay=String(next.manifest.originalDisplayId);
+    if(next.conditionalReady){root.dataset.sourceCreationConditionalReady=JSON.stringify(next.conditionalReady);root.dataset.sourceCreationAppearanceComplete='false';root.dataset.sourceCreationMissingOverride=next.conditionalReady.omittedOverride;}
     root.dataset.sourceCreationAssembly=JSON.stringify(e.assembly);
    }catch(error){if(token===serial&&!closed){if(!active)canvas.hidden=true;root.dataset.sourceCreationPreview=active?'scene-only':'unavailable';root.dataset.sourceCreationError=error.message;}}
   },

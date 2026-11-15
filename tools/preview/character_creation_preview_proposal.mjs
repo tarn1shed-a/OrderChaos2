@@ -1,5 +1,7 @@
 // A read-only model interface for the existing original creation stage.
 // It creates no DOM, layout, role, inventory, attribute, skill or server session.
+import {ELF_CONDITIONAL_FORMAT,checkedElfConditionalPolicy} from './creation_elf_source_ready.mjs';
+export {ELF_CONDITIONAL_FORMAT,checkedElfConditionalPolicy,loadElfConditionalTexture,inheritElfTextureReceipt,completeElfConditionalPreview} from './creation_elf_source_ready.mjs';
 export function creationSourceWrap(THREE,value){
   if(value===0)return THREE.RepeatWrapping;
   if(value===1||value===2)return THREE.ClampToEdgeWrapping;
@@ -10,6 +12,7 @@ export const CREATION_RACE_FORMAT='oc2-race-stage-creation-candidate-v1';
 export const CREATION_RACE_IDENTITIES=Object.freeze({
   '1:0':Object.freeze({key:'mendel-male',display:2048,model:34}),
   '1:1':Object.freeze({key:'mendel-female',display:2049,model:31}),
+  '2:0':Object.freeze({key:'elf-male',display:2046,model:33,conditional:true}),
   '2:1':Object.freeze({key:'elf-female',display:2047,model:2}),
   '3:0':Object.freeze({key:'orc-male',display:2050,model:28}),
   '3:1':Object.freeze({key:'orc-female',display:2051,model:30}),
@@ -18,7 +21,7 @@ export const CREATION_RACE_IDENTITIES=Object.freeze({
 export const CREATION_PREVIEW_FORMATS=Object.freeze({
   '0:0':'oc2-human-male-creation-candidate-v1',
   '0:1':'oc2-human-female-creation-candidate-v1',
-  ...Object.fromEntries(Object.keys(CREATION_RACE_IDENTITIES).map(key=>[key,CREATION_RACE_FORMAT])),
+  ...Object.fromEntries(Object.entries(CREATION_RACE_IDENTITIES).map(([key,source])=>[key,source.conditional?ELF_CONDITIONAL_FORMAT:CREATION_RACE_FORMAT])),
 });
 
 export function creationPreviewKey(race,gender){
@@ -48,6 +51,7 @@ export function checkedCreationPreview(manifest,{race,gender}){
       manifest.sourceTraceSHA256!=='6c3c300912f2cc7021a3784c601a7229b327916ee89c9a34ac72390b82f680a8')
       throw Error('Original race-stage costume evidence is incomplete');
   }
+  if(manifest.format===ELF_CONDITIONAL_FORMAT)checkedElfConditionalPolicy(manifest);
   if(!Array.isArray(manifest.visibleMeshIndices)||!Array.isArray(manifest.materials))throw Error('Original preview indices missing');
   const indices=new Set();
   for(const entry of manifest.materials){
@@ -81,12 +85,12 @@ export function checkedCreationModel(manifest,data,{race,gender}){
   })[scope.key];
   const modelPaths={1:'human/male/oc2_human_m_body_01.bdae',32:'human/female/oc2_human_f_body_01.bdae',
     34:'mendel/male/oc2_mendel_m_body_01.bdae',31:'mendel/female/oc2_mendel_f_body_01.bdae',
-    2:'elf/female/oc2_elf_f_body_01.bdae',28:'orc/male/oc2_orc_m_body_01.bdae',
+    2:'elf/female/oc2_elf_f_body_01.bdae',33:'elf/male/oc2_elf_m_body_01.bdae',28:'orc/male/oc2_orc_m_body_01.bdae',
     30:'orc/female/oc2_orc_f_body_01.bdae',29:'daisauros/male/oc2_daisauros_m_body_01.bdae'};
   const source=data.sourceCreation;
   if(!expected||manifest.originalDisplayId!==expected.display||data.source!=='model/npc/character/'+modelPaths[expected.model]||
     source?.displayId!==expected.display||source.race!==race||source.gender!==gender||source.createdRole!==false||source.originalFloatWeightsPreserved!==true||
-    (manifest.format===CREATION_RACE_FORMAT?source.sourceModelId!==expected.model:
+    ([CREATION_RACE_FORMAT,ELF_CONDITIONAL_FORMAT].includes(manifest.format)?source.sourceModelId!==expected.model:
       Object.hasOwn(source,'sourceModelId')&&source.sourceModelId!==expected.model)||
     JSON.stringify(source.visibleMeshIndices)!==JSON.stringify(manifest.visibleMeshIndices))
     throw Error('Original preview model does not match its stage costume');

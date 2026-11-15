@@ -11,7 +11,7 @@ assert.equal(creationSourceWrap(explicitThree,1),1001);
 assert.equal(creationSourceWrap(explicitThree,2),1001);
 assert.throws(()=>creationSourceWrap(explicitThree,3));
 assert.equal(creationPreviewKey(0,0),'0:0');assert.equal(creationPreviewKey(0,1),'0:1');
-assert.equal(creationPreviewKey(2,1),'2:1');assert.equal(creationPreviewKey(2,0),null);assert.equal(creationPreviewKey('0',0),null);
+assert.equal(creationPreviewKey(2,1),'2:1');assert.equal(creationPreviewKey(2,0),'2:0');assert.equal(creationPreviewKey('0',0),null);
 const minimal={format:'oc2-human-male-creation-candidate-v1',race:0,gender:0,createdRole:false,initialServerAttributes:null,visibleMeshIndices:[],materials:[]};
 assert.deepEqual(checkedCreationPreview(minimal,{race:0,gender:0}),{key:'0:0',createsPlayableRole:false,grantsEquipment:false,writesCharacter:false});
 for(const invalid of [{...minimal,createdRole:true},{...minimal,initialServerAttributes:{}},{...minimal,gender:1},{...minimal,materials:[{index:0},{index:0}]}])

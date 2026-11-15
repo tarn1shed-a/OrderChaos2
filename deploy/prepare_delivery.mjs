@@ -25,6 +25,18 @@ export const TYPES={'.svg':'image/svg+xml','.html':'text/html; charset=utf-8','.
 const sha=raw=>createHash('sha256').update(raw).digest('hex');
 const compressible=new Set(['.json','.js','.mjs','.css','.html','.glsl','.rgba','.svg']);
 
+export function selectCreationProfile(files){
+  const legacy=['/assets/source-creation-stage/manifest-races-v1.json','/assets/source-creation-stage/manifest-v3.json','/assets/source-creation-stage/manifest-v2.json','/assets/source-creation-stage/manifest.json'];
+  const conditional='/assets/source-creation-stage/manifest-conditional-v1.json';
+  const selected=[conditional,...legacy].find(url=>files[url])||legacy.at(-1);
+  if(selected===conditional){
+    for(const url of ['/character_creation_race_preview_v2.mjs','/creation_elf_source_ready.mjs',
+      '/assets/source-creation-elf-conditional-v1/manifest.json','/assets/source-creation-elf-conditional-v1/assets/character.json'])
+      if(!files[url])throw Error('Conditional creation delivery is incomplete: '+url);
+  }
+  return selected;
+}
+
 export async function prepare(root,{stage=false}={}){
   const runtime=resolve(root,'analysis/raw/portable/running-preview');
   const bundle=JSON.parse(await readFile(resolve(runtime,'bundle-manifest.json'),'utf8'));
@@ -49,7 +61,7 @@ export async function prepare(root,{stage=false}={}){
     const entryUI=Boolean(files['/assets/source-entry/entry.json']);
     const path=resolve(destination,'staged-entry.js');
     const creationPreview=Boolean(files['/assets/source-creation-stage/manifest.json']);
-    const creationProfile=files['/assets/source-creation-stage/manifest-races-v1.json']?'/assets/source-creation-stage/manifest-races-v1.json':files['/assets/source-creation-stage/manifest-v3.json']?'/assets/source-creation-stage/manifest-v3.json':files['/assets/source-creation-stage/manifest-v2.json']?'/assets/source-creation-stage/manifest-v2.json':'/assets/source-creation-stage/manifest.json';
+    const creationProfile=selectCreationProfile(files);
     let entrySource=stageEntry(await readFile(files['/explore-map.js'].path,'utf8'),{entryUI,creationPreview,creationProfile});
     if(files[INSIDE_MANIFEST])entrySource=stageInsideEntry(entrySource);
     if(files[CHARACTER_PANEL_MANIFEST])entrySource=stageCharacterHotbarEntry(stageCharacterPanelsEntry(entrySource));

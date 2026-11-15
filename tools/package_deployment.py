@@ -156,6 +156,7 @@ def build_context(archive, destination):
     sources += ['tools/preview/source-tutorial-sky-overlay.mjs']
     sources += ['tools/preview/tutorial_terrain_grouping_policy.js']
     sources += ['tools/preview/quest_journal_program.mjs','tools/preview/quest_journal_widgets.mjs']
+    sources += ['tools/creation_class_stage/stage_switch.mjs','tools/creation_class_stage/actor_v2.mjs','tools/creation_class_stage/material_v2.mjs']
     # Optional original human composition code. Its private inputs/configuration
     # are not activated or appended to the unchanged base runtime archive.
     sources += python_closure('source_human_pose_worker')

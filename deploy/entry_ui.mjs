@@ -15,12 +15,13 @@ export function createSourceEntry({connect,previewURL=null}){
   let manifest=null,screen=null,selected=null,roles=[],identities=[],isReady=false,busy=false,pendingError=null,listOffset=0;
   let draft={race:0,gender:0,cls:0,name:''};
   let racePreview=null,previewPromise=null;
+  const stagedPreview=previewURL==='/assets/source-creation-stage/manifest-stages-v1.json';
   function hidePreview(){racePreview?.hide();}
   function updateRacePreview(){
     if(!previewURL)return;
-    const current={screen:root.dataset.sourceScreen,race:draft.race,gender:draft.gender};
-    if(!previewPromise)previewPromise=import('./creation_preview.mjs').then(({createSourceCreationPreview})=>racePreview=createSourceCreationPreview(root,{profileURL:previewURL}));
-    previewPromise.then(p=>{if(root.dataset.sourceScreen===current.screen&&draft.race===current.race&&draft.gender===current.gender&&!root.hidden)return p.show(current);}).catch(error=>{root.dataset.sourceCreationError=error.message;});
+    const current={screen:root.dataset.sourceScreen,race:draft.race,gender:draft.gender,professionIndex:draft.cls};
+    if(!previewPromise)previewPromise=stagedPreview?import('./creation_stages.mjs').then(({createSourceCreationStages})=>racePreview=createSourceCreationStages(root,{profileURL:previewURL})):import('./creation_preview.mjs').then(({createSourceCreationPreview})=>racePreview=createSourceCreationPreview(root,{profileURL:previewURL}));
+    previewPromise.then(p=>{if(root.dataset.sourceScreen===current.screen&&draft.race===current.race&&draft.gender===current.gender&&(!stagedPreview||draft.cls===current.professionIndex)&&!root.hidden)return p.show(current);}).catch(error=>{root.dataset.sourceCreationError=error.message;});
   }
   const blocked=new Map();
   function hideRoot(){racePreview?.dispose();racePreview=null;previewPromise=null;root.hidden=true;for(const[el,value]of blocked)el.inert=value;blocked.clear();}
@@ -243,10 +244,11 @@ export function createSourceEntry({connect,previewURL=null}){
       for(let i=0;i<5;i++)q('._ClassList.Item_'+i+'.SelectedEff').setAttribute('display',i===draft.cls?'inline':'none');
       label('._ClassDescMC._Title',word('GENERAL_CH_SELEC_'+classTitles[draft.cls]));image(q('._ClassDescMC._Icon'),icon('class_'+classNames[draft.cls]));
       const key='GENERAL_CH_SELEC_'+String(9+draft.cls).padStart(2,'0');field('._ClassDescMC._Detail.mc_content.text',{name:'职业说明',value:word(key)});
+      if(stagedPreview)updateRacePreview();
     };
     for(let i=0;i<5;i++){const path='._ClassList.Item_'+i;hide(path+'.IsLockedForSkill');image(q(path+'.DisplayIcon'),icon('class_'+classNames[i]));button(q(path),word('GENERAL_CH_SELEC_'+classTitles[i]),()=>{draft.cls=i;update();});}
     // The authored radar frame is not the selected class's recovered data.
-    hide('._ClassDescMC._Pic');hide('._ClassDescMC._ScrollBar');update();
+    hide('._ClassDescMC._Pic');hide('._ClassDescMC._Detail.mc_bounds');hide('._ClassDescMC._ScrollBar');update();
   }
   async function appearance(){
     await show('CharacterChoosePart');navigation(profession,()=>{});
@@ -270,6 +272,7 @@ export function createSourceEntry({connect,previewURL=null}){
       }catch(error){await connectionError(manifest.strings[error.message]?.text||error.message,appearance);}
       finally{submitting=false;}
     });
+    if(stagedPreview)updateRacePreview();
   }
   async function connectionError(message,back=choose){
     await show('LoginMsgBox');hide('._DetailScrollPane');hide('._TxtTitle');hide('._VersionText');hide('.cnt._YesBtn');hide('.cnt._NoBtn');

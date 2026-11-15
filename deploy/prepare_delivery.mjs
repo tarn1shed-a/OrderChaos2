@@ -18,6 +18,8 @@ import {stageUnstuckEntry} from './unstuck_entry.mjs';
 import {stageInspectorEntry} from './map_inspector_ui.mjs';
 import {stageTutorialSkyEntry,stageTutorialSkyPlan,SKY_MANIFEST} from '../tools/preview/source-tutorial-sky-overlay.mjs';
 import {creationPreviewPlan} from './creation_plan.mjs';
+import {CREATION_STAGES_PROFILE}from'./creation_stages_profile.mjs';
+import {prepareCreationStagesDelivery}from'./creation_stages_delivery.mjs';
 import {prepareQuestDelivery} from './quest_delivery.mjs';
 import {stageTutorialTerrainGroups,stageTutorialTerrainGroupsPlan,TERRAIN_GROUPS,TERRAIN_GROUPS_SHA,TERRAIN_GROUPS_HELPER} from './tutorial_terrain_groups.mjs';
 
@@ -28,7 +30,8 @@ const compressible=new Set(['.json','.js','.mjs','.css','.html','.glsl','.rgba',
 export function selectCreationProfile(files){
   const legacy=['/assets/source-creation-stage/manifest-races-v1.json','/assets/source-creation-stage/manifest-v3.json','/assets/source-creation-stage/manifest-v2.json','/assets/source-creation-stage/manifest.json'];
   const conditional='/assets/source-creation-stage/manifest-conditional-v1.json';
-  const selected=[conditional,...legacy].find(url=>files[url])||legacy.at(-1);
+  const selected=[CREATION_STAGES_PROFILE,conditional,...legacy].find(url=>files[url])||legacy.at(-1);
+  if(selected===CREATION_STAGES_PROFILE&&!files['/assets/source-creation-stages/contract.json'])throw Error('Original staged creation delivery incomplete');
   if(selected===conditional){
     for(const url of ['/character_creation_race_preview_v2.mjs','/creation_elf_source_ready.mjs',
       '/assets/source-creation-elf-conditional-v1/manifest.json','/assets/source-creation-elf-conditional-v1/assets/character.json'])
@@ -53,6 +56,7 @@ export async function prepare(root,{stage=false}={}){
     const path=resolve(root,'deploy/node_modules/three/build',name),raw=await readFile(path);
     files['/vendor/'+name]={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.js']};
   }
+  await prepareCreationStagesDelivery(root,files);
   if(stage){
     const entryManifest=JSON.parse(await readFile(files['/assets/source-temple-sampling/manifest.json'].path,'utf8'));
     const terrain=JSON.parse(await readFile(files[entryManifest.map.url].path,'utf8'));

@@ -40,6 +40,7 @@ jobs:
       - run: python tools/tutorial_quest_chain_tests.py
       - run: python tools/ordinary_mainline_evidence_tests.py
       - run: python tools/localized_text_inventory_tests.py
+      - run: python tools/mainline_chat_source_tests.py
       - run: python tools/ordinary_quest_map_tests.py
       - run: python tools/tutorial_script_entry_tests.py
       - run: python tools/tutorial_script_archive_tests.py

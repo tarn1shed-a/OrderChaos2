@@ -50,7 +50,33 @@ export function bindQuestMotion(rpc,info,entry,scope=randomUUID(),playerChoice=n
   return motion;
 }
 
-export function createQuestMotion(config,threadURL,entry,{playerChoice=null}={}){
+export function prepareQuestBodies(rpc,info,keys){
+  if(keys===null)return [];
+  if(!Array.isArray(keys)||new Set(keys).size!==keys.length||keys.some(key=>typeof key!=='string'||!key))throw Error('必须明确指定不重复的原身体预热计划');
+  if(keys.length&&(!Array.isArray(info?.sourceSpeciesKeys)||keys.some(key=>!info.sourceSpeciesKeys.includes(key))))throw Error('预热计划包含未声明的原身体');
+  const prepared=[];
+  for(const key of keys){
+    const result=rpc.request('prepareOwnBody',{species:key}),pose=result?.pose;
+    const announced=typeof pose?.field==='string'&&Object.hasOwn(info,pose.field)?info[pose.field]:null;
+    if(result?.ready!==true||result.key!==key||!/^source[A-Z][A-Za-z]*Pose$/.test(pose?.field)||
+      announced?.key!==key||pose.bindingId!==announced.bindingId||pose.valueBytes!==announced.valueBytes||
+      !/^[a-f0-9]{64}$/.test(pose.bindingId)||!Number.isSafeInteger(pose.valueBytes)||pose.valueBytes<=0||
+      !Number.isFinite(result.milliseconds)||result.milliseconds<0||!Number.isSafeInteger(result.rssBytes)||result.rssBytes<=0)
+      throw Error('原身体预热未返回匹配的实际完成记录');
+    prepared.push(Object.freeze({key,ready:true,pose:Object.freeze({field:pose.field,bindingId:pose.bindingId,valueBytes:pose.valueBytes}),milliseconds:result.milliseconds,rssBytes:result.rssBytes}));
+  }
+  return Object.freeze(prepared);
+}
+
+export function createQuestMotion(config,threadURL,entry,{playerChoice=null,prepareBodies=null}={}){
+  // Operator startup preparation only; no player position, queue, timestep or
+  // timeout is changed. Every declared key is checked before any preparation.
+  if(prepareBodies!==null&&(!Array.isArray(prepareBodies)||new Set(prepareBodies).size!==prepareBodies.length||prepareBodies.some(key=>typeof key!=='string'||!key)))throw Error('必须明确指定不重复的原身体预热计划');
   const rpc=new NativeQuestRPC(config,threadURL);
-  try{return bindQuestMotion(rpc,rpc.request('init'),entry,randomUUID(),playerChoice);}catch(error){rpc.close();throw error;}
+  try{
+    const info=rpc.request('init'),prepared=prepareQuestBodies(rpc,info,prepareBodies);
+    const motion=bindQuestMotion(rpc,info,entry,randomUUID(),playerChoice);
+    if(prepareBodies!==null)motion.preparedPlayerBodies=prepared;
+    return motion;
+  }catch(error){rpc.close();throw error;}
 }

@@ -42,6 +42,19 @@ const motion = createQuestMotion(config, threadURL, entry, {playerChoice: choice
 
 这只是供可选接线使用的模块，不代表生产入口已经开放九种身体。原跳跃/空中/战斗缺口及各身体准入条件保持，未以旧精灵身体替代其它种族，也未改角色存档。
 
+可选的原身体工作进程接线还需在HTTP服务监听前预热，不能把整套原控制器初始化放到第一次移动中：
+
+```js
+const motion = createQuestMotion(config, threadURL, entry, {
+  playerChoice: choice,
+  prepareBodies: registry.bodyKeys,
+});
+```
+
+这份明确计划先整体检查是否有重复或未声明身体，再逐个请求 `prepareOwnBody`。工作进程须返回实际完成、同一身体的姿势绑定/字节数及测量的耗时/RSS；任何一步失败都会关闭工作进程，工厂不会返回可监听的motion。默认 `prepareBodies:null` 不发送额外请求，原20秒单次超时、运动计算和tick不变。4项公共检查覆盖真实Node工作线程握手、顺序、绑定拒绝、部分失败清理和旧路径；测试线程是明确的宿主夹具，不冒充原CPU。
+
+本机独立9身体原工作进程另已通过34项真实HTTP/双WebSocket及重启检查：监听前预热约27秒，单体约2.5至4.1秒；监听后首个原姿势约55至122毫秒。这是当前Mac、loopback及分组双演员数据，不是Railway、澳洲网络或九人同时在线的性能证明。原工作进程RSS约830MiB，尚须核完整Linux服务的总驻留内存；没有新增人为内存上限或调整生产额度。记录为 `analysis/raw/player-choice-delivery-20261115/wire-check-v2.json`，该私有候选未据此宣称全角色已上线。
+
 统一选择、身份存储、地图动作、身体绘制、职业技能是不同环节。当前正式任务客户端仍有旧身体拒绝条件，尚未切换全部身体工厂；仅删除条件会错误套用精灵女性。原已学、已装备技能数据仍不能由职业或等级猜出，五职业目录也不能当作已恢复的快捷栏。后续逐批接真实身体与技能窗口，通过实际测试后才发布，不能把本研究分支说成Railway已更新全部角色。
 
 真实旧存档及原文件的哈希保持原值；未部署、未调整服务器地区、未启动Docker、未恢复自动续跑。

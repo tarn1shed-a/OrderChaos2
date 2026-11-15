@@ -1,0 +1,118 @@
+// Stage1/2 source actor geometry/material bridge. This is a WebGL adaptation,
+// not a replacement original model-ready reply or a played-role permission.
+import {checkedStageCandidate} from './stage_switch.mjs';
+const finite=(values,n)=>Array.isArray(values)&&(n===undefined||values.length===n)&&values.every(Number.isFinite);
+const same=(a,b)=>{
+ if(a===b)return true;
+ if(!a||!b||typeof a!=='object'||typeof b!=='object'||Array.isArray(a)!==Array.isArray(b))return false;
+ const keys=Object.keys(a).sort(),other=Object.keys(b).sort();
+ return keys.length===other.length&&keys.every((k,i)=>k===other[i]&&same(a[k],b[k]));
+};
+const attributes=[['Vertex','position'],['Normal','normal'],['TexCoord0','uv'],['Tangent','sourceTangent'],['Binormal','sourceBinormal'],['SkinWeights','skinWeight'],['SkinIndices','skinIndex']];
+export function checkedStageModel(manifest,data,identity){
+ checkedStageCandidate(manifest,identity);
+ const source=data?.sourceCreation;
+ if(data?.format!=='bdae946-character-v1'||data.source!==identity.sourceModel.ModelPath||
+  source?.displayId!==identity.request.displayId||source.stage!==identity.panel||source.screen!==identity.screen||
+  source.race!==identity.race||source.gender!==identity.gender||source.professionIndex!==identity.professionIndex||source.profession!==identity.profession||
+  source.sourceModelId!==identity.sourceModel.ID||source.originalFloatWeightsPreserved!==true||source.createdRole!==false||
+  !Array.isArray(data.meshes)||!Array.isArray(data.materials)||!Array.isArray(data.rig?.nodes)||!Array.isArray(data.rig?.skins)||
+  JSON.stringify(source.visibleMeshIndices)!==JSON.stringify(manifest.visibleMeshIndices))throw Error('Original stage actor does not match its own display/model');
+ if(!Array.isArray(manifest.attachments)||!Array.isArray(manifest.modelEffects)||manifest.modelEffects.length||
+  ['eff_mod_eff1','eff_mod_eff2','eff_mod_eff3'].some(k=>identity.sourceModel[k]))throw Error('Original stage Model effect needs its own recovered constructor');
+ if(manifest.animationScope?.initialSourceName!=='idle'||manifest.animationScope.finiteInitialClipOnly!==true||manifest.animationScope.noInventedInfiniteIdleLoop!==true)
+  throw Error('Unproved source selection animation continuation');
+ if(data.clips?.length!==1||data.clips[0].name!=='idle'||data.clips[0].duration!==manifest.idleDuration||!(manifest.idleDuration>0))throw Error('Original finite stage idle differs');
+ return manifest;
+}
+function checkedMaterial(row){
+ const profiles=row?.sourceEffectProfiles?.profiles,states=profiles?.map(p=>p.state);
+ if(states?.length!==2||JSON.stringify(states[0])!==JSON.stringify(states[1])||states[0].blendEnabled||!states[0].depthTestEnabled||
+  !states[0].depthWriteEnabled||states[0].depthFunctionGL!==515||!row.samplers||!row.addressing)throw Error('Uncovered original stage material pass');
+ return row;
+}
+function wrap(THREE,value){if(value===0)return THREE.RepeatWrapping;if(value===1||value===2)return THREE.ClampToEdgeWrapping;throw Error('Unknown original texture address');}
+export function buildCreationStageActor({THREE,manifest,data,identity,textures,attachmentData,createMaterial}){
+ checkedStageModel(manifest,data,identity);
+ if(!(textures instanceof Map)||!(attachmentData instanceof Map)||typeof createMaterial!=='function')throw Error('Actual texture/model/material constructors required');
+ const root=new THREE.Group(),geometries=[],materials=[],clones=[],skeletons=[],meshes=[],weapons=[];
+ let mixer=null,disposed=false;
+ const release=()=>{if(disposed)return;disposed=true;root.removeFromParent();if(mixer){mixer.stopAllAction();mixer.uncacheRoot(root);}for(const value of geometries)value.dispose();for(const value of materials)value.dispose();for(const value of clones)value.dispose();for(const value of skeletons)value.dispose();};
+ try{
+  const nodes=data.rig.nodes.map((n,i)=>{
+   if(!finite(n.position,3)||!finite(n.quaternion,4)||!finite(n.scale,3)||!Number.isInteger(n.parent)||n.parent< -1||n.parent>=i)throw Error('Original source hierarchy differs');
+   const bone=new THREE.Bone();bone.name='creation_stage_node_'+i;bone.position.fromArray(n.position);bone.quaternion.fromArray(n.quaternion);bone.scale.fromArray(n.scale);return bone;
+  });
+  data.rig.nodes.forEach((n,i)=>(n.parent<0?root:nodes[n.parent]).add(nodes[i]));
+  const geometryFor=m=>{
+   const g=new THREE.BufferGeometry();geometries.push(g);
+   for(const [name,key,width]of [['position','positions',3],['normal','normals',3],['uv','uvs',2],['sourceTangent','sourceTangents',3],['sourceBinormal','sourceBinormals',3]]){
+    if(!finite(m[key])||m[key].length%width)throw Error('Original stage geometry attribute absent');
+    g.setAttribute(name,new THREE.Float32BufferAttribute(m[key],width));
+   }
+   if(!Array.isArray(m.indices)||!Array.isArray(m.groups))throw Error('Original stage source indices absent');
+   g.setIndex(m.indices);for(const group of m.groups)g.addGroup(group.start,group.count,group.material);return g;
+  };
+  const materialsFor=(object,sourceRows,groups)=>{
+   const result=[];
+   for(const index of new Set(groups.map(g=>g.material))){
+    const row=checkedMaterial(sourceRows.find(m=>m.index===index));if(!row)throw Error('Original visible material missing');
+    const samplers=new Map();
+    for(const [slot,path]of Object.entries(row.samplers)){
+     const original=textures.get(path),address=row.addressing[slot];
+     if(!original?.isTexture||original.flipY!==false||original.colorSpace!==THREE.NoColorSpace||!address)throw Error('Original stage sampler was not constructed');
+     const texture=original.clone();clones.push(texture);texture.wrapS=wrap(THREE,address.addressU);texture.wrapT=wrap(THREE,address.addressV);texture.needsUpdate=true;samplers.set(path,texture);
+    }
+    const material=createMaterial(THREE,row,samplers,manifest.colors,object);
+    if(!material?.isMaterial)throw Error('Actual source material constructor did not return a Three material');materials.push(material);result[index]=material;
+   }
+   for(const [to,from]of attributes){const attribute=object.geometry.getAttribute(from);if(attribute)object.geometry.setAttribute(to,attribute);}
+   return result;
+  };
+  const visible=new Set(manifest.visibleMeshIndices),skinMap=new Map(data.rig.skins.map(s=>[s.mesh,s]));
+  data.meshes.forEach((m,index)=>{
+   const geometry=geometryFor(m),skin=skinMap.get(index);
+   if(!skin||!Array.isArray(skin.boneNodes)||!Array.isArray(skin.inverseBindMatrices)||skin.boneNodes.some(i=>!nodes[i]))throw Error('Original stage skin absent');
+   geometry.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(skin.skinIndices,4));geometry.setAttribute('skinWeight',new THREE.Float32BufferAttribute(skin.skinWeights,4));
+   const object=new THREE.SkinnedMesh(geometry,[]),skeleton=new THREE.Skeleton(skin.boneNodes.map(i=>nodes[i]),skin.inverseBindMatrices.map(m=>new THREE.Matrix4().fromArray(m)));skeletons.push(skeleton);
+   object.bind(skeleton,new THREE.Matrix4());object.visible=visible.has(index);object.name=m.name;object.frustumCulled=false;root.add(object);meshes.push(object);
+   if(object.visible)object.material=materialsFor(object,manifest.materials,m.groups);
+  });
+  const seen=new Set();
+  for(const row of manifest.attachments){
+   const source=attachmentData.get(row.model),mount=row.mount;
+   if(seen.has(row.slot)||!source||source.source!==row.source||row.sourceRequest?.slot!==row.slot||row.sourceRequest.itemKey!==row.itemKey||
+    !mount?.sourceNodePresent||mount.rootFallback||!nodes[mount.sourceNodeIndex]||mount.slot!==row.slot||!finite(mount.rootLocalTranslation,3)||
+    mount.rotationOrScaleRewritten!==false||mount.sourceRootGeometryTransformPreserved!==true||source.meshes?.length!==1)
+    throw Error('Original weapon source mount/model differs');
+   seen.add(row.slot);const attachment=new THREE.Group();attachment.position.fromArray(mount.rootLocalTranslation);nodes[mount.sourceNodeIndex].add(attachment);
+   for(const m of source.meshes){
+    const object=new THREE.Mesh(geometryFor(m),[]),transform=source.sourceRigidMeshTransform;
+    if(transform){
+     const node=source.sourceNodes?.[transform.sourceNodeIndex];
+     if(transform.format!=='oc2-original-rigid-root-mesh-transform-v1'||transform.sourceMeshName!==m.name||
+      transform.nativeCPUExecuted!==true||transform.originalGPUObserved!==false||transform.originalModelLoaderExecuted!==false||
+      transform.sourceLiteralMeshAttachmentVerified!==true||!node||node.parent!==-1||!finite(transform.nativeMatrix,16)||
+      !same(node,transform.sourceNode))throw Error('Original rigid mesh transform proof differs');
+     const expected=new THREE.Matrix4().compose(new THREE.Vector3(...node.position),new THREE.Quaternion(...node.quaternion),new THREE.Vector3(...node.scale));
+     if(expected.elements.some((v,i)=>Math.abs(v-transform.nativeMatrix[i])>2e-6))throw Error('Original rigid mesh matrix differs');
+     object.matrix.fromArray(transform.nativeMatrix);object.matrixAutoUpdate=false;
+    }else{
+     const node=source.sourceNodes?.find(n=>(n.aliases||[]).includes(m.name.replace(/-mesh$/,'')));
+     if(!node||node.parent!==-1||node.position.some(v=>v!==0)||node.quaternion.some((v,i)=>v!==(i===3?1:0))||node.scale.some(v=>v!==1))throw Error('Legacy weapon requires exact identity source root');
+    }
+    object.name=m.name;object.frustumCulled=false;object.material=materialsFor(object,row.materials,m.groups);attachment.add(object);weapons.push(object);
+   }
+  }
+  const clip=data.clips[0],tracks=clip.tracks.map(t=>{
+   if(!nodes[t.node]||!['position','quaternion','scale'].includes(t.type))throw Error('Original stage idle target absent');
+   const name=`creation_stage_node_${t.node}.${t.type}`;
+   return t.type==='quaternion'?new THREE.QuaternionKeyframeTrack(name,t.times,t.values):new THREE.VectorKeyframeTrack(name,t.times,t.values);
+  });
+  mixer=new THREE.AnimationMixer(root);const action=mixer.clipAction(new THREE.AnimationClip('idle',clip.duration,tracks));
+  action.setLoop(THREE.LoopOnce,1);action.clampWhenFinished=true;action.play();mixer.update(0);root.updateMatrixWorld(true);
+  return {root,manifest,nodes,meshes,weapons,mixer,action,scope:{stageGeometryConstructed:true,sourceMaterialObjectsConstructed:true,
+    originalGPUObserved:false,selectionAnimationContinuationRestored:false,createsPlayableRole:false},
+   update(delta){if(!disposed)mixer.update(Math.min(Math.max(delta,0),.1));},dispose:release};
+ }catch(error){release();throw error;}
+}

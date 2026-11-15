@@ -119,3 +119,9 @@
 !tools/tutorial_map_geometry.py
 !tools/tutorial_preview_selection.py
 !tools/tutorial_walk_collision.py
+
+# Versioned original creation stage policies; no models or research outputs.
+!tools/creation_class_stage/
+!tools/creation_class_stage/stage_switch.mjs
+!tools/creation_class_stage/actor_v2.mjs
+!tools/creation_class_stage/material_v2.mjs

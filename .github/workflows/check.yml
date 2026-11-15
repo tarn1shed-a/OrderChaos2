@@ -228,6 +228,13 @@ jobs:
           python -m py_compile tools/ordinary_quest_profile.py tools/ordinary_quest_package.py tools/ordinary_quest_map.py tools/ordinary_quest_actors.py tools/ordinary_quest_tracking.py
       - run: node --test tools/self_name_tests.mjs
       - run: node --test tools/creation_stage_tests.mjs tools/creation_preview_tests.mjs tools/character_creation_preview_proposal_tests.mjs tools/creation_race_preview_tests.mjs tools/creation_elf_conditional_tests.mjs tools/creation_profile_routes_tests.mjs
+      - name: Class and appearance stage delivery boundaries (original assets excluded)
+        run: |
+          node --test tools/creation_stages_delivery_tests.mjs
+          node --check deploy/creation_stages.mjs
+          node --check tools/creation_class_stage/actor_v2.mjs
+          node --check tools/creation_class_stage/material_v2.mjs
+          python -m py_compile tools/creation_stages_package.py
       - run: python tools/species_world_queue_tests.py
       - run: node --test tools/species_world_motion_tests.mjs
       - run: python tools/source_species_worker_tests.py

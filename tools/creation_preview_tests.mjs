@@ -36,8 +36,20 @@ test('preview host has no character mutation endpoint and keeps unsupported role
  assert(source.includes("screen!=='CharacterChooseRace'"));
  const css=readFileSync(new URL('../deploy/entry_ui.css',import.meta.url),'utf8');assert(css.includes('object-fit:contain'));assert(css.includes('pointer-events:none'));
 });
+test('additional race delivery preserves original identities and refuses to claim all nine bodies',()=>{
+ const rows=[['1:0','mendel-male',2048,34],['1:1','mendel-female',2049,31],['2:1','elf-female',2047,2],['3:0','orc-male',2050,28],['3:1','orc-female',2051,30],['4:0','kartan',2052,29]];
+ const p={...profile,format:'oc2-source-creation-preview-delivery-v4',originalStaticInstances:151,originalDryChunks:192,originalWaterSurfaceChunks:152,originalWetFloorRestored:true,originalGroupRepresentativeMaterialCopies:true,
+  sourceRaceTraceSHA256:'6c3c300912f2cc7021a3784c601a7229b327916ee89c9a34ac72390b82f680a8',allNineRacePreviewsRestored:false,
+  extensions:[['dry','water'],['flowers','flowers'],['grass','grass'],['waterfalls','waterfalls'],['waterSurface','water-surface'],['wetFloor','water-floor-groups']].map(([kind,ns])=>({kind,url:`/assets/source-selection-${ns}/overlay.json`})),
+  previews:{...profile.previews,...Object.fromEntries(rows.map(([key,body])=>[key,{baseURL:`/assets/source-creation-races-v1/${body}/`}] ))},
+  additionalOriginalPreviews:rows.map(([key,bodyKey,display,model])=>({key,bodyKey,display,model}))};
+ assert.equal(validate(p),p);
+ for(const change of [{...p,format:'oc2-source-creation-preview-delivery-v3'},{...p,allNineRacePreviewsRestored:true},
+  {...p,previews:{...p.previews,'2:0':p.previews['2:1']}},{...p,additionalOriginalPreviews:p.additionalOriginalPreviews.slice(1)},
+  {...p,additionalOriginalPreviews:p.additionalOriginalPreviews.map((r,i)=>i?r:{...r,model:1})}])assert.throws(()=>validate(change));
+});
 test('race-only preparation does not become a map-entry gate or prefetch unrelated character textures',()=>{
- const original={critical:['/explore-map.js','/assets/source-creation-stage/manifest.json','/assets/source-selection-scene/manifest.json','/__delivery/entry_ui.mjs'],background:['/assets/source-temple-sampling/far.png','/assets/source-creation-human-female/assets/body.png','/selection_scene_water_surface.js','/assets/source-selection-water-surface/overlay.json'],scope:{unchanged:true}};
+ const original={critical:['/explore-map.js','/assets/source-creation-stage/manifest.json','/assets/source-selection-scene/manifest.json','/__delivery/entry_ui.mjs'],background:['/assets/source-temple-sampling/far.png','/assets/source-creation-human-female/assets/body.png','/selection_scene_water_surface.js','/assets/source-selection-water-surface/overlay.json','/character_creation_race_preview_v1.mjs','/assets/source-creation-races-v1/orc-female/assets/body.png'],scope:{unchanged:true}};
  const before=JSON.stringify(original),actual=creationPreviewPlan(original,[...original.critical,...original.background]);
  assert.deepEqual(actual.critical,['/explore-map.js','/__delivery/entry_ui.mjs']);assert.deepEqual(actual.background,['/assets/source-temple-sampling/far.png']);assert.equal(JSON.stringify(original),before);
  assert.equal(actual.scope.unchanged,true);assert.equal(actual.scope.creationPreviewChangesPlayableRaces,false);
@@ -52,5 +64,7 @@ test('preview routing is opt-in and leaves the existing entry, world and saves u
  assert.equal(extended.replace("previewURL:'/assets/source-creation-stage/manifest-v2.json',",''),old);
  const corrected=stageEntry(original,{entryUI:true,creationPreview:true,creationProfile:'/assets/source-creation-stage/manifest-v3.json'});
  assert.equal(corrected.replace("previewURL:'/assets/source-creation-stage/manifest-v3.json',",''),old);
+ const races=stageEntry(original,{entryUI:true,creationPreview:true,creationProfile:'/assets/source-creation-stage/manifest-races-v1.json'});
+ assert.equal(races.replace("previewURL:'/assets/source-creation-stage/manifest-races-v1.json',",''),old);
  assert.throws(()=>stageEntry(original,{entryUI:true,creationPreview:true,creationProfile:'https://external.invalid/profile'}));
 });

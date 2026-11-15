@@ -4,6 +4,7 @@
 !deploy/
 !deploy/*.py
 !deploy/*.mjs
+!deploy/*.css
 !deploy/retired_ui.css
 !deploy/attribute_ui.css
 !deploy/unstuck_ui.css
@@ -23,6 +24,8 @@
 !tools/preview/source-scene-effect-fire10-overlay.mjs
 !tools/preview/source-tutorial-sky-overlay.mjs
 !tools/preview/tutorial_terrain_grouping_policy.js
+!tools/preview/quest_journal_program.mjs
+!tools/preview/quest_journal_widgets.mjs
 !tools/local_mvp_runtime.json
 !tools/requirements-native.txt
 !tools/requirements-resources.txt

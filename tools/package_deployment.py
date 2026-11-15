@@ -155,6 +155,7 @@ def build_context(archive, destination):
                'deploy/acceptance.mjs', 'deploy/physics_acceptance.py', 'tools/preview/map-runtime-inside-overlay.mjs', 'tools/preview/character-panel-runtime-overlay.mjs', 'tools/preview/character-hotbar-overlay.mjs', 'tools/preview/source-scene-effect-overlay.mjs', 'tools/preview/source-scene-effect-fire10-overlay.mjs', 'deploy/character_hotbar.mjs', *python_closure()]
     sources += ['tools/preview/source-tutorial-sky-overlay.mjs']
     sources += ['tools/preview/tutorial_terrain_grouping_policy.js']
+    sources += ['tools/preview/quest_journal_program.mjs','tools/preview/quest_journal_widgets.mjs']
     # Optional original human composition code. Its private inputs/configuration
     # are not activated or appended to the unchanged base runtime archive.
     sources += python_closure('source_human_pose_worker')

@@ -118,5 +118,5 @@ export async function createQuestTracking({profile,host=document.body}={}){
   }
   const resize=()=>{if(last)update(last);};window.addEventListener('resize',resize);
   document.fonts.ready.then(()=>{if(!disposed&&last)update(last);});
-  return Object.freeze({update,clear:()=>update(null),dispose(){disposed=true;window.removeEventListener('resize',resize);root.remove();style.remove();}});
+  return Object.freeze({update,clear:()=>update(null),get currentQuestId(){return last?trackedObjective(profile,last)?.questId??null:null;},dispose(){disposed=true;window.removeEventListener('resize',resize);root.remove();style.remove();}});
 }

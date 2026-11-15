@@ -80,7 +80,9 @@ export async function createQuestTracking({profile,host=document.body}={}){
   if(parsed.querySelector('parsererror,script,foreignObject'))throw Error('Invalid original objective drawing');
   const root=document.createElement('section');root.className='source-quest-tracking';root.hidden=true;root.setAttribute('aria-label','任务追踪');
   const svg=document.importNode(parsed.documentElement,true);root.append(svg);host.append(root);
-  const style=document.createElement('style');style.textContent='.source-quest-tracking{position:fixed;inset:0;z-index:18;pointer-events:none;overflow:hidden}.source-quest-tracking[hidden]{display:none}.source-quest-tracking>svg{display:block;width:100%;height:100%;pointer-events:none}';document.head.append(style);
+  const style=document.createElement('link');style.rel='stylesheet';style.href=new URL('./quest_tracking.css',import.meta.url).href;
+  try{await new Promise((ok,bad)=>{style.onload=ok;style.onerror=()=>bad(Error('Original objective layout unavailable'));document.head.append(style);});}
+  catch(error){style.remove();root.remove();throw error;}
   const q=path=>svg.querySelector(`[data-source-path="${path}"]`),prefix='.m_CurQuestPanel.m_QuestItem0';
   const cfg=profile.window.config,[w,h]=profile.window.measuredSize;
   svg.querySelector('[data-quest-window]').setAttribute('transform',`translate(${Number(cfg.relativeposX)*(1136-w)+Number(cfg.offsetX)} ${Number(cfg.relativeposY)*(640-h)+Number(cfg.offsetY)}) scale(0.05)`);

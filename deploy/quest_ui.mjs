@@ -117,10 +117,15 @@ export async function createQuestUI({host=document.body,profile,optionalProfile,
     const doc=new DOMParser().parseFromString(await r.text(),'image/svg+xml');if(doc.querySelector('parsererror,script,foreignObject'))throw Error('Invalid original SVG');return doc;}
   const drawing=await svg(spec.url,assetBaseURL),optional=optionalProfile?await svg(optionalProfile.rewardSVG.file,optionalBaseURL):null;
   const root=document.createElement('section');root.className='compatible-source-mission';root.hidden=true;root.setAttribute('aria-label','任务');host.append(root);
-  const style=document.createElement('style');style.textContent=`
-@font-face{font-family:EntryText;src:url('${url('chineseText.woff',url(fontBaseURL))}')}@font-face{font-family:EntryDisplay;src:url('${url('chineseDisplay.woff',url(fontBaseURL))}')}@font-face{font-family:EntryGothic;src:url('${url('leagueGothic.woff',url(fontBaseURL))}')}
-.compatible-source-mission{position:fixed;inset:0;z-index:45;pointer-events:none;overflow:hidden}.compatible-source-mission[hidden]{display:none}.compatible-source-mission>svg{width:100%;height:100%;display:block;pointer-events:none}.compatible-source-mission [role=button]{cursor:pointer;pointer-events:auto}.compatible-source-mission [aria-disabled=true]{pointer-events:none}.compatible-source-mission-text{position:fixed;box-sizing:border-box;margin:0;padding:0;border:0;background:transparent;white-space:pre-wrap;overflow:auto;overflow-wrap:break-word;line-height:normal;scrollbar-width:none;pointer-events:auto}
-`;document.head.append(style);
+  // Same source fonts/layout, loaded without an inline-style CSP exception.
+  const style=document.createElement('link');style.rel='stylesheet';style.href=new URL('./quest_ui.css',import.meta.url).href;
+  const faces=[['EntryText','chineseText.woff'],['EntryDisplay','chineseDisplay.woff'],['EntryGothic','leagueGothic.woff']]
+    .map(([family,file])=>new FontFace(family,`url(${JSON.stringify(url(file,url(fontBaseURL)))})`));
+  try{
+    const sheet=new Promise((ok,bad)=>{style.onload=ok;style.onerror=()=>bad(Error('Original task layout unavailable'));document.head.append(style);});
+    await Promise.all([sheet,...faces.map(face=>face.load())]);
+    for(const face of faces)document.fonts.add(face);
+  }catch(error){for(const face of faces)document.fonts.delete(face);style.remove();root.remove();throw error;}
   let screen=null,texts=[],current=null,layoutBoard=null,disposed=false,controller;
   const q=path=>screen?.querySelector(`[data-source-path="${path}"]`);
   const visible=(path,value)=>{const el=q(path);if(el){el.setAttribute('display',value?'inline':'none');el.setAttribute('aria-hidden',String(!value));}};
@@ -197,5 +202,5 @@ export async function createQuestUI({host=document.body,profile,optionalProfile,
   controller=createQuestController({query,action,program,programFactory,render,hide:clear,onError});
   const key=e=>{if(e.key==='Escape'&&current){e.preventDefault();controller.close().catch(onError);}};
   window.addEventListener('keydown',key);window.addEventListener('resize',layout);
-  return Object.freeze({...controller,dispose(){if(disposed)return;controller.dispose();disposed=true;root.remove();style.remove();window.removeEventListener('keydown',key);window.removeEventListener('resize',layout);}});
+  return Object.freeze({...controller,dispose(){if(disposed)return;controller.dispose();disposed=true;root.remove();style.remove();for(const face of faces)document.fonts.delete(face);window.removeEventListener('keydown',key);window.removeEventListener('resize',layout);}});
 }

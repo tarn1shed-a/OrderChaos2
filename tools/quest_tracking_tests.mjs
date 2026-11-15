@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {trackedObjective,formatTrackedObjective} from '../deploy/quest_tracking.mjs';
 import {prepareQuestDelivery} from '../deploy/quest_delivery.mjs';
+import {CHARACTER_CHOICE_SKILL_DEPENDENCIES} from '../deploy/character_choice_skills.mjs';
 
 // Authored host DTO fixtures; original text/art/programs are never stored here.
 const profile=()=>({format:'oc2-original-ordinary-tracking-v1',sourceSHA256:'760866b49cbd948764e93183c7ba5cc32605d408e91b7f052f52856837cdfe2c',
@@ -45,8 +46,15 @@ test('new client remains compatible with the previous deployed bundle until its 
         '/mission_program.mjs','/ordinary-quest-scene.mjs','/source-ordinary-quest-actors.mjs'].map(k=>[k,{}]))};
     await prepareQuestDelivery(root,dir,files);assert.ok(!readFileSync(files['/quests.html'].path,'utf8').includes('data-source-quest-tracking'));
     assert.ok(files['/__delivery/quest_tracking.mjs']);
+    assert.doesNotMatch(readFileSync(files['/quests.html'].path,'utf8'),/data-source-character-skills/);
     files['/assets/source-quest-tracking/tracking.json']={};await prepareQuestDelivery(root,dir,files);
     assert.match(readFileSync(files['/quests.html'].path,'utf8'),/data-source-quest-tracking="1"/);
+    files['/assets/character-source/panels.json']={};
+    await assert.rejects(prepareQuestDelivery(root,dir,files),/skill directory delivery is incomplete/);
+    for(const url of CHARACTER_CHOICE_SKILL_DEPENDENCIES)files[url]={};
+    await prepareQuestDelivery(root,dir,files);
+    assert.match(readFileSync(files['/quests.html'].path,'utf8'),/data-source-character-skills="1"/);
+    assert.ok(files['/__delivery/character_choice_skills.mjs']);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 const actual=new URL('../analysis/raw/ordinary-quest-tracking-20261115/candidate-v1/assets/source-quest-tracking/tracking.json',import.meta.url);

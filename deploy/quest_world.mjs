@@ -14,12 +14,13 @@ import {createMobileHUD} from '/mobile-hud.js';
 import {createTouchJoystick} from '/touch-joystick.js';
 import {createPressControl} from '/press-control.js';
 import {mountSourceProgress} from '/hud-progress.js';
+import {createCharacterChoiceSkills} from '/__delivery/character_choice_skills.mjs';
 
 const $=id=>document.getElementById(id),canvas=$('scene'),viewport=$('viewport');
 const jsonCache=new Map(),textureCache=new Map(),textureLoader=new THREE.TextureLoader();
 async function json(url){if(!jsonCache.has(url))jsonCache.set(url,fetch(url).then(async r=>{if(!r.ok)throw Error('原资源未就绪');return r.json();}));return jsonCache.get(url);}
 async function texture(url){if(!textureCache.has(url))textureCache.set(url,textureLoader.loadAsync(url).then(t=>{t.colorSpace=THREE.NoColorSpace;t.flipY=false;t.needsUpdate=true;return t;}));return textureCache.get(url);}
-let renderer,scene,camera,origin,bounds,world,sourceMap,actorAssets,playerFactory,profile,questUI,questTracking,entry;
+let renderer,scene,camera,origin,bounds,world,sourceMap,actorAssets,playerFactory,profile,questUI,questTracking,entry,skills;
 let socket,identity,selfId,connected=false,ready=false,generation=0,players=[],questState=null,character=null;
 let cameraYaw=.65,cameraPitch=.58,cameraDistance=12,lastFrame=performance.now(),serverOffset=0;
 const focus=new THREE.Vector3(),avatars=new Map(),actors=new Map(),objects=new Map(),keys=new Set();
@@ -29,9 +30,10 @@ const room=new URLSearchParams(location.search).get('room')?.slice(0,16)||'QUEST
 const note=message=>{if($('load-note')){$('load-note').textContent=String(message||'');$('load-note').hidden=!message;}};
 const send=data=>{if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(data));};
 const me=()=>players.find(p=>p.id===selfId);
-const blocked=()=>!connected||!!document.querySelector('.source-entry:not([hidden]),.compatible-source-mission:not([hidden])')||
+const blocked=()=>!connected||skills?.isOpen||!!document.querySelector('.source-entry:not([hidden]),.compatible-source-mission:not([hidden])')||
   ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);
 function stop(){keys.clear();destination=null;joystick?.reset();jumpControl?.reset();joystickInput={active:false,x:0,y:0};if(connected)send({type:'input',x:0,y:0});}
+function openEntry(){skills?.disconnect();entry?.open();}
 function sourcePosition(p){
   if(!bounds||!world||!Number.isFinite(p?.x)||!Number.isFinite(p?.y)||!Number.isFinite(p?.worldY))return null;
   return new THREE.Vector3(bounds.min[0]+p.x/world.width*(bounds.max[0]-bounds.min[0]),p.worldY,bounds.min[2]+p.y/world.height*(bounds.max[2]-bounds.min[2]));
@@ -62,7 +64,7 @@ function compatibleInfo(info){
     returnItems:info.returnItems.map(v=>({...v,hasPromo:false,restricted:false}))};
 }
 async function openQuest(id=profile?.quests[0]?.id){
-  if(!connected||!id||questState?.completedQuestIds?.includes(id))return;stop();
+  if(!connected||!id||questState?.completedQuestIds?.includes(id))return;skills?.close();stop();
   try{await questUI.open(id);}catch(error){note(error.message);}
 }
 async function interact(target){
@@ -105,7 +107,7 @@ function syncPlayers(at){
   }
   updateHUD(me());
 }
-function clearConnection(){connected=false;selfId=null;players=[];questState=null;stop();questUI?.close().catch(()=>{});
+function clearConnection(){connected=false;selfId=null;players=[];questState=null;skills?.disconnect();stop();questUI?.close().catch(()=>{});
   questTracking?.clear();
   for(const a of avatars.values()){disposeCharacterAnimation(a.body);a.root.removeFromParent();}avatars.clear();
   for(const view of objects.values())view.instance.root.visible=false;
@@ -120,19 +122,19 @@ function connect(name,credentials,profession){
     if(token!==generation)return;let msg;try{msg=JSON.parse(event.data);}catch{return;}
     if(msg.type==='welcome'){
       if(msg.character?.sourceAvatar||msg.character?.appearance&&(msg.character.appearance.race!==2||msg.character.appearance.gender!==1)){
-        denied=true;ws.close();entry.error('这个角色的原模型尚未接入当前地图，请选择已支持的角色。');entry.open();return;
+        denied=true;ws.close();entry.error('这个角色的原模型尚未接入当前地图，请选择已支持的角色。');openEntry();return;
       }
-      selfId=msg.id;world=msg.world;character=msg.character;identity={characterId:msg.character.id,resumeToken:msg.resumeToken};connected=true;entry.hide();
+      selfId=msg.id;world=msg.world;character=msg.character;identity={characterId:msg.character.id,resumeToken:msg.resumeToken};connected=true;entry.hide();skills?.sync();
       $('session-open').hidden=true;$('field-actions').hidden=false;$('touch-controls').hidden=false;$('field-interaction').disabled=false;$('field-quests').disabled=false;
       note('');canvas.focus({preventScroll:true});try{await api('state');}catch(error){note(error.message);}
     }else if(msg.type==='state'){
       players=msg.players||[];if(msg.serverTime)serverOffset=msg.serverTime-Date.now();syncPlayers(msg.serverTime||Date.now());
       if(msg.questState)applyQuestState(msg.questState);
-    }else if(msg.type==='error'){denied=true;note(msg.message);entry.error(msg.message);entry.open();}
+    }else if(msg.type==='error'){denied=true;note(msg.message);entry.error(msg.message);openEntry();}
     else if(msg.type==='notice')note(msg.message);
   });
   ws.addEventListener('close',()=>{if(token!==generation)return;clearConnection();
-    if(!denied){note('连接中断，正在重连…');retryTimer=setTimeout(()=>connect(name,credentials,profession),1500);}else entry.open();});
+    if(!denied){note('连接中断，正在重连…');retryTimer=setTimeout(()=>connect(name,credentials,profession),1500);}else openEntry();});
 }
 async function loadPlayer(entry){
   const data=await json(entry.url);if(data.format!=='bdae946-character-v1'||data.characterMaterials?.format!=='oc2-character-materials-v1')throw Error('原玩家资源不完整');
@@ -153,8 +155,14 @@ async function mountHUD(ui){
   joystick=createTouchJoystick($('touch-controls'),{stage:viewport,profile:ui.controls.joystick,scale:()=>mobileHUD.scale,enabled:()=>!blocked(),change:value=>{joystickInput=value;if(value.active){destination=null;keys.clear();}}});
 }
 async function init(){
-  for(const id of ['field-inventory','field-skills','hotbar-settings','field-attack']){$(id).hidden=true;$(id).style.display='none';}
-  $('field-quests').disabled=true;$('session-open').hidden=true;entry=createSourceEntry({connect});entry.open();
+  for(const id of ['field-inventory','hotbar-settings','field-attack']){$(id).hidden=true;$(id).style.display='none';}
+  $('field-skills').hidden=true;$('field-skills').style.display='none';
+  if(document.documentElement.dataset.sourceCharacterSkills==='1')skills=createCharacterChoiceSkills({
+    readSession:()=>({connected,character,epoch:generation}),button:$('field-skills'),stop,
+    beforeOpen:()=>{pointer=null;questUI?.close().catch(error=>note(error.message));},
+    focusGame:()=>canvas.focus({preventScroll:true}),onError:error=>note(error.message),
+  });
+  $('field-quests').disabled=true;$('session-open').hidden=true;entry=createSourceEntry({connect});openEntry();
   renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));
   renderer.outputColorSpace=THREE.LinearSRGBColorSpace;renderer.toneMapping=THREE.NoToneMapping;scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(45,1,.1,900);
   profile=await json('/assets/ordinary-quests/profile.json');
@@ -182,7 +190,7 @@ async function init(){
     query:async id=>{const v=await api('query',{questId:id});if(v.info.Status===0)throw Error('当前任务已完成');return compatibleInfo(v.info);},
     action:command=>api('action',{command}),onError:error=>note(error.message)});
   focus.fromArray(profile.actors[0].position).sub(origin).add(new THREE.Vector3(0,1,0));
-  $('field-quests').addEventListener('click',()=>openQuest());$('session-open').addEventListener('click',()=>{stop();entry.open();});
+  $('field-quests').addEventListener('click',()=>openQuest());$('session-open').addEventListener('click',()=>{stop();openEntry();});
   $('reset-view').addEventListener('click',()=>{cameraYaw=.65;cameraPitch=.58;cameraDistance=12;});
   ready=true;entry.ready();note('');requestAnimationFrame(draw);
 }
@@ -206,7 +214,12 @@ function pick(event){
   const point=hit.point.clone().add(origin);destination={...logicalPosition(point),source:point,stopDistance:.35};keys.clear();
 }
 const moveKeys=new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight']);
-window.addEventListener('keydown',e=>{if(blocked()||e.isComposing||e.metaKey||e.ctrlKey||e.altKey)return;
+window.addEventListener('keydown',e=>{
+  if(e.code==='KeyK'&&skills&&connected&&!e.isComposing&&!e.metaKey&&!e.ctrlKey&&!e.altKey&&
+    !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)&&!document.querySelector('.source-entry:not([hidden])')){
+    e.preventDefault();if(!e.repeat){if(skills.isOpen)skills.close();else if(!blocked()){stop();void skills.open();}}return;
+  }
+  if(blocked()||e.isComposing||e.metaKey||e.ctrlKey||e.altKey)return;
   if(moveKeys.has(e.code)){e.preventDefault();keys.add(e.code);destination=null;}
   if(e.code==='Space'){e.preventDefault();if(!e.repeat)send({type:'jump',pressed:true});}});
 window.addEventListener('keyup',e=>{keys.delete(e.code);if(e.code==='Space'&&connected)send({type:'jump',pressed:false});});
@@ -228,5 +241,5 @@ setInterval(()=>{
   const n=Math.hypot(x,y);if(n>1){x/=n;y/=n;}send({type:'input',x,y});
 },50);
 setInterval(()=>{if(connected&&!document.hidden)api('state').catch(()=>{});},1000);
-window.addEventListener('pagehide',()=>{generation++;clearTimeout(retryTimer);stop();socket?.close();questUI?.dispose();questTracking?.dispose();actorAssets?.dispose();sourceMap?.dispose();renderer?.dispose();});
-init().catch(error=>{console.error(error);note(error.message);entry?.error(error.message);entry?.open();});
+window.addEventListener('pagehide',()=>{generation++;clearTimeout(retryTimer);stop();skills?.dispose();socket?.close();questUI?.dispose();questTracking?.dispose();actorAssets?.dispose();sourceMap?.dispose();renderer?.dispose();});
+init().catch(error=>{console.error(error);note(error.message);entry?.error(error.message);openEntry();});

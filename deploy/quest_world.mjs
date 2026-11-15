@@ -42,8 +42,10 @@ async function api(path,data={}){
   if(!identity)throw Error('请先选择角色');
   const caller=identity.characterId,connection=generation;
   const r=await fetch('/__quests/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identity,...data}),cache:'no-store'});
-  const v=await r.json();if(!r.ok)throw Error(v.error||'任务请求失败');
-  if(v.state&&identity?.characterId===caller&&generation===connection)applyQuestState(v.state);return v;
+  const v=await r.json();
+  if(!connected||identity?.characterId!==caller||generation!==connection)throw Error('角色连接已变更，请重新打开任务。');
+  if(!r.ok)throw Error(v.error||'任务请求失败');
+  if(v.state)applyQuestState(v.state);return v;
 }
 function applyQuestState(state){
   if(!state||state.origin!=='compatible-quest-layer'||questState&&state.revision<questState.revision)return;questState=state;
@@ -95,9 +97,10 @@ function syncPlayers(at){
     let a=avatars.get(p.id);
     if(!a){const root=new THREE.Group(),body=playerFactory();root.add(body);root.position.copy(point);scene.add(root);
       a={root,body,target:point.clone(),previous:null,lastAt:at,motion:{moving:false,speed:0}};avatars.set(p.id,a);}
-    a.target.copy(point);a.motion=snapshotMotion(a.previous,p,(at-a.lastAt)/1000,(bounds.max[0]-bounds.min[0])/world.width);
-    if(a.previous){const dx=p.x-a.previous.x,dy=p.y-a.previous.y;if(Math.hypot(dx,dy)>.0001)a.body.rotation.y=Math.atan2(dx,dy);}
-    a.previous={x:p.x,y:p.y};a.lastAt=at;setCharacterEquipment(a.body,p.equipment);setCharacterLook(a.body,p.look);
+    const motionPoint={...p,x:point.x,y:point.z};
+    a.target.copy(point);a.motion=snapshotMotion(a.previous,motionPoint,(at-a.lastAt)/1000,1);
+    if(a.previous){const dx=motionPoint.x-a.previous.x,dy=motionPoint.y-a.previous.y;if(Math.hypot(dx,dy)>.0001)a.body.rotation.y=Math.atan2(dx,dy);}
+    a.previous={x:motionPoint.x,y:motionPoint.y};a.lastAt=at;setCharacterEquipment(a.body,p.equipment);setCharacterLook(a.body,p.look);
     syncCharacterCombat(a.body,p,at,.7);
   }
   updateHUD(me());
@@ -220,7 +223,8 @@ setInterval(()=>{
   let x=right*Math.cos(cameraYaw)+back*Math.sin(cameraYaw),y=-right*Math.sin(cameraYaw)+back*Math.cos(cameraYaw);
   if(destination){const point=sourcePosition(player);if(point&&Math.hypot(point.x-destination.source.x,point.z-destination.source.z)<=destination.stopDistance){
       const target=destination.interaction;destination=null;x=y=0;if(target)interact(target);
-    }else{const dx=destination.x-player.x,dy=destination.y-player.y,d=Math.hypot(dx,dy);if(d>0){x=dx/d;y=dy/d;}}}
+    }else if(point){const dx=destination.source.x-point.x,dy=destination.source.z-point.z,d=Math.hypot(dx,dy);if(d>0){x=dx/d;y=dy/d;}}
+    else{x=y=0;}}
   const n=Math.hypot(x,y);if(n>1){x/=n;y/=n;}send({type:'input',x,y});
 },50);
 setInterval(()=>{if(connected&&!document.hidden)api('state').catch(()=>{});},1000);

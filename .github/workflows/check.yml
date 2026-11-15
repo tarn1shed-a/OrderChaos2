@@ -173,6 +173,12 @@ jobs:
       - run: node --test tools/local_mvp_tests.mjs
       - name: Compatible ordinary quest execution and authenticated transport
         run: node --test tools/ordinary_quests_tests.mjs tools/quest_transport_tests.mjs tools/quest_tracking_tests.mjs
+      - name: Selected player identity, pose transport and character switching
+        run: |
+          node --test tools/player_choice_tests.mjs tools/player_choice_human_tests.mjs tools/player_choice_motion_tests.mjs tools/quest_client_session_tests.mjs tools/quest_coordinates_tests.mjs
+          OC2_ENTRY_UI_PUBLIC_ONLY=1 node --test tools/player_choice_ui_tests.mjs
+          node --check tools/player_choice_ui_qa.mjs
+          python -m py_compile tools/player_choice_matrix.py tools/player_choice_inventory.py tools/player_choice_world_source.py tools/character_human_male_probe.py
       - name: Ordinary quest client and deployment syntax (original assets stay private)
         run: |
           node --check deploy/quest_world.mjs

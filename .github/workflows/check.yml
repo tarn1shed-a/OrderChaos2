@@ -183,6 +183,16 @@ jobs:
           node tools/ordinary_npc_quest_state_tests.mjs --public-only
           node tools/npc_marker_state_tests.mjs
           node --test tools/npc_marker_delivery_tests.mjs
+      - name: Original accepted task book and session guards
+        run: |
+          node --test tools/quest_journal_state_tests.mjs tools/quest_journal_delivery_tests.mjs
+          node tools/quest_journal_program_tests.mjs --public-only
+          node tools/quest_journal_widgets_tests.mjs --public-only
+          node tools/quest_journal_state_source_tests.mjs --public-only
+          python tools/quest_journal_widgets_tests.py
+          node --check deploy/quest_journal.mjs
+          node --check deploy/quest_journal_delivery.mjs
+          python -m py_compile tools/quest_journal_profile.py tools/quest_journal_package.py
       - name: Selected player identity, pose transport and character switching
         run: |
           node --test tools/player_choice_tests.mjs tools/player_choice_human_tests.mjs tools/player_choice_motion_tests.mjs tools/quest_client_session_tests.mjs tools/quest_coordinates_tests.mjs

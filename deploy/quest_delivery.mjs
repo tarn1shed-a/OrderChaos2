@@ -4,7 +4,7 @@ import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {CHARACTER_CHOICE_SKILL_DEPENDENCIES} from './character_choice_skills.mjs';
 
-export async function prepareQuestDelivery(root,destination,files){
+export async function prepareQuestDelivery(root,destination,files,{creationProfile=null}={}){
   if(!files['/assets/ordinary-quests/profile.json'])return false;
   for(const url of ['/assets/source-ordinary-quest-map1/manifest.json','/assets/source-ordinary-quest-actors/profile.json',
     '/assets/source-quest/quest-ui.json','/assets/source-mission-optional/optional-assets.json',
@@ -16,7 +16,18 @@ export async function prepareQuestDelivery(root,destination,files){
   }
   const skills=Boolean(files['/assets/character-source/panels.json']);
   if(skills)for(const url of CHARACTER_CHOICE_SKILL_DEPENDENCIES)if(!files[url])throw Error('Original skill directory delivery is incomplete: '+url);
-  for(const name of ['quest_world.mjs','quest_ui.mjs','quest_tracking.mjs','character_choice_skills.mjs'])await add('/__delivery/'+name,resolve(root,'deploy',name),'text/javascript; charset=utf-8');
+  for(const name of ['quest_world.mjs','quest_ui.mjs','quest_tracking.mjs','character_choice_skills.mjs']){
+    let path=resolve(root,'deploy',name);
+    if(name==='quest_world.mjs'&&creationProfile){
+      if(!['manifest.json','manifest-v2.json','manifest-v3.json','manifest-races-v1.json','manifest-conditional-v1.json'].some(n=>creationProfile==='/assets/source-creation-stage/'+n)||!files[creationProfile])
+        throw Error('Original quest-entry creation profile is unavailable');
+      const source=await readFile(path,'utf8'),anchor='entry=createSourceEntry({connect});';
+      if(source.split(anchor).length!==2)throw Error('Original quest-entry preview anchor differs');
+      const bytes=Buffer.from(source.replace(anchor,'entry=createSourceEntry({connect,previewURL:'+JSON.stringify(creationProfile)+'});'));
+      path=resolve(destination,'quest-world-entry.mjs');await writeFile(path,bytes);
+      await add('/__delivery/'+name,path,'text/javascript; charset=utf-8',bytes);
+    }else await add('/__delivery/'+name,path,'text/javascript; charset=utf-8');
+  }
   files['/__delivery/mission_program.mjs']=files['/mission_program.mjs'];
   // Start from the same original entry page, without restoring the old camp UI.
   const path=resolve(destination,'quests.html');

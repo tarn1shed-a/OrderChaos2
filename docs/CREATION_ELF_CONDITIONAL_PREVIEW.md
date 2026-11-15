@@ -57,3 +57,6 @@ node --test tools/creation_preview_tests.mjs tools/creation_race_preview_tests.m
 父级还逐项实际点击其余八套原展示模型、返回并重新打开精灵男性，检查当前身份、画面和六个绑定，控制台无warning/error。龙人没有可点的性别控件，按实际DOM核对单一2052身体，不制造另一性别。此QA只读，没有创建角色、启动游戏或读写存档。私有截图、各显示身份、旧失败和新成功对照位于`analysis/raw/creation-elf-parent-strict-20261116/`。这证明网页GPU能显示原BDAE保留材质，不证明失踪brown覆盖贴图存在，也不证明原Android最终外观已知；appearanceComplete仍false。完整创角后续阶段、已存角色预览和九种身体正式可玩仍分开验收。
 
 正式路由仅在精确v5资料和对应浏览器接口都齐备时选择条件预览；v1–v4保持旧路由，缺接口明确拒绝。新模型和图片仍按打开种族页请求，不混入新手进图预载。最终Linux、私有包、Git/CI及Railway发布状态以本批私有交接收据为准。
+
+
+任务入口也复用同一原种族预览：原`quest_world`此前只传connect，未传previewURL，因此任务页选角一直只有二维控件。现在仅在实际预览资料齐备时，由部署构建给独立输出注入同一已选配置URL；原world源码、任务动作和存档不重写。没有资料时保持原任务入口行为，外部URL/缺失配置拒绝。完整界面和角色可玩范围仍分别核查，不能用预览代替可创建/可入图资格。

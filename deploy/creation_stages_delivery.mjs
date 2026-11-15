@@ -2,18 +2,20 @@
 import {readFile}from'node:fs/promises';
 import {resolve}from'node:path';
 import {createHash}from'node:crypto';
-import {CREATION_STAGES_PROFILE,validateCreationStagesDelivery,stageCandidateChoice}from'./creation_stages_profile.mjs';
+import {CREATION_STAGES_PROFILES,CREATION_STAGES_PROFILE_V2,validateCreationStagesDelivery,stageCandidateChoice}from'./creation_stages_profile.mjs';
 import {checkedStageContract,selectStageIdentity,checkedStageCandidate,stageResourceURL}from'../tools/creation_class_stage/stage_switch.mjs';
 const digest=b=>createHash('sha256').update(b).digest('hex');
 export async function prepareCreationStagesDelivery(root,files){
- if(!files[CREATION_STAGES_PROFILE])return false;
+ const profiles=CREATION_STAGES_PROFILES.filter(url=>files[url]);
+ if(!profiles.length)return false;
  const required=url=>{if(!files[url])throw Error('Original stage delivery incomplete: '+url);return files[url];};
  const read=async url=>{
   const row=required(url),raw=await readFile(row.path);
   if(raw.length!==row.bytes||digest(raw)!==row.sha256)throw Error('Original stage delivery bytes differ: '+url);
   return JSON.parse(raw);
  };
- const p=validateCreationStagesDelivery(await read(CREATION_STAGES_PROFILE));
+ for(const profileURL of profiles){
+ const p=validateCreationStagesDelivery(await read(profileURL),{profileURL});
  if(required(p.contractURL).sha256!==p.contractSHA256)throw Error('Original stage contract differs');
  const contract=checkedStageContract(await read(p.contractURL));
  const race=await read(p.raceProfileURL);
@@ -30,10 +32,12 @@ export async function prepareCreationStagesDelivery(root,files){
    for(const path of Object.values(material.samplers))required(url(path));
   }
  }
+ }
  const modules=[['creation_stages.mjs','deploy/creation_stages.mjs'],['creation_stages_profile.mjs','deploy/creation_stages_profile.mjs'],
   ['creation_class_stage/stage_switch.mjs','tools/creation_class_stage/stage_switch.mjs'],
   ['creation_class_stage/actor_v2.mjs','tools/creation_class_stage/actor_v2.mjs'],
   ['creation_class_stage/material_v2.mjs','tools/creation_class_stage/material_v2.mjs']];
+ if(profiles.includes(CREATION_STAGES_PROFILE_V2))modules.push(['creation_class_stage/actor_v3.mjs','tools/creation_class_stage/actor_v3.mjs']);
  for(const [name,relative]of modules){const path=resolve(root,relative),raw=await readFile(path);files['/__delivery/'+name]={path,bytes:raw.length,sha256:digest(raw),type:'text/javascript; charset=utf-8'};}
  return true;
 }

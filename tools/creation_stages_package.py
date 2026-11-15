@@ -12,6 +12,8 @@ import tarfile
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / 'analysis/raw/ordinary-quest-journal-live-20261116/complete-v2.tar.gz'
 BASE_SHA = '438dd2d0c97ba11dd7585c2ed342fb087fef8614c802a597a0345c0a65bd0d59'
+BASE_V2 = ROOT / 'analysis/raw/creation-class-ui-fix-20261116/complete-three-class-v2.tar.gz'
+BASE_V2_SHA = '01ed9ab1da0b171bc13b2554c63dea0e8bad1d2e8ee26ec8dac10842d01e7451'
 CONTRACT = ROOT / 'analysis/raw/creation-class-entry-20261116/source-v1/contract-runtime.json'
 CONTRACT_SHA = '26ad805cd6b9abb68026e30996b8344e100673b37fb41a230cc9f30e1017a8ba'
 FORMAT = 'oc2-source-creation-stages-delivery-v1'
@@ -29,7 +31,9 @@ def relative_resource(value):
     return name
 
 
-def payload(actors):
+def payload(actors, actor_version=2):
+    if actor_version not in (2, 3):
+        raise ValueError('Reviewed source actor version required')
     if sha(CONTRACT.read_bytes()) != CONTRACT_SHA:
         raise ValueError('Frozen original stage contract changed')
     contract = json.loads(CONTRACT.read_bytes())
@@ -40,6 +44,8 @@ def payload(actors):
         'raceProfileURL': '/assets/source-creation-stage/manifest-conditional-v1.json',
         'contractURL': '/assets/source-creation-stages/contract.json', 'contractSHA256': CONTRACT_SHA,
         'candidates': {}}
+    if actor_version == 3:
+        profile['actorVersion'] = 3
     receipts = []
     for folder in actors:
         folder = Path(folder).resolve()
@@ -78,30 +84,34 @@ def payload(actors):
         receipts.append({'sourceKey': folder.name, 'choice': key, 'manifestSHA256': sha(raw), 'members': members})
     if not profile['candidates']:
         raise ValueError('At least one verified original preview candidate required')
-    added['game-data/converted/source-creation-stage/manifest-stages-v1.json'] = encoded(profile)
+    profile_name = 'manifest-stages-v2.json' if actor_version == 3 else 'manifest-stages-v1.json'
+    added['game-data/converted/source-creation-stage/'+profile_name] = encoded(profile)
     return added, profile, receipts
 
 
-def package(output, actors):
+def package(output, actors, actor_version=2):
     from runtime_delta import inspect
     from creation_preview_delivery import safe_members
     output = Path(output).resolve()
     if not output.is_relative_to(ROOT/'analysis/raw') or output.exists():
         raise ValueError('New private output required')
-    if sha(BASE.read_bytes()) != BASE_SHA:
+    base, base_sha = (BASE_V2, BASE_V2_SHA) if actor_version == 3 else (BASE, BASE_SHA)
+    if sha(base.read_bytes()) != base_sha:
         raise ValueError('Original published base runtime changed')
-    original, _ = inspect(BASE)
-    files = safe_members(BASE); files.pop('bundle-manifest.json')
-    added, profile, actors_receipt = payload(actors)
-    if set(files) & set(added):
-        raise ValueError('Original asset replacement refused')
+    original, _ = inspect(base)
+    files = safe_members(base); files.pop('bundle-manifest.json')
+    added, profile, actors_receipt = payload(actors, actor_version)
+    for name in set(files) & set(added):
+        if files[name] != added[name]:
+            raise ValueError('Original asset replacement refused: '+name)
+    added = {name: raw for name, raw in added.items() if name not in files}
     manifest = copy.deepcopy(original)
     files.update(added)
     manifest['files'] = {k: {'bytes': len(v), 'sha256': sha(v)} for k, v in sorted(files.items())}
-    manifest['creationStagesIntegration'] = {'format': FORMAT, 'baseArchiveSHA256': BASE_SHA,
+    manifest['creationStagesIntegration'] = {'format': FORMAT, 'baseArchiveSHA256': base_sha,
         'originalPayloadsPreserved': len(original['files']), 'addedPayloads': len(added),
         'choices': sorted(profile['candidates']), 'localSavesImported': False, 'playableRacesChanged': False,
-        'fullCreationOrAll45Restored': False}
+        'fullCreationOrAll45Restored': False, 'actorVersion': actor_version}
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open('xb') as stream, gzip.GzipFile(filename='', mode='wb', fileobj=stream, mtime=0) as gz, tarfile.open(fileobj=gz, mode='w') as archive:
         for name, raw in sorted({**files, 'bundle-manifest.json': encoded(manifest)}.items()):
@@ -118,5 +128,6 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--actor', type=Path, action='append', required=True)
-    a = p.parse_args(); r = package(a.output, a.actor)
+    p.add_argument('--actor-version', type=int, choices=(2, 3), default=2)
+    a = p.parse_args(); r = package(a.output, a.actor, a.actor_version)
     print(json.dumps({k: v for k, v in r.items() if k != 'actors'}))

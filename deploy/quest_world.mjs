@@ -3,6 +3,7 @@
 import * as THREE from '/vendor/three.module.js';
 import {createSourceEntry} from '/__delivery/entry_ui.mjs';
 import {createQuestUI} from '/__delivery/quest_ui.mjs';
+import {createQuestTracking} from '/__delivery/quest_tracking.mjs';
 import {createMissionProgramRuntime} from '/__delivery/mission_program.mjs';
 import {createOrdinaryScene} from '/ordinary-quest-scene.mjs';
 import {loadOrdinaryQuestActorAssets} from '/source-ordinary-quest-actors.mjs';
@@ -18,7 +19,7 @@ const $=id=>document.getElementById(id),canvas=$('scene'),viewport=$('viewport')
 const jsonCache=new Map(),textureCache=new Map(),textureLoader=new THREE.TextureLoader();
 async function json(url){if(!jsonCache.has(url))jsonCache.set(url,fetch(url).then(async r=>{if(!r.ok)throw Error('原资源未就绪');return r.json();}));return jsonCache.get(url);}
 async function texture(url){if(!textureCache.has(url))textureCache.set(url,textureLoader.loadAsync(url).then(t=>{t.colorSpace=THREE.NoColorSpace;t.flipY=false;t.needsUpdate=true;return t;}));return textureCache.get(url);}
-let renderer,scene,camera,origin,bounds,world,sourceMap,actorAssets,playerFactory,profile,questUI,entry;
+let renderer,scene,camera,origin,bounds,world,sourceMap,actorAssets,playerFactory,profile,questUI,questTracking,entry;
 let socket,identity,selfId,connected=false,ready=false,generation=0,players=[],questState=null,character=null;
 let cameraYaw=.65,cameraPitch=.58,cameraDistance=12,lastFrame=performance.now(),serverOffset=0;
 const focus=new THREE.Vector3(),avatars=new Map(),actors=new Map(),objects=new Map(),keys=new Set();
@@ -51,6 +52,7 @@ function applyQuestState(state){
     view.instance.root.visible=!!quest&&active.has(quest.id)&&progress?.status===4&&!collected.has(id);}
   for(const view of actors.values())view.target.disabled=completed.has(view.target.questId);
   $('field-quests').disabled=!connected||profile.quests.every(q=>completed.has(q.id));
+  questTracking?.update(state);
 }
 function compatibleInfo(info){
   // Explicit plain-item display adaptation; no native ActionID is fabricated.
@@ -101,6 +103,7 @@ function syncPlayers(at){
   updateHUD(me());
 }
 function clearConnection(){connected=false;selfId=null;players=[];questState=null;stop();questUI?.close().catch(()=>{});
+  questTracking?.clear();
   for(const a of avatars.values()){disposeCharacterAnimation(a.body);a.root.removeFromParent();}avatars.clear();
   for(const view of objects.values())view.instance.root.visible=false;
   $('field-hud').hidden=true;$('field-actions').hidden=true;$('touch-controls').hidden=true;$('field-quests').disabled=true;
@@ -170,6 +173,7 @@ async function init(){
     json(playerManifest.ui.url),json('/assets/source-quest/quest-ui.json'),json('/assets/source-mission-optional/optional-assets.json'),
     json('/assets/ordinary-quests/program-v1.json'),json('/assets/ordinary-quests/item-assets.json'),json('/assets/ordinary-quests/quality-frames.json')]);
   await mountHUD(uiProfile);
+  if(document.documentElement.dataset.sourceQuestTracking==='1')questTracking=await createQuestTracking({profile:await json('/assets/source-quest-tracking/tracking.json')});
   questUI=await createQuestUI({profile:questProfile,optionalProfile,program,programFactory:createMissionProgramRuntime,
     assetBaseURL:location.href,optionalBaseURL:new URL('/assets/source-mission-optional/',location.href),itemAssets,qualityFrames,
     query:async id=>{const v=await api('query',{questId:id});if(v.info.Status===0)throw Error('当前任务已完成');return compatibleInfo(v.info);},
@@ -220,5 +224,5 @@ setInterval(()=>{
   const n=Math.hypot(x,y);if(n>1){x/=n;y/=n;}send({type:'input',x,y});
 },50);
 setInterval(()=>{if(connected&&!document.hidden)api('state').catch(()=>{});},1000);
-window.addEventListener('pagehide',()=>{generation++;clearTimeout(retryTimer);stop();socket?.close();questUI?.dispose();actorAssets?.dispose();sourceMap?.dispose();renderer?.dispose();});
+window.addEventListener('pagehide',()=>{generation++;clearTimeout(retryTimer);stop();socket?.close();questUI?.dispose();questTracking?.dispose();actorAssets?.dispose();sourceMap?.dispose();renderer?.dispose();});
 init().catch(error=>{console.error(error);note(error.message);entry?.error(error.message);entry?.open();});

@@ -23,6 +23,7 @@ CURRENT_SHA = '6f764b775b98ff70aae8f7ff26b3b1b3adbfb2211ae5375fd1af6e4777bc3b00'
 MAP = ROOT/'analysis/raw/plain-quest-map1-20261115/candidate-v3'
 ACTORS = ROOT/'analysis/raw/plain-quest-feasibility-20261115/actors-v4'
 UI = ROOT/'analysis/raw/quest-ui-compatible-20261115/qa-v1'
+TRACKING = ROOT/'analysis/raw/ordinary-quest-tracking-20261115/candidate-v1'
 sha=lambda b:hashlib.sha256(b).hexdigest()
 encode=lambda v:(json.dumps(v,ensure_ascii=False,sort_keys=True,indent=2)+'\n').encode()
 
@@ -57,7 +58,7 @@ def package(output,delta=None):
     def add(name,raw):
         if name in files and files[name]!=raw:raise ValueError('Cannot replace current runtime '+name)
         files[name]=raw
-    for folder in [MAP,ACTORS,UI]:
+    for folder in [MAP,ACTORS,UI,TRACKING]:
         for file in sorted((folder/'assets').rglob('*')):
             if not file.is_file():continue
             if file.is_symlink()or file.suffix not in ('.json','.png','.svg','.woff'):

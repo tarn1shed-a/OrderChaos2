@@ -67,7 +67,7 @@ export async function startOrdinaryQuestLocal({directory,port=8904,
       try{
         let file;
         if(path==='/'||path==='/quests.html'){
-          const html=retirePrototypeHTML(readFileSync(resolve(core,'explore-map.html'),'utf8'))
+          const html=retirePrototypeHTML(readFileSync(resolve(core,'explore-map.html'),'utf8')).replace('<html ','<html data-source-quest-tracking="1" ')
             .replace(/<script type="module" src="[^"]*explore-map\.js[^"]*"><\/script>/,'<script type="module" src="/__delivery/quest_world.mjs"></script>');
           res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(html);return;
         }
@@ -79,6 +79,7 @@ export async function startOrdinaryQuestLocal({directory,port=8904,
         else if(path.startsWith('/__delivery/')){
           const name=path.slice('/__delivery/'.length);if(!/^[a-z_]+\.(?:mjs|css)$/.test(name))throw Error('Unknown module');file=resolve(ROOT,'deploy',name);
         }else if(path.startsWith('/assets/source-ordinary-quest-map1/'))file=resolve(mapDirectory,'.'+path);
+        else if(path.startsWith('/assets/source-quest-tracking/'))file=resolve(ROOT,'analysis/raw/ordinary-quest-tracking-20261115/candidate-v1','.'+path);
         else if(path.startsWith('/assets/source-ordinary-quest-actors/'))file=resolve(actorsDirectory,'.'+path);
         else if(path.startsWith('/assets/source-entry/'))file=resolve(entries,path.slice('/assets/source-entry/'.length));
         else if(path.startsWith('/assets/')&&existsSync(resolve(uiDirectory,'.'+path)))file=resolve(uiDirectory,'.'+path);

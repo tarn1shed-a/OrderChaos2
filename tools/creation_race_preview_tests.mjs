@@ -136,7 +136,7 @@ test('actual original costume assembly and raw source-material factory retain ow
   const vertex=object.getVertexPosition(0,new THREE.Vector3());assert(vertex.toArray().every(Number.isFinite));
  }
  preview.dispose();preview.dispose();for(const material of materials)material.dispose();for(const material of originalMaterials)material.dispose();
- assert.equal(Object.keys(CREATION_RACE_IDENTITIES).includes('2:0'),false);
+ assert.equal(CREATION_RACE_IDENTITIES['2:0'].conditional,true);
 });
 
 test('each additional body uses its own real stage costume, material programs and literal source skeleton',async t=>{

@@ -32,7 +32,7 @@ test('actual task delivery opts into the same verified preview and never rewrite
  // Host file-inventory fixture; no original model or task contents fabricated.
  const directory=mkdtempSync(join(tmpdir(),'oc2-quest-preview-')),root=join(directory,'source'),destination=join(directory,'built');
  mkdirSync(join(root,'deploy'),{recursive:true});mkdirSync(destination);
- const originals={};for(const n of ['quest_world.mjs','quest_ui.mjs','quest_tracking.mjs','character_choice_skills.mjs']){
+ const originals={};for(const n of ['quest_world.mjs','quest_ui.mjs','quest_tracking.mjs','character_choice_skills.mjs','quest_ui.css','quest_tracking.css']){
   const p=fileURLToPath(new URL('../deploy/'+n,import.meta.url));originals[n]=readFileSync(p);copyFileSync(p,join(root,'deploy',n));
  }
  const html=join(directory,'entry.html');writeFileSync(html,'<html lang="zh-CN"><script type="module" src="/explore-map.js"></script></html>');
@@ -43,6 +43,10 @@ test('actual task delivery opts into the same verified preview and never rewrite
  try{
   const legacy=fixture();await prepareQuestDelivery(root,destination,legacy);assert.equal(readFileSync(legacy['/__delivery/quest_world.mjs'].path,'utf8'),originals['quest_world.mjs'].toString());
   const current=fixture();await prepareQuestDelivery(root,destination,current,{creationProfile:next});const derived=readFileSync(current['/__delivery/quest_world.mjs'].path,'utf8');
+  for(const name of ['quest_ui.css','quest_tracking.css']){
+   assert.equal(current['/__delivery/'+name].type,'text/css; charset=utf-8');
+   assert.deepEqual(readFileSync(current['/__delivery/'+name].path),originals[name]);
+  }
   assert(derived.includes('entry=createSourceEntry({connect,previewURL:'+JSON.stringify(next)+'});'));
   assert.equal(derived.replace(',previewURL:'+JSON.stringify(next),''),originals['quest_world.mjs'].toString());
   await assert.rejects(prepareQuestDelivery(root,destination,fixture(),{creationProfile:'https://external.invalid/profile'}),/unavailable/);

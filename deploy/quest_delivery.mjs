@@ -28,6 +28,7 @@ export async function prepareQuestDelivery(root,destination,files,{creationProfi
       await add('/__delivery/'+name,path,'text/javascript; charset=utf-8',bytes);
     }else await add('/__delivery/'+name,path,'text/javascript; charset=utf-8');
   }
+  for(const name of ['quest_ui.css','quest_tracking.css'])await add('/__delivery/'+name,resolve(root,'deploy',name),'text/css; charset=utf-8');
   files['/__delivery/mission_program.mjs']=files['/mission_program.mjs'];
   // Start from the same original entry page, without restoring the old camp UI.
   const path=resolve(destination,'quests.html');

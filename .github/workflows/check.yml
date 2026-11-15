@@ -22,6 +22,11 @@ jobs:
       - run: python tools/bdae_tests.py
       - run: python tools/bdae_attributes_tests.py
       - run: python tools/bdae_animation_tests.py
+      - name: Quest227 source assets and original animation boundary (private inputs excluded)
+        run: |
+          python tools/ordinary_quest_227_tests.py --public-only
+          python tools/ordinary_crocodile_animation_tests.py --public-only
+          python -m py_compile tools/ordinary_quest_227_probe.py tools/ordinary_quest_227_assets.py tools/ordinary_quest_227_package.py tools/ordinary_crocodile_animation_probe.py
       - run: python tools/bdae_skin_tests.py
       - run: python tools/beff_effects_tests.py
       - run: python tools/skill_attachments_tests.py

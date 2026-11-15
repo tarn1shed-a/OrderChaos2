@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync}from'node:fs';
-import {CREATION_STAGES_PROFILE,CREATION_STAGES_DELIVERY_FORMAT,STAGE_CONTRACT_URL,STAGE_CONTRACT_SHA256,RACE_PROFILE,validateCreationStagesDelivery}from'../deploy/creation_stages_profile.mjs';
+import {CREATION_STAGES_PROFILE,CREATION_STAGES_PROFILE_V2,CREATION_STAGES_DELIVERY_FORMAT,STAGE_CONTRACT_URL,STAGE_CONTRACT_SHA256,RACE_PROFILE,validateCreationStagesDelivery}from'../deploy/creation_stages_profile.mjs';
 import {prepareCreationStagesDelivery}from'../deploy/creation_stages_delivery.mjs';
 import {selectCreationProfile}from'../deploy/prepare_delivery.mjs';
 import {creationPreviewPlan}from'../deploy/creation_plan.mjs';
@@ -28,6 +28,17 @@ test('old bundles do not require the new helpers or resources',async()=>{
  assert.throws(()=>selectCreationProfile({...files,[CREATION_STAGES_PROFILE]:{}}),/incomplete/);
  assert.equal(selectCreationProfile({...files,[CREATION_STAGES_PROFILE]:{},[STAGE_CONTRACT_URL]:{}}),CREATION_STAGES_PROFILE);
 });
+test('new profile explicitly opts into complete rigid ancestors while old profile keeps its own factory',()=>{
+ const old=profile(),next={...profile(),actorVersion:3,candidates:{'2:0:0:1':profile().candidates['1:0:0:1']}};
+ assert.equal(validateCreationStagesDelivery(old,{profileURL:CREATION_STAGES_PROFILE}),old);
+ assert.equal(validateCreationStagesDelivery(next,{profileURL:CREATION_STAGES_PROFILE_V2}),next);
+ assert.throws(()=>validateCreationStagesDelivery(next,{profileURL:CREATION_STAGES_PROFILE}),/version/);
+ assert.throws(()=>validateCreationStagesDelivery(old,{profileURL:CREATION_STAGES_PROFILE_V2}),/version/);
+ assert.throws(()=>validateCreationStagesDelivery({...next,actorVersion:4}),/scope/);
+ const files={[CREATION_STAGES_PROFILE]:{},[STAGE_CONTRACT_URL]:{}};
+ assert.equal(selectCreationProfile(files),CREATION_STAGES_PROFILE);
+ assert.equal(selectCreationProfile({...files,[CREATION_STAGES_PROFILE_V2]:{}}),CREATION_STAGES_PROFILE_V2);
+});
 test('new previews remain on demand; game map/NPC/task loading order is preserved',()=>{
  const preview=['/__delivery/creation_stages.mjs','/__delivery/creation_stages_profile.mjs','/__delivery/creation_class_stage/actor_v2.mjs',
   '/assets/source-creation-stages/contract.json','/assets/source-creation-stages/actors/fixture/assets/character.json'];
@@ -37,9 +48,9 @@ test('new previews remain on demand; game map/NPC/task loading order is preserve
  assert.deepEqual(next.critical,game.slice(0,2));assert.deepEqual(next.background,[game[2]]);assert.deepEqual(p,before);
  assert.equal(next.scope.creationPreviewChangesPlayableRaces,false);
 });
-test('Docker source closure includes the three runtime helpers without original asset globs',()=>{
+test('Docker source closure includes reviewed runtime helpers without original asset globs',()=>{
  const root=new URL('../',import.meta.url),ignore=readFileSync(new URL('.dockerignore',root),'utf8'),pack=readFileSync(new URL('tools/package_deployment.py',root),'utf8');
- for(const n of ['stage_switch.mjs','actor_v2.mjs','material_v2.mjs']){
+ for(const n of ['stage_switch.mjs','actor_v2.mjs','actor_v3.mjs','material_v2.mjs']){
   assert(ignore.includes('!tools/creation_class_stage/'+n));assert(pack.includes('tools/creation_class_stage/'+n));
  }
  assert(!ignore.includes('!analysis/raw/'));assert(!ignore.includes('!game-data/'));

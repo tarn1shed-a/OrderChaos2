@@ -105,7 +105,7 @@ export function createSourceCreationStages(root,{profileURL}){
  async function initialise(){
   if(engine)return engine;
   if(!pending)pending=(async()=>{
-   const stages=validateCreationStagesDelivery(await json(profileURL));
+   const stages=validateCreationStagesDelivery(await json(profileURL),{profileURL});
    const [p,contract]=await Promise.all([json(stages.raceProfileURL).then(validateCreationDelivery),json(stages.contractURL).then(checkedStageContract)]);
    const THREE=await import('/vendor/three.module.js');
    const [profile,fresh,sceneProfile,insideProfile,stonesProfile]=await Promise.all([p.stage,p.environment,p.scene,p.inside,p.stones].map(json));
@@ -216,16 +216,17 @@ export function createSourceCreationStages(root,{profileURL}){
  async function loadStageActor(e,identity){
   const route=e.stages.candidates[`${identity.panel}:${identity.race}:${identity.gender}:${identity.professionIndex}`];
   if(!route)return null; // A missing source candidate never reuses a race costume.
+  const actorAPI=e.stages.actorVersion===3?await import('./creation_class_stage/actor_v3.mjs'):{checkedStageModel,buildCreationStageActor};
   const url=path=>stageResourceURL(route.baseURL,path),manifest=await json(url('manifest.json'));
   checkedStageCandidate(manifest,identity);
-  const data=await json(url(manifest.model));checkedStageModel(manifest,data,identity);
+  const data=await json(url(manifest.model));actorAPI.checkedStageModel(manifest,data,identity);
   const rows=[...manifest.materials,...manifest.attachments.flatMap(row=>row.materials)];
   const paths=[...new Set(rows.flatMap(row=>Object.values(row.samplers)))],textures=new Map(),attachmentData=new Map();
   const requests=paths.map(path=>[path,url(path)]),models=manifest.attachments.map(row=>[row.model,url(row.model)]);
   await Promise.all([...requests.map(async([path,src])=>textures.set(path,await e.texture(src))),
    ...models.map(async([path,src])=>attachmentData.set(path,await json(src)))]);
   const programs=await loadSourceCharacterPrograms();
-  return buildCreationStageActor({THREE:e.THREE,manifest,data,identity,textures,attachmentData,
+  return actorAPI.buildCreationStageActor({THREE:e.THREE,manifest,data,identity,textures,attachmentData,
    createMaterial:(THREE,row,maps,colors,object)=>createSourceCreationMaterial(THREE,row,maps,programs,object,
     {...colors,eye:e.profile.transform.freshModelEyeColor},e.fresh.sourceCharacterLight,e.lighting,e.profile.sourceControllerLight.direction)});
  }

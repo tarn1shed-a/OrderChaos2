@@ -15,7 +15,7 @@ export function createSourceEntry({connect,previewURL=null}){
   let manifest=null,screen=null,selected=null,roles=[],identities=[],isReady=false,busy=false,pendingError=null,listOffset=0;
   let draft={race:0,gender:0,cls:0,name:''};
   let racePreview=null,previewPromise=null;
-  const stagedPreview=previewURL==='/assets/source-creation-stage/manifest-stages-v1.json';
+  const stagedPreview=['/assets/source-creation-stage/manifest-stages-v1.json','/assets/source-creation-stage/manifest-stages-v2.json'].includes(previewURL);
   function hidePreview(){racePreview?.hide();}
   function updateRacePreview(){
     if(!previewURL)return;

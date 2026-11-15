@@ -18,6 +18,7 @@ import {stageUnstuckEntry} from './unstuck_entry.mjs';
 import {stageInspectorEntry} from './map_inspector_ui.mjs';
 import {stageTutorialSkyEntry,stageTutorialSkyPlan,SKY_MANIFEST} from '../tools/preview/source-tutorial-sky-overlay.mjs';
 import {creationPreviewPlan} from './creation_plan.mjs';
+import {prepareQuestDelivery} from './quest_delivery.mjs';
 import {stageTutorialTerrainGroups,stageTutorialTerrainGroupsPlan,TERRAIN_GROUPS,TERRAIN_GROUPS_SHA,TERRAIN_GROUPS_HELPER} from './tutorial_terrain_groups.mjs';
 
 export const TYPES={'.svg':'image/svg+xml','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.png':'image/png','.woff':'font/woff','.glsl':'text/plain; charset=utf-8','.rgba':'application/octet-stream','.glb':'model/gltf-binary'};
@@ -77,6 +78,7 @@ export async function prepare(root,{stage=false}={}){
     if(files['/assets/source-unstuck/unstuck.json'])for(const name of ['unstuck_ui.mjs','unstuck_ui.css','unstuck_state.mjs','unstuck_return.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES[extname(name)]};}
   }
+  await prepareQuestDelivery(root,destination,files);
   const urls=Object.keys(files).sort(),sidecars=new Map();let cursor=0;
   async function worker(){while(cursor<urls.length){
     const url=urls[cursor++],meta=files[url];

@@ -15,6 +15,10 @@ import {installAdmin} from './admin_server.mjs';
 import {createMapInspector,stageInspectorServer} from './map_inspector.mjs';
 import {applyPositionRepair} from './role_position_repair.mjs';
 import {stageSourceAvatarServer} from './source_avatar_server.mjs';
+import {stageOrdinaryQuestServer} from './quest_server_overlay.mjs';
+import {OrdinaryQuestLedger} from './ordinary_quests.mjs';
+import {createQuestMotion} from './quest_motion.mjs';
+import {installQuestTransport} from './quest_transport.mjs';
 
 const root=resolve(new URL('../',import.meta.url).pathname);
 const runtime=resolve(root,'analysis/raw/portable/running-preview');
@@ -31,7 +35,13 @@ const base=pathToFileURL(runtime+'/prototype/');
 const {loadNativeWindowCollision}=await import(new URL('game/native-window-collision.mjs',base));
 const {loadGameplay}=await import(new URL('game/basic-attack.mjs',base));
 const observed=new URL('server-observed.mjs',base);
-writeFileSync(observed,stageInspectorServer(stageSourceAvatarServer(entryServer(readFileSync(new URL('server.mjs',base),'utf8'),new URL('./movement_trace.mjs',import.meta.url).href))));
+const questProfileFile=resolve(runtime,'game-data/converted/ordinary-quests/profile.json');
+const questConfigFile=resolve(runtime,'native-inputs/ordinary-quest/native-physics.json');
+if(existsSync(questProfileFile)!==existsSync(questConfigFile))throw Error('Incomplete ordinary-quest runtime');
+const ordinaryQuestLayer=existsSync(questProfileFile)?new OrdinaryQuestLedger(JSON.parse(readFileSync(questProfileFile,'utf8')),{saveFile:'/data/saves/ordinary-quests.json'}):null;
+let serverSource=stageInspectorServer(stageSourceAvatarServer(entryServer(readFileSync(new URL('server.mjs',base),'utf8'),new URL('./movement_trace.mjs',import.meta.url).href)));
+if(ordinaryQuestLayer)serverSource=stageOrdinaryQuestServer(serverSource);
+writeFileSync(observed,serverSource);
 const {createGameServer}=await import(observed);
 const motion=configureTrialEntry(loadNativeWindowCollision(new URL('native-physics.json',base)));
 if(!motion?.sourceNative)throw Error('Original collision inputs are unavailable; no fallback');
@@ -40,14 +50,20 @@ if(!gameplay)throw Error('Reviewed gameplay data unavailable');
 let game;
 const inspector=createMapInspector({identityFile:'/data/map-inspector.json',entryPosition:()=>trialEntryPosition(motion)});
 const recovery=createRuntimeRecovery({close:()=>game.close(),exit:code=>process.exit(code)});
+// The second original scene's CPU worker is started only when a player enters
+// that map. It does not replace or reload the tutorial's worker or positions.
+let questMotion;
+const loadQuestMotion=()=>questMotion||=createQuestMotion(JSON.parse(readFileSync(questConfigFile,'utf8')),new URL('game/native-physics-thread.mjs',base),ordinaryQuestLayer.profile.entryPosition||ordinaryQuestLayer.profile.actors[0].position);
+const ordinaryQuestMotion=ordinaryQuestLayer?{get world(){return loadQuestMotion().world;},fork:()=>loadQuestMotion().fork(),close:()=>questMotion?.close()}:null;
 try {
-  game=createGameServer({inspector,maxPlayersPerRoom:maxPlayers,saveFile:'/data/saves/characters.json',gameplay,motion:null,mapWindowMotion:motion,navigation:null,onRuntimeFailure:error=>recovery.fail(error)});
+  game=createGameServer({inspector,maxPlayersPerRoom:maxPlayers,saveFile:'/data/saves/characters.json',gameplay,motion:null,mapWindowMotion:motion,navigation:null,onRuntimeFailure:error=>recovery.fail(error),...(ordinaryQuestLayer?{ordinaryQuestLayer,ordinaryQuestMotion}:{})});
   try{const repaired=applyPositionRepair(game.entryStore,'/data/role-position-repair.json',()=>trialEntryPosition(motion));if(repaired)console.log(JSON.stringify({positionRepair:repaired}));}
   catch(error){console.error('Position repair refused: '+error.message);}
   await installDelivery(game.server,root);
   installEntryRead(game.server,'/data/saves/characters.json');
   installNameDraw(game.server,createNameDrawer(root));
   installEntryManagement(game.server,trialRoleManager(game.entryStore,game.entryActive,{entryPosition:()=>trialEntryPosition(motion)}));
+  if(ordinaryQuestLayer)installQuestTransport(game.server,{ledger:ordinaryQuestLayer,store:game.entryStore,active:game.entryActive});
   installAdmin(game.server,{inspector,store:game.entryStore,active:game.entryActive,passwordHash:process.env.OC2_ADMIN_PASSWORD_HASH,secureCookies:process.env.OC2_ADMIN_LOCAL_HTTP!=='1'});
   await new Promise((ok,fail)=>{game.server.once('error',fail);game.server.listen(port,'0.0.0.0',()=>{game.server.off('error',fail);ok();});});
 } catch(error) { if(game)await game.close();else await motion.close();throw error; }

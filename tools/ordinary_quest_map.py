@@ -1,7 +1,8 @@
 """Bounded original map1/dawnwatch context for the ordinary quest461 adapter.
 
-Only original four TRN/AITM cells, their own masks/textures/DAT and PHY enter
-the output. This creates no quest rules, saves, scenery or source server code.
+Only the reviewed four-cell quest461 or two-cell quest208 original windows,
+their own masks/textures/DAT and PHY enter the output. This creates no quest
+rules, saves, scenery or source server code. Default461 bytes stay unchanged.
 Unsupported material families remain explicit omissions, never generic fills.
 """
 import argparse
@@ -9,6 +10,7 @@ import collections
 import copy
 import hashlib
 import json
+import re
 import struct
 import tempfile
 import xml.etree.ElementTree as ET
@@ -38,6 +40,23 @@ NAMESPACE='source-ordinary-quest-map1'
 COORDINATES=[(x,z)for z in(-5,-4)for x in(-1,0)]
 LIBRARY_SHA='77f449f2100a4717578e282bb04f1f8fff25d25c7bfa461d7d39ee49d1cb8ca4'
 sha=lambda raw:hashlib.sha256(raw).hexdigest()
+
+
+def area_inputs(coordinates=None,namespace=None,source_area=None):
+    """Only the two reviewed task windows; this is not a full-map exporter."""
+    area=source_area or 'quest461'
+    allowed={'quest461':COORDINATES,'mainline208':[(-5,0),(-4,0)]}
+    if area not in allowed:raise ValueError('Only reviewed original quest461/mainline208 areas are supported')
+    rows=allowed[area]if coordinates is None else coordinates
+    if not isinstance(rows,(list,tuple))or not rows or any(not isinstance(r,(list,tuple))or len(r)!=2 or any(type(v)is not int for v in r)for r in rows):
+        raise ValueError('Expected explicit original integer cell coordinates')
+    rows=[tuple(r)for r in rows]
+    if len(set(rows))!=len(rows)or set(rows)!=set(allowed[area]):raise ValueError('Coordinates differ from the bounded original task area')
+    rows=sorted(rows,key=lambda p:(p[1],p[0]))
+    name=namespace or(NAMESPACE if area=='quest461'else'source-mainline208-map1')
+    if not isinstance(name,str)or not re.fullmatch(r'[a-z][a-z0-9-]{0,63}',name):raise ValueError('Expected one safe private asset namespace')
+    if area=='mainline208'and name==NAMESPACE:raise ValueError('Mainline208 cannot replace the frozen quest461 namespace')
+    return rows,name,area
 
 
 class DawnwatchGroups(NativeFloor):
@@ -87,7 +106,8 @@ class DawnwatchGroups(NativeFloor):
             'maskSources':loaded,'nativeFull355f28':True,'native35650c':True,'freshGlobal2527a10':e.r(0x2527a10,'B')[0]}
 
 
-def build(output,source_path=DEFAULT_SOURCE,library=ROOT/'analysis/raw/beff-native/library.so'):
+def build(output,source_path=DEFAULT_SOURCE,library=ROOT/'analysis/raw/beff-native/library.so',*,coordinates=None,namespace=None,source_area=None):
+    coordinates,namespace,source_area=area_inputs(coordinates,namespace,source_area)
     output=local_output(output)
     if output.exists():raise ValueError('Choose a new isolated output directory')
     image=NativeImage(Path(library).read_bytes())
@@ -107,24 +127,24 @@ def build(output,source_path=DEFAULT_SOURCE,library=ROOT/'analysis/raw/beff-nati
         'exceptions':[i.attrib['name']for i in e.findall('Instance')]}for e in levels.findall('Item')],
         [{'id':e.attrib['id'],'level':int(e.attrib['level'])}for e in overrides.findall('Item')])
     gate.level_delegate=query.lookup
-    destination=output/'assets'/NAMESPACE;destination.mkdir(parents=True)
+    destination=output/'assets'/namespace;destination.mkdir(parents=True)
     textures={};files=[]
     def write(name,data):
         p=destination/name;p.parent.mkdir(parents=True,exist_ok=True)
         p.write_text(json.dumps(data,ensure_ascii=False,separators=(',',':'),allow_nan=False)+'\n');files.append(p)
-        return '/assets/'+NAMESPACE+'/'+name
+        return '/assets/'+namespace+'/'+name
     def texture(name,terrain=False):
         if name in textures:return textures[name]['url']
         if not source.candidates(name):raise ValueError('Original texture absent: '+name)
         raw=source.read(name);decoded,proof=texture_image(source,name,None,terrain_layer=terrain)
         if proof:raise ValueError('No invented texture fallback in this map')
         filename='textures/'+sha(raw)+'.png';p=destination/filename;p.parent.mkdir(parents=True,exist_ok=True);decoded.save(p);files.append(p)
-        textures[name]={'url':'/assets/'+NAMESPACE+'/'+filename,'sourceSHA256':sha(raw),'width':decoded.width,'height':decoded.height}
+        textures[name]={'url':'/assets/'+namespace+'/'+filename,'sourceSHA256':sha(raw),'width':decoded.width,'height':decoded.height}
         return textures[name]['url']
     tiles=[];materials=[];lighting=[];placements=[];admissions=[];groups=[];pending_water=[];missing_terrain=[]
     native=DawnwatchGroups(image);indices=native.triangle_indices()
     with tempfile.TemporaryDirectory(prefix='oc2-ordinary-map-')as temp:
-        for x,z in COORDINATES:
+        for x,z in coordinates:
             stem=f'{x:04d}_{z:04d}';name=f'world/dawnwatch/terrain/{stem}.trn';raw=source.read(name)
             tile=raw_tile(raw,x,z);tile['tile']=[x,z];tiles.append(tile);profile=tile_materials(raw)
             native.read(raw);group=native.groups(source,[x,z]);group.update(tile=[x,z],source=name,sourceSHA256=sha(raw));groups.append(group)
@@ -132,7 +152,7 @@ def build(output,source_path=DEFAULT_SOURCE,library=ROOT/'analysis/raw/beff-nati
             mask,classes=mask_channels(channels);profile['mask']=None
             if mask:
                 file='masks/'+stem+'.png';p=destination/file;p.parent.mkdir(parents=True,exist_ok=True);mask.save(p);files.append(p)
-                profile['mask']={'url':'/assets/'+NAMESPACE+'/'+file,'width':mask.width,'height':mask.height,'flipY':False}
+                profile['mask']={'url':'/assets/'+namespace+'/'+file,'width':mask.width,'height':mask.height,'flipY':False}
             flags=[]
             for chunk,row,cl in zip(profile['chunks'],group['chunks'],classes):
                 if row['rawIndices']!=chunk['indices']or row['maskClasses']!=cl:raise ValueError('Original material input differs')
@@ -202,10 +222,13 @@ def build(output,source_path=DEFAULT_SOURCE,library=ROOT/'analysis/raw/beff-nati
             except ValueError as error:gaps.append({'model':name,'stage':'material','instances':[r['id']for r in instances],'reason':str(error)})
         p=Path(temp)/'effects.bdae';p.write_bytes(source.read('CustomEffects.bdae'));effect=terrain_effect(BDAE(p))
     colors={v for t in tiles for v in t['colors']}
-    terrain={'format':'oc2-source-map-window-v1','world':'dawnwatch','mapId':1,'tileOrigin':[-1,-5],'tileCount':[2,2],'grid':{'width':129},
+    minimum_x,minimum_z=(min(p[i]for p in coordinates)for i in(0,1))
+    maximum_x,maximum_z=(max(p[i]for p in coordinates)for i in(0,1))
+    width,height=maximum_x-minimum_x+1,maximum_z-minimum_z+1
+    terrain={'format':'oc2-source-map-window-v1','world':'dawnwatch','mapId':1,'tileOrigin':[minimum_x,minimum_z],'tileCount':[width,height],'grid':{'width':width*64+1},
         'sourceTiles':tiles,'sourceVertexColorSummary':{'unique16':len(colors),'white16':colors=={65535}},
-        'bounds':{'min':[-64,min(min(t['heights'])for t in tiles)*.01,-320],'max':[64,max(max(t['heights'])for t in tiles)*.01,-192]},
-        'verification':{'sourceTileCount':4,'seamDifferencesPreserved':seam_audit(tiles)}}
+        'bounds':{'min':[minimum_x*64,min(min(t['heights'])for t in tiles)*.01,minimum_z*64],'max':[(maximum_x+1)*64,max(max(t['heights'])for t in tiles)*.01,(maximum_z+1)*64]},
+        'verification':{'sourceTileCount':len(tiles),'seamDifferencesPreserved':seam_audit(tiles)}}
     first_available=next(t['url']for p in materials for t in p['textures']if t['url'])
     material_profile={'format':'oc2-terrain-materials-v1','world':'dawnwatch','tiles':materials,'fallback':first_available,
         'sources':source.proofs,'nativeRepresentativeMaterialTransfer':True}
@@ -217,7 +240,12 @@ def build(output,source_path=DEFAULT_SOURCE,library=ROOT/'analysis/raw/beff-nati
     from scene_lighting import zone_targets,color_vector
     from native_temple_ambient import TempleAmbientProbe
     zone_rows=decode_ftable(source.read('tables/zones.tbl'),'ID')['rows'];base=next(r for r in zone_rows if r['ID']==3)
-    overlay=next(r for r in zone_rows if r['ID']==9)
+    zone_evidence=None
+    if source_area=='mainline208':
+        from ordinary_mainline_zone_probe import verify_route_region
+        zone_evidence=verify_route_region(image,source)
+    overlay_id=zone_evidence['overlayId']if zone_evidence else 9
+    overlay=next(r for r in zone_rows if r['ID']==overlay_id)
     if base['map_id']!=1 or overlay['parent_ID']!=3 or overlay['phasing_id']!=0:raise ValueError('Original quest coastal environment changed')
     targets=zone_targets(overlay,base)
     rgb=TempleAmbientProbe(image).produce(overlay['light_ambient'],overlay['light_diffuse'],targets['intensities'],adds=(0.,0.))
@@ -228,6 +256,11 @@ def build(output,source_path=DEFAULT_SOURCE,library=ROOT/'analysis/raw/beff-nati
         'compatibilityInitialization':'Settled original region3/overlay9 targets with explicit zero runtime RGB additions; no invented lamps or hand-tuned colors.',
         'selectionScope':'Quest461/NPC6598 and all11 phase0 gear coordinates lie in rectangle9. Phase2 overlays disabled. Remote polygon priorities/whole-world live updates not asserted.',
         'limits':['Explicit settled-target compatibility context, not original frame history, live region transition or recovered original server scene.','No weather effects, sky or extra lights constructed.']}
+    if zone_evidence:
+        environment.update(sourceOverlayId=overlay_id,
+            compatibilityInitialization='Settled original region3/overlay5 targets with explicit zero runtime RGB additions; no invented lamps or hand-tuned colors.',
+            selectionScope='Original4c2bcc/4c2cf4 containment at65 quest208 route points selects3/5, including actual polygon preparation. Full world-manager update/history not asserted.',
+            sourceRouteRegionEvidence=zone_evidence)
     manifest={'format':FORMAT,'world':'dawnwatch','mapId':1,'profile':'APK_Default','sourceWorld':world,'sourceMapInfo':maprow,'originalSettings':options,
         'terrain':write('terrain.json',terrain),'terrainMaterials':write('terrain-materials.json',material_profile),'terrainLighting':write('terrain-lighting.json',terrain_lighting),
         'environment':write('environment.json',environment),
@@ -238,8 +271,11 @@ def build(output,source_path=DEFAULT_SOURCE,library=ROOT/'analysis/raw/beff-nati
         'limits':['Original map1 archive window serving quest461. Compatibility gameplay is separate from original server approval.',
         'Unsupported decoration/shader branches remain omitted, not substituted. Water/sky are not claimed restored here.',
         'Lighting caller must supply this world own original region inputs; tutorial/selection profiles are forbidden.']}
+    if source_area=='mainline208':
+        manifest['sourceArea']={'name':source_area,'questId':208,'coordinates':coordinates,'namespace':namespace}
+        manifest['limits'][0]='Original map1 archive window serving the original quest208 route. Task compatibility execution is separate from original server approval.'
     url=write('manifest.json',manifest)
-    summary={'format':FORMAT,'manifest':url,'mapId':1,'world':'dawnwatch','tiles':4,'sourcePlacements':len(placements),
+    summary={'format':FORMAT,'manifest':url,'mapId':1,'world':'dawnwatch','tiles':len(tiles),'sourcePlacements':len(placements),
         'sourceStaticModels':len({r['model']for r in placements if r['sourceType']==2}),'renderModels':len(scenery),
         'renderInstances':sum(len(r['instances'])for r in scenery),'nativeColliders':len(colliders),'nativePHYFiles':len(phy_sources),
         'pendingWaterChunks':len(pending_water),'missingTerrainChunks':missing_terrain,'gaps':gaps,'savesChanged':False,'gpuVerified':False,'nativeMovementVerified':False,'librarySHA256':LIBRARY_SHA,
@@ -251,5 +287,7 @@ def build(output,source_path=DEFAULT_SOURCE,library=ROOT/'analysis/raw/beff-nati
 if __name__=='__main__':
     cli=argparse.ArgumentParser(description=__doc__);cli.add_argument('--output',type=Path,required=True)
     cli.add_argument('--source',type=Path,default=DEFAULT_SOURCE);cli.add_argument('--library',type=Path,default=ROOT/'analysis/raw/beff-native/library.so')
-    args=cli.parse_args();report=build(args.output,args.source,args.library)
+    cli.add_argument('--coordinates',help='JSON array of the already reviewed original cells');cli.add_argument('--namespace')
+    cli.add_argument('--source-area',choices=['quest461','mainline208'])
+    args=cli.parse_args();report=build(args.output,args.source,args.library,coordinates=json.loads(args.coordinates)if args.coordinates else None,namespace=args.namespace,source_area=args.source_area)
     print(json.dumps({k:report[k]for k in('tiles','sourcePlacements','renderModels','renderInstances','nativeColliders','nativePHYFiles','pendingWaterChunks')},ensure_ascii=False))

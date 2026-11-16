@@ -89,9 +89,9 @@ export function validateCreationDelivery(p){
 }
 const attributes=[['Vertex','position'],['Normal','normal'],['TexCoord0','uv'],['Tangent','sourceTangent'],['Binormal','sourceBinormal'],['SkinWeights','skinWeight'],['SkinIndices','skinIndex']];
 
-export function createSourceCreationStages(root,{profileURL}){
+export function createSourceCreationStages(root,{profileURL,motionHistory=null,initialOwnerSelection=null}){
  if(!root?.prepend||!safe(profileURL))throw Error('Existing recovered entry and explicit private profile required');
- let engine=null,pending=null,serial=0,active=false,closed=false,raf=0,actor=null,lastTime=0;
+ let engine=null,pending=null,serial=0,active=false,closed=false,raf=0,actor=null,lastTime=0,motion=null,resumeClock=true,requested=null,acceptedSelection=initialOwnerSelection?{...initialOwnerSelection}:null;
  const canvas=document.createElement('canvas');canvas.className='source-creation-preview';canvas.hidden=true;canvas.setAttribute('aria-hidden','true');
  const cache=new Map(),loaderCache=new Map(),textCache=new Map();
  const json=async url=>{
@@ -163,7 +163,7 @@ export function createSourceCreationStages(root,{profileURL}){
   })().catch(e=>{pending=null;throw e;});
   return pending;
  }
- function dropActor(){if(actor){actor.dispose();actor=null;}}
+ function dropActor(){motion?.dispose();motion=null;if(actor){actor.dispose();actor=null;}}
  async function loadActor(e,race,gender){
   // Existing public proposal bytes are immutable. The versioned additional
   // API validates all incoming resources; v1-v3 retain the old actual factory.
@@ -220,7 +220,7 @@ export function createSourceCreationStages(root,{profileURL}){
    return {...preview,conditionalReady,dispose:release};
   }catch(error){release();throw error;}
  }
- async function loadStageActor(e,identity){
+ async function loadStageActor(e,identity,{sourcePoseOwner=null}={}){
   const route=e.stages.candidates[`${identity.panel}:${identity.race}:${identity.gender}:${identity.professionIndex}`];
   if(!route)return null; // A missing source candidate never reuses a race costume.
   const shared=['shared-source-geometry-v1','shared-source-geometry-v2'].includes(route.provider);
@@ -240,21 +240,45 @@ export function createSourceCreationStages(root,{profileURL}){
   await Promise.all([...requests.map(async([path,src])=>textures.set(path,await e.texture(src))),
    ...models.map(async([path,src])=>attachmentData.set(path,await json(src)))]);
   const programs=await loadSourceCharacterPrograms();
-  return (shared?actorAPI.build:actorAPI.buildCreationStageActor)({THREE:e.THREE,renderer:e.renderer,manifest,data,identity,textures,attachmentData,
+  const next=(shared?actorAPI.build:actorAPI.buildCreationStageActor)({THREE:e.THREE,renderer:e.renderer,manifest,data,identity,textures,attachmentData,sourcePoseOwner,
    createMaterial:(THREE,row,maps,colors,object)=>createSourceCreationMaterial(THREE,row,maps,programs,object,
     {...colors,eye:e.profile.transform.freshModelEyeColor},e.fresh.sourceCharacterLight,e.lighting,e.profile.sourceControllerLight.direction)});
+  if(sourcePoseOwner&&!shared){
+   const {attachLegacyClassSourcePose}=await import('./creation_control/legacy_actor_pose_v1.mjs');
+   try{attachLegacyClassSourcePose({actor:next,data,identity,current:sourcePoseOwner});}catch(error){next.dispose();throw error;}
+  }
+  return {actor:next,data};
  }
+ function visibilityChanged(){
+  // Browser presentation clock only. A hidden tab cannot fabricate intermediate
+  // original frames; resume from a fresh observed zero-delta preview frame.
+  resumeClock=true;cancelAnimationFrame(raf);
+  if(active&&!closed&&!document.hidden){lastTime=performance.now();raf=requestAnimationFrame(frame);}
+ }
+ document.addEventListener('visibilitychange',visibilityChanged);
  function frame(time){
-  if(!active||closed||!engine)return;
-  actor?.update((time-lastTime)/1000);lastTime=time;
+  if(!active||closed||!engine||document.hidden)return;
+  // A browser suspension outside the checked source-delta domain is a clock
+  // resumption, not a fabricated sequence of native update calls.
+  const resumed=resumeClock||time-lastTime>20000;
+  const elapsed=resumed?0:Math.max(0,Math.floor(time)-Math.floor(lastTime));
+  const seconds=resumed?0:(time-lastTime)/1000;resumeClock=false;
+  try{
+   actor?.update(seconds);
+   if(motion){const state=motion.update(elapsed,actor);motionHistory.classFrame(state);root.dataset.sourceCreationMotion=JSON.stringify({kind:motion.kind,key:motion.key,...state});}
+  }catch(error){motion?.dispose();motion=null;motionHistory?.unresolvedClassCarrier();root.dataset.sourceCreationMotionError=error.message;}
+  lastTime=time;
   engine.camera.setPose(engine.track.update());engine.renderer.render(engine.scene,engine.camera.camera);
   root.dataset.sourceCreationDrawCalls=String(engine.renderer.info.render.calls);
   raf=requestAnimationFrame(frame);
  }
- function hide(){serial++;active=false;canvas.hidden=true;cancelAnimationFrame(raf);dropActor();root.dataset.sourceCreationPreview='hidden';delete root.dataset.sourceCreationDisplay;delete root.dataset.sourceCreationStage;delete root.dataset.sourceCreationDrawCalls;delete root.dataset.sourceCreationAssembly;delete root.dataset.sourceCreationConditionalReady;delete root.dataset.sourceCreationAppearanceComplete;delete root.dataset.sourceCreationMissingOverride;delete root.dataset.sourceCreationSharedGeometry;delete root.dataset.sourceCreationError;}
+ function hide(){serial++;active=false;canvas.hidden=true;cancelAnimationFrame(raf);dropActor();root.dataset.sourceCreationPreview='hidden';delete root.dataset.sourceCreationDisplay;delete root.dataset.sourceCreationStage;delete root.dataset.sourceCreationDrawCalls;delete root.dataset.sourceCreationAssembly;delete root.dataset.sourceCreationConditionalReady;delete root.dataset.sourceCreationAppearanceComplete;delete root.dataset.sourceCreationMissingOverride;delete root.dataset.sourceCreationSharedGeometry;delete root.dataset.sourceCreationError;delete root.dataset.sourceCreationMotion;delete root.dataset.sourceCreationMotionError;requested=null;}
  return {
-  async show({screen,race,gender,professionIndex}){
-   hide();if(closed||!['CharacterChooseRace','CharacterChooseClass','CharacterChoosePart'].includes(screen))return;
+  async show({screen,race,gender,professionIndex,event='page-enter'}){
+   // Original same-index Class call returns without replacing the wrapper.
+   if(requested&&screen==='CharacterChooseClass'&&requested.screen===screen&&requested.race===race&&requested.gender===gender&&requested.professionIndex===professionIndex)return;
+   const ownerBefore=acceptedSelection?.race===race&&acceptedSelection?.gender===gender?{...acceptedSelection}:null;
+   hide();requested={screen,race,gender,professionIndex};if(closed||!['CharacterChooseRace','CharacterChooseClass','CharacterChoosePart'].includes(screen))return;
    const token=serial;root.dataset.sourceCreationPreview='loading';
    try{
     const e=await initialise();if(token!==serial||closed)return;
@@ -265,16 +289,42 @@ export function createSourceCreationStages(root,{profileURL}){
     // must not leave a previous race on screen or remove the proven background.
     root.prepend(canvas);canvas.hidden=false;active=true;lastTime=performance.now();raf=requestAnimationFrame(frame);
     root.dataset.sourceCreationAssembly=JSON.stringify(e.assembly);
-    const next=identity.panel===0?await loadActor(e,race,gender):await loadStageActor(e,identity);
+    const sourcePoseOwner=e.stages.sourceMotion&&identity.panel===1?()=>token===serial&&!closed:null;
+    const built=identity.panel===0?{actor:await loadActor(e,race,gender)}:await loadStageActor(e,identity,{sourcePoseOwner});
+    const next=built?.actor;
     if(token!==serial||closed){next?.dispose();return;}
     if(!next){root.dataset.sourceCreationPreview='scene-only';return;}actor=next;if(identity.panel!==0)applyCreationStageTransform(actor.root,e.profile);e.scene.add(actor.root);
+    if(identity.panel===0&&acceptedSelection){acceptedSelection={...acceptedSelection,race,gender};}
+    if(identity.panel===1){
+     acceptedSelection={race,gender,professionIndex};
+     if(e.stages.sourceMotion){
+      try{
+       if(!motionHistory)throw Error('Explicit session animation history required');
+       const initialGlobals=motionHistory.read();
+       // The new finite carrier cannot certify the retired controller's history.
+       // Only its current actual source selection frame can make it known again.
+       motionHistory.unresolvedClassCarrier();
+       if(!e.motionLibrary){const {createCreationMotionLibrary}=await import('./creation_motion.mjs');e.motionLibrary=createCreationMotionLibrary({json,crypto:globalThis.crypto,bytes:async url=>{
+        const r=await fetch(url);if(!r.ok)throw Error('Original Class motion input unavailable');return new Uint8Array(await r.arrayBuffer());
+       }});}
+       // Class.Init's synchronous show request is superseded by EnterPanel1's
+       // new generic wrapper. Only a later actual Class binding retains show.
+       const kind=event==='class-selection'&&ownerBefore&&ownerBefore.professionIndex!==professionIndex?'show':'initial';
+       const prepared=await e.motionLibrary.prepare({identity,data:built.data,kind,ownerBefore,initialGlobals,current:sourcePoseOwner});
+       if(!sourcePoseOwner()){prepared?.dispose();return;}
+       if(prepared){try{actor.claimSourcePoseWriter();motion=prepared;resumeClock=true;root.dataset.sourceCreationMotion=JSON.stringify({kind:motion.kind,key:motion.key,pending:true});}catch(error){prepared.dispose();motion=null;throw error;}}
+      }catch(error){if(sourcePoseOwner())root.dataset.sourceCreationMotionError=error.message;}
+     }
+    }
+    if(token!==serial||closed)return;
+    lastTime=performance.now();
     root.dataset.sourceCreationPreview='ready';root.dataset.sourceCreationDisplay=String(identity.request.displayId);root.dataset.sourceCreationStage=String(identity.panel);
     if(next.sharedSource){root.dataset.sourceCreationSharedGeometry=JSON.stringify(next.sharedSource);root.dataset.sourceCreationAppearanceComplete=String(!next.sharedSource.bodyOnly);}
     if(next.conditionalReady){root.dataset.sourceCreationConditionalReady=JSON.stringify(next.conditionalReady);root.dataset.sourceCreationAppearanceComplete='false';root.dataset.sourceCreationMissingOverride=next.conditionalReady.omittedOverride;}
     root.dataset.sourceCreationAssembly=JSON.stringify(e.assembly);
-   }catch(error){if(token===serial&&!closed){if(!active)canvas.hidden=true;root.dataset.sourceCreationPreview=active?'scene-only':'unavailable';root.dataset.sourceCreationError=error.message;}}
+   }catch(error){if(token===serial&&!closed){requested=null;if(!active)canvas.hidden=true;root.dataset.sourceCreationPreview=active?'scene-only':'unavailable';root.dataset.sourceCreationError=error.message;}}
   },
   hide,
-  dispose(){hide();closed=true;canvas.remove();if(engine){engine.sharedStageFactory?.then(f=>f.dispose()).catch(()=>{});for(const p of engine.parts)p.dispose();engine.renderer.dispose();}for(const t of loaderCache.values())t.then(v=>v.dispose()).catch(()=>{});loaderCache.clear();},
+  dispose(){hide();closed=true;document.removeEventListener('visibilitychange',visibilityChanged);canvas.remove();if(engine){engine.sharedStageFactory?.then(f=>f.dispose()).catch(()=>{});for(const p of engine.parts)p.dispose();engine.renderer.dispose();}for(const t of loaderCache.values())t.then(v=>v.dispose()).catch(()=>{});loaderCache.clear();},
  };
 }

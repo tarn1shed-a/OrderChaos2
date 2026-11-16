@@ -160,6 +160,7 @@ def build_context(archive, destination):
     sources += ['tools/creation_class_stage/stage_switch.mjs','tools/creation_class_stage/actor_v2.mjs','tools/creation_class_stage/actor_v3.mjs','tools/creation_class_stage/material_v2.mjs']
     sources += ['tools/creation_class_stage/actor_v6.mjs', 'tools/creation_batch/geometry_core.mjs', 'tools/creation_batch/contracts.mjs', 'tools/creation_batch/stage_adapters_v1.mjs', 'tools/creation_batch/stage_adapter_core_v1.mjs', 'tools/creation_batch/stage_guard.mjs', 'tools/creation_batch/source_capabilities_v1.mjs']
     sources += ['tools/creation_batch/'+name+'.mjs' for name in ['stage_batch_guard', 'stage_adapters_all_v1', 'stage_adapters_v5', 'typed_armor_root']]
+    sources += ['tools/creation_control/'+name+'.mjs' for name in ['source_pose_applier_v1','source_pose_writer_v1','legacy_actor_pose_v1']]
     # Optional original human composition code. Its private inputs/configuration
     # are not activated or appended to the unchanged base runtime archive.
     sources += python_closure('source_human_pose_worker')

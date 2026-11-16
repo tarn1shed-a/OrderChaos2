@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {selectCreationProfile} from '../deploy/prepare_delivery.mjs';
 import {creationPreviewPlan} from '../deploy/creation_plan.mjs';
 import {prepareQuestDelivery} from '../deploy/quest_delivery.mjs';
+import {CREATION_STAGES_PROFILE_V4} from '../deploy/creation_stages_profile.mjs';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,copyFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -49,6 +50,11 @@ test('actual task delivery opts into the same verified preview and never rewrite
   }
   assert(derived.includes('entry=createSourceEntry({connect,previewURL:'+JSON.stringify(next)+'});'));
   assert.equal(derived.replace(',previewURL:'+JSON.stringify(next),''),originals['quest_world.mjs'].toString());
+  const batch=fixture();batch[CREATION_STAGES_PROFILE_V4]={};
+  await prepareQuestDelivery(root,destination,batch,{creationProfile:CREATION_STAGES_PROFILE_V4});
+  const staged=readFileSync(batch['/__delivery/quest_world.mjs'].path,'utf8');
+  assert(staged.includes('entry=createSourceEntry({connect,previewURL:'+JSON.stringify(CREATION_STAGES_PROFILE_V4)+'});'));
+  assert.equal(staged.replace(',previewURL:'+JSON.stringify(CREATION_STAGES_PROFILE_V4),''),originals['quest_world.mjs'].toString());
   await assert.rejects(prepareQuestDelivery(root,destination,fixture(),{creationProfile:'https://external.invalid/profile'}),/unavailable/);
   const absent=fixture();delete absent[next];await assert.rejects(prepareQuestDelivery(root,destination,absent,{creationProfile:next}),/unavailable/);
   for(const[n,bytes]of Object.entries(originals))assert.deepEqual(readFileSync(join(root,'deploy',n)),bytes);

@@ -16,7 +16,7 @@ export function recipeFromFrozenStage({manifest,data,identity,validateStageModel
  if(new Set(manifest.visibleMeshIndices).size!==manifest.visibleMeshIndices.length||manifest.visibleMeshIndices.some(i=>!Number.isInteger(i)||!data.meshes[i]))throw Error('Original visible mesh selection differs');
  return Object.freeze({format:'oc2-creation-shared-geometry-recipe-v1',manifest,data,identity,bindings,validateStageModel});
 }
-export function createCreationGeometry({THREE,recipe,textures,attachmentData,createMaterial,textureCapabilities,samplerAddressResolver=sourceWrap}){
+export function createCreationGeometry({THREE,recipe,textures,attachmentData,createMaterial,textureCapabilities,samplerAddressResolver=sourceWrap,armorRootValidator=checkArmorRoot}){
  if(recipe?.format!=='oc2-creation-shared-geometry-recipe-v1'||!(textures instanceof Map)||!(attachmentData instanceof Map)||typeof createMaterial!=='function')
   throw Error('Explicit source recipe and actual constructors are required');
  const {manifest,data,identity}=recipe;
@@ -72,7 +72,7 @@ export function createCreationGeometry({THREE,recipe,textures,attachmentData,cre
    if(slots.has(row.slot))throw Error('Duplicate original attachment slot');slots.add(row.slot);
    const source=attachmentData.get(row.model),mount=row.mount;
    let target,container;
-   if(row.kind===ARMOR_ROOT){checkArmorRoot(row,source,identity);target=root;container=rigidParts;}
+   if(row.kind===ARMOR_ROOT){armorRootValidator(row,source,identity);target=root;container=rigidParts;}
    else{
     if(row.kind!==undefined||!source||source.source!==row.source||row.sourceRequest?.slot!==row.slot||row.sourceRequest.itemKey!==row.itemKey||
      !mount?.sourceNodePresent||mount.rootFallback||!nodes[mount.sourceNodeIndex]||mount.slot!==row.slot||!finite(mount.rootLocalTranslation,3)||

@@ -144,3 +144,7 @@
 !tools/creation_batch/source_capabilities_v1.mjs
 !tools/creation_batch/stage_adapter_core_v1.mjs
 !tools/creation_batch/stage_guard.mjs
+!tools/creation_batch/stage_batch_guard.mjs
+!tools/creation_batch/stage_adapters_all_v1.mjs
+!tools/creation_batch/stage_adapters_v5.mjs
+!tools/creation_batch/typed_armor_root.mjs

@@ -89,7 +89,7 @@ export async function prepare(root,{stage=false}={}){
     await writeFile(path,raw);files['/explore-map.js']={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.js']};
     for(const name of ['staged_scene.mjs','streaming_window.mjs','click_input.mjs','browser_timing.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES['.mjs']};}
-    if(entryUI)for(const name of ['entry_ui.mjs','entry_ui.css','entry_name.mjs','attribute_ui.mjs','attribute_state.mjs','attribute_ui.css','attribute_preview.mjs','self_name.mjs','character_hotbar.mjs','map_inspector_ui.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
+    if(entryUI)for(const name of ['entry_ui.mjs','entry_ui.css','entry_name.mjs','creation_motion_history.mjs','attribute_ui.mjs','attribute_state.mjs','attribute_ui.css','attribute_preview.mjs','self_name.mjs','character_hotbar.mjs','map_inspector_ui.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES[extname(name)]};}
     if(creationPreview){const path=resolve(root,'deploy/creation_preview.mjs'),raw=await readFile(path);files['/__delivery/creation_preview.mjs']={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.mjs']};}
     if(files['/assets/source-unstuck/unstuck.json'])for(const name of ['unstuck_ui.mjs','unstuck_ui.css','unstuck_state.mjs','unstuck_return.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);

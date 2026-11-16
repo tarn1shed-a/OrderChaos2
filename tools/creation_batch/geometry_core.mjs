@@ -1,3 +1,4 @@
+import {createSourcePoseApplier} from '../creation_control/source_pose_applier_v1.mjs';
 // One geometry/material/mount traversal for the source Class and Part recipes.
 // No per-profession renderer, timers, queue production, ready reply or role grant.
 import {checkedStageModel} from '../creation_class_stage/actor_v6.mjs';
@@ -86,20 +87,7 @@ export function createCreationGeometry({THREE,recipe,textures,attachmentData,cre
    }
   }
   root.updateMatrixWorld(true);
-  const applySourcePose=pose=>{
-   if(disposed)throw Error('Shared source geometry disposed');
-   const expected={uiRace:identity.race,gender:identity.gender,uiProfessionIndex:identity.professionIndex,profession:identity.profession,stage:identity.panel,displayId:identity.request.displayId,sourceModelId:identity.sourceModel.ID};
-   if(pose?.format!=='oc2-creation-pure-source-pose-v1'||Object.entries(expected).some(([key,value])=>pose.identity?.[key]!==value)||!Array.isArray(pose.nodeTRS))throw Error('Own source pose identity required');
-   const seen=new Set();
-   for(const row of pose.nodeTRS){
-    const index=row.sourceNodeIndex,source=data.rig.nodes[index];
-    if(!Number.isInteger(index)||seen.has(index)||!source||!finite(row.position,3)||!finite(row.quaternion,4)||!finite(row.scale,3)||
-     row.name!==source.name||!same(row.aliases,source.aliases))throw Error('Actual source pose target differs');
-    seen.add(index);
-   }
-   for(const row of pose.nodeTRS){const node=nodes[row.sourceNodeIndex];node.position.fromArray(row.position);node.quaternion.fromArray(row.quaternion);node.scale.fromArray(row.scale);}
-   root.updateMatrixWorld(true);
-  };
+  const applySourcePose=createSourcePoseApplier({identity,data,nodes,root,isDisposed:()=>disposed});
   return {root,nodes,meshes,weapons,rigidParts,manifest,applySourcePose,dispose,
    scope:{sharedSourceGeometryConstructed:true,sourceMaterialObjectsConstructed:true,unresolvedSourceEffects:manifest.modelEffects.length,
     sourceEffectSuccessSupplied:false,originalGPUObserved:false,originalReadySupplied:false,createsPlayableRole:false,sourceClockOrQueueCreated:false}};

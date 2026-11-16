@@ -1,5 +1,6 @@
 // Original drawings; centered entry sizing is the user's explicit web layout preference.
 // Existing web identities are a separate adapter.
+import {createCreationMotionHistory} from './creation_motion_history.mjs';
 import {entryNameError} from './entry_name.mjs';
 const NS='http://www.w3.org/2000/svg';
 export function savedEntryIdentities(storage){
@@ -15,12 +16,13 @@ export function createSourceEntry({connect,previewURL=null}){
   let manifest=null,screen=null,selected=null,roles=[],identities=[],isReady=false,busy=false,pendingError=null,listOffset=0;
   let draft={race:0,gender:0,cls:0,name:''};
   let racePreview=null,previewPromise=null;
-  const stagedPreview=['/assets/source-creation-stage/manifest-stages-v1.json','/assets/source-creation-stage/manifest-stages-v2.json','/assets/source-creation-stage/manifest-stages-v3.json','/assets/source-creation-stage/manifest-stages-v4.json'].includes(previewURL);
+  const motionHistory=createCreationMotionHistory({counter:0,selected:0}); // Explicit fresh web-session carrier of original cold BSS.
+  const stagedPreview=['/assets/source-creation-stage/manifest-stages-v1.json','/assets/source-creation-stage/manifest-stages-v2.json','/assets/source-creation-stage/manifest-stages-v3.json','/assets/source-creation-stage/manifest-stages-v4.json','/assets/source-creation-stage/manifest-stages-v5.json'].includes(previewURL);
   function hidePreview(){racePreview?.hide();}
-  function updateRacePreview(){
+  function updateRacePreview(event='page-enter'){
     if(!previewURL)return;
-    const current={screen:root.dataset.sourceScreen,race:draft.race,gender:draft.gender,professionIndex:draft.cls};
-    if(!previewPromise)previewPromise=stagedPreview?import('./creation_stages.mjs').then(({createSourceCreationStages})=>racePreview=createSourceCreationStages(root,{profileURL:previewURL})):import('./creation_preview.mjs').then(({createSourceCreationPreview})=>racePreview=createSourceCreationPreview(root,{profileURL:previewURL}));
+    const current={screen:root.dataset.sourceScreen,race:draft.race,gender:draft.gender,professionIndex:draft.cls,event};
+    if(!previewPromise)previewPromise=stagedPreview?import('./creation_stages.mjs').then(({createSourceCreationStages})=>racePreview=createSourceCreationStages(root,{profileURL:previewURL,motionHistory,initialOwnerSelection:{race:draft.race,gender:draft.gender,professionIndex:draft.cls}})):import('./creation_preview.mjs').then(({createSourceCreationPreview})=>racePreview=createSourceCreationPreview(root,{profileURL:previewURL}));
     previewPromise.then(p=>{if(root.dataset.sourceScreen===current.screen&&draft.race===current.race&&draft.gender===current.gender&&(!stagedPreview||draft.cls===current.professionIndex)&&!root.hidden)return p.show(current);}).catch(error=>{root.dataset.sourceCreationError=error.message;});
   }
   const blocked=new Map();
@@ -221,7 +223,7 @@ export function createSourceEntry({connect,previewURL=null}){
     if(kind==='Race'){const male=size('._MaleBtn'),female=size('._FemaleBtn');move('._MaleBtn',120,640-male.h-100);move('._FemaleBtn',150+male.w,640-female.h-100);}
   }
   async function race(){
-    await show('CharacterChooseRace');creationPositions('Race');navigation(choose,profession);
+    await show('CharacterChooseRace');draft.cls=0;motionHistory.enterRace(draft);creationPositions('Race');navigation(choose,profession);
     const update=()=>{
       for(let i=0;i<5;i++){const path='._RaceList.Item_'+i;q(path+'.SelectedEff').setAttribute('display',i===draft.race?'inline':'none');}
       label('._RaceDescMC._Title',word('GENERAL_CH_SELEC_'+raceTitles[draft.race]));
@@ -232,21 +234,21 @@ export function createSourceEntry({connect,previewURL=null}){
       }
       updateRacePreview();
     };
-    for(let i=0;i<5;i++){const path='._RaceList.Item_'+i;hide(path+'.IsLockedForSkill');image(q(path+'.DisplayIcon'),icon('race_'+raceNames[i]));button(q(path),word('GENERAL_CH_SELEC_'+raceTitles[i]),()=>{draft.race=i;if(i===4)draft.gender=0;update();});}
-    for(const[which,value]of [['Male',0],['Female',1]]){hide('._'+which+'Btn.IsLockedForSkill');image(q('._'+which+'Btn.DisplayIcon'),icon(which.toLowerCase()));button(q('._'+which+'Btn'),word('GENERAL_CH_SELEC_'+(value?23:24)),()=>{draft.gender=value;update();});}
+    for(let i=0;i<5;i++){const path='._RaceList.Item_'+i;hide(path+'.IsLockedForSkill');image(q(path+'.DisplayIcon'),icon('race_'+raceNames[i]));button(q(path),word('GENERAL_CH_SELEC_'+raceTitles[i]),()=>{const before={...draft};draft.race=i;if(i===4)draft.gender=0;draft.cls=0;motionHistory.raceInput(before,draft);update();});}
+    for(const[which,value]of [['Male',0],['Female',1]]){hide('._'+which+'Btn.IsLockedForSkill');image(q('._'+which+'Btn.DisplayIcon'),icon(which.toLowerCase()));button(q('._'+which+'Btn'),word('GENERAL_CH_SELEC_'+(value?23:24)),()=>{const before={...draft};draft.gender=value;draft.cls=0;motionHistory.raceInput(before,draft);update();});}
     // Original txt_select_class -> ScrollPane -> UIComponent constructor
     // hides its mc_bounds authoring rectangle (code SHA 24e6fc6e…279df6).
     hide('._RaceDescMC._Detail.mc_bounds');hide('._RaceDescMC._ScrollBar');update();
   }
   async function profession(){
     await show('CharacterChooseClass');creationPositions('Class');navigation(race,appearance);
-    const update=()=>{
+    const update=(event='page-enter')=>{
       for(let i=0;i<5;i++)q('._ClassList.Item_'+i+'.SelectedEff').setAttribute('display',i===draft.cls?'inline':'none');
       label('._ClassDescMC._Title',word('GENERAL_CH_SELEC_'+classTitles[draft.cls]));image(q('._ClassDescMC._Icon'),icon('class_'+classNames[draft.cls]));
       const key='GENERAL_CH_SELEC_'+String(9+draft.cls).padStart(2,'0');field('._ClassDescMC._Detail.mc_content.text',{name:'职业说明',value:word(key)});
-      if(stagedPreview)updateRacePreview();
+      if(stagedPreview)updateRacePreview(event);
     };
-    for(let i=0;i<5;i++){const path='._ClassList.Item_'+i;hide(path+'.IsLockedForSkill');image(q(path+'.DisplayIcon'),icon('class_'+classNames[i]));button(q(path),word('GENERAL_CH_SELEC_'+classTitles[i]),()=>{draft.cls=i;update();});}
+    for(let i=0;i<5;i++){const path='._ClassList.Item_'+i;hide(path+'.IsLockedForSkill');image(q(path+'.DisplayIcon'),icon('class_'+classNames[i]));button(q(path),word('GENERAL_CH_SELEC_'+classTitles[i]),()=>{draft.cls=i;update('class-selection');});}
     // The authored radar frame is not the selected class's recovered data.
     hide('._ClassDescMC._Pic');hide('._ClassDescMC._Detail.mc_bounds');hide('._ClassDescMC._ScrollBar');update();
   }

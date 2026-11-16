@@ -245,6 +245,7 @@ jobs:
           node --test tools/creation_stages_delivery_tests.mjs
           node --test tools/creation_shared_tests.mjs
           node --test tools/creation_stage_batch_tests.mjs
+          node --test tools/creation_motion_tests.mjs
           node --test tools/plan_documents_tests.mjs
           node --test tools/creation_rigid_guards_tests.mjs
           node --check deploy/creation_stages.mjs
@@ -258,7 +259,7 @@ jobs:
           node --check tools/creation_class_stage/actor_v2.mjs
           node --check tools/creation_class_stage/actor_v3.mjs
           node --check tools/creation_class_stage/material_v2.mjs
-          python -m py_compile tools/creation_stages_package.py tools/creation_shared_package.py tools/creation_stage_batch_package.py tools/creation_structure_audit.py
+          python -m py_compile tools/creation_stages_package.py tools/creation_shared_package.py tools/creation_stage_batch_package.py tools/creation_motion_package.py tools/creation_structure_audit.py
       - run: python tools/species_world_queue_tests.py
       - run: node --test tools/species_world_motion_tests.mjs
       - run: python tools/source_species_worker_tests.py

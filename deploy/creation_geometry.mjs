@@ -2,6 +2,7 @@
 // admission, native model-ready reply or missing BEFF is produced here.
 import {createSharedStageGuard} from './creation_batch/stage_guard.mjs';
 import {recipeFromFrozenStage,createCreationGeometry,attachFrozenFiniteIdle} from './creation_batch/geometry_core.mjs';
+import {createSourcePoseWriter} from './creation_control/source_pose_writer_v1.mjs';
 import {sourceWrap} from './creation_batch/contracts.mjs';
 
 export async function createSharedStageFactory({profile,loadBytes,crypto}){
@@ -15,7 +16,7 @@ export async function createSharedStageFactory({profile,loadBytes,crypto}){
  const validate=guard.checkedStageModel;
  return Object.freeze({
   checkedStageModel:validate,
-  build({THREE,renderer,manifest,data,identity,textures,attachmentData,createMaterial}){
+  build({THREE,renderer,manifest,data,identity,textures,attachmentData,createMaterial,sourcePoseOwner=null}){
    if(!live)throw Error('Shared stage factory disposed');
    const gl=renderer?.getContext();
    if(!gl||typeof WebGL2RenderingContext==='undefined'||!(gl instanceof WebGL2RenderingContext)||gl.isContextLost())
@@ -29,11 +30,14 @@ export async function createSharedStageFactory({profile,loadBytes,crypto}){
    let initial;
    try{initial=attachFrozenFiniteIdle(THREE,actor,data);}catch(error){actor.dispose();throw error;}
    let disposed=false;
-   return {...actor,update:delta=>{if(!disposed)initial.update(delta);},
+   const writer=sourcePoseOwner?createSourcePoseWriter({applySourcePose:actor.applySourcePose,current:sourcePoseOwner,
+    stopFinite:()=>initial.dispose(),updateFinite:delta=>initial.update(delta),isDisposed:()=>disposed}):null;
+   return {...actor,update:delta=>{if(!disposed)(writer?writer.update(delta):initial.update(delta));},
+    ...(writer?{applySourcePose:writer.apply,claimSourcePoseWriter:writer.claim,sourcePoseWriter:writer.inspect}:{}),
     sharedSource:{sourceDisplay:identity.request.displayId,sourceModel:identity.sourceModel.ID,
      bodyOnly:manifest.appearanceComplete!==true,unresolvedEffects:manifest.modelEffects.length,
      originalGPUReadyProduced:false,createsPlayableRole:false,fullClassQueueRestored:false},
-    dispose(){if(disposed)return;disposed=true;initial.dispose();actor.dispose();}};
+    dispose(){if(disposed)return;disposed=true;writer?.dispose();initial.dispose();actor.dispose();}};
   },
   dispose(){if(!live)return;live=false;guard.dispose();},
  });

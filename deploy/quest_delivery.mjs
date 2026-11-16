@@ -46,7 +46,7 @@ export async function prepareQuestDelivery(root,destination,files,{creationProfi
     if(name==='quest_world.mjs'&&(creationProfile||journal)){
       let source=await readFile(path,'utf8');if(journal)source=stageQuestJournalWorld(source);
       if(creationProfile){
-        if(!['manifest.json','manifest-v2.json','manifest-v3.json','manifest-races-v1.json','manifest-conditional-v1.json','manifest-stages-v1.json','manifest-stages-v2.json','manifest-stages-v3.json','manifest-stages-v4.json'].some(n=>creationProfile==='/assets/source-creation-stage/'+n)||!files[creationProfile])throw Error('Original quest-entry creation profile is unavailable');
+        if(!['manifest.json','manifest-v2.json','manifest-v3.json','manifest-races-v1.json','manifest-conditional-v1.json','manifest-stages-v1.json','manifest-stages-v2.json','manifest-stages-v3.json','manifest-stages-v4.json','manifest-stages-v5.json'].some(n=>creationProfile==='/assets/source-creation-stage/'+n)||!files[creationProfile])throw Error('Original quest-entry creation profile is unavailable');
         const anchor='entry=createSourceEntry({connect});';if(source.split(anchor).length!==2)throw Error('Original quest-entry preview anchor differs');
         source=source.replace(anchor,'entry=createSourceEntry({connect,previewURL:'+JSON.stringify(creationProfile)+'});');
       }

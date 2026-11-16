@@ -15,18 +15,29 @@ export function createSourceEntry({connect,previewURL=null}){
   const root=document.createElement('section');root.className='source-entry';root.hidden=true;root.setAttribute('aria-label','登录与角色选择');document.body.append(root);
   let manifest=null,screen=null,selected=null,roles=[],identities=[],isReady=false,busy=false,pendingError=null,listOffset=0;
   let draft={race:0,gender:0,cls:0,name:''};
-  let racePreview=null,previewPromise=null;
+  let racePreview=null,previewPromise=null,previewGeneration=0;
   const motionHistory=createCreationMotionHistory({counter:0,selected:0}); // Explicit fresh web-session carrier of original cold BSS.
-  const stagedPreview=['/assets/source-creation-stage/manifest-stages-v1.json','/assets/source-creation-stage/manifest-stages-v2.json','/assets/source-creation-stage/manifest-stages-v3.json','/assets/source-creation-stage/manifest-stages-v4.json','/assets/source-creation-stage/manifest-stages-v5.json'].includes(previewURL);
+  const sourceRaceMotion=previewURL==='/assets/source-creation-stage/manifest-stages-v6.json';
+  const stagedPreview=['/assets/source-creation-stage/manifest-stages-v1.json','/assets/source-creation-stage/manifest-stages-v2.json','/assets/source-creation-stage/manifest-stages-v3.json','/assets/source-creation-stage/manifest-stages-v4.json','/assets/source-creation-stage/manifest-stages-v5.json','/assets/source-creation-stage/manifest-stages-v6.json'].includes(previewURL);
   function hidePreview(){racePreview?.hide();}
   function updateRacePreview(event='page-enter'){
     if(!previewURL)return;
-    const current={screen:root.dataset.sourceScreen,race:draft.race,gender:draft.gender,professionIndex:draft.cls,event};
-    if(!previewPromise)previewPromise=stagedPreview?import('./creation_stages.mjs').then(({createSourceCreationStages})=>racePreview=createSourceCreationStages(root,{profileURL:previewURL,motionHistory,initialOwnerSelection:{race:draft.race,gender:draft.gender,professionIndex:draft.cls}})):import('./creation_preview.mjs').then(({createSourceCreationPreview})=>racePreview=createSourceCreationPreview(root,{profileURL:previewURL}));
-    previewPromise.then(p=>{if(root.dataset.sourceScreen===current.screen&&draft.race===current.race&&draft.gender===current.gender&&(!stagedPreview||draft.cls===current.professionIndex)&&!root.hidden)return p.show(current);}).catch(error=>{root.dataset.sourceCreationError=error.message;});
+    const generation=previewGeneration,current={screen:root.dataset.sourceScreen,race:draft.race,gender:draft.gender,professionIndex:draft.cls,event};
+    if(!previewPromise){
+      // This is the game/owner input at the first binding, before async import.
+      const initialOwnerSelection={race:current.race,gender:current.gender,professionIndex:current.professionIndex};
+      previewPromise=stagedPreview?import('./creation_stages.mjs').then(({createSourceCreationStages})=>{
+        if(generation!==previewGeneration)return null;
+        return racePreview=createSourceCreationStages(root,{profileURL:previewURL,motionHistory,initialOwnerSelection});
+      }):import('./creation_preview.mjs').then(({createSourceCreationPreview})=>{
+        if(generation!==previewGeneration)return null;
+        return racePreview=createSourceCreationPreview(root,{profileURL:previewURL});
+      });
+    }
+    previewPromise.then(p=>{if(generation===previewGeneration&&p&&root.dataset.sourceScreen===current.screen&&draft.race===current.race&&draft.gender===current.gender&&(!stagedPreview||draft.cls===current.professionIndex)&&!root.hidden)return p.show(current);}).catch(error=>{if(generation===previewGeneration)root.dataset.sourceCreationError=error.message;});
   }
   const blocked=new Map();
-  function hideRoot(){racePreview?.dispose();racePreview=null;previewPromise=null;root.hidden=true;for(const[el,value]of blocked)el.inert=value;blocked.clear();}
+  function hideRoot(){previewGeneration++;racePreview?.dispose();racePreview=null;previewPromise=null;root.hidden=true;for(const[el,value]of blocked)el.inert=value;blocked.clear();}
   const api=async(path,data)=>{const r=await fetch('/__entry/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),cache:'no-store'}),v=await r.json();if(!r.ok)throw Error(v.error||'请求失败');return v;};
   function remember(role,token){
     const saved=JSON.parse(localStorage.getItem('oc2.character-slots.v1')||'{"characters":{},"lastName":""}');
@@ -223,8 +234,8 @@ export function createSourceEntry({connect,previewURL=null}){
     if(kind==='Race'){const male=size('._MaleBtn'),female=size('._FemaleBtn');move('._MaleBtn',120,640-male.h-100);move('._FemaleBtn',150+male.w,640-female.h-100);}
   }
   async function race(){
-    await show('CharacterChooseRace');draft.cls=0;motionHistory.enterRace(draft);creationPositions('Race');navigation(choose,profession);
-    const update=()=>{
+    await show('CharacterChooseRace');draft.cls=0;if(!sourceRaceMotion)motionHistory.enterRace(draft);creationPositions('Race');navigation(choose,profession);
+    const update=(event='page-enter')=>{
       for(let i=0;i<5;i++){const path='._RaceList.Item_'+i;q(path+'.SelectedEff').setAttribute('display',i===draft.race?'inline':'none');}
       label('._RaceDescMC._Title',word('GENERAL_CH_SELEC_'+raceTitles[draft.race]));
       image(q('._RaceDescMC._Icon'),icon('race_'+raceNames[draft.race]));
@@ -232,10 +243,10 @@ export function createSourceEntry({connect,previewURL=null}){
       for(const[which,value]of [['Male',0],['Female',1]]){
         q('._'+which+'Btn').setAttribute('display',draft.race===4?'none':'inline');q('._'+which+'Btn.SelectedEff').setAttribute('display',draft.gender===value?'inline':'none');
       }
-      updateRacePreview();
+      updateRacePreview(event);
     };
-    for(let i=0;i<5;i++){const path='._RaceList.Item_'+i;hide(path+'.IsLockedForSkill');image(q(path+'.DisplayIcon'),icon('race_'+raceNames[i]));button(q(path),word('GENERAL_CH_SELEC_'+raceTitles[i]),()=>{const before={...draft};draft.race=i;if(i===4)draft.gender=0;draft.cls=0;motionHistory.raceInput(before,draft);update();});}
-    for(const[which,value]of [['Male',0],['Female',1]]){hide('._'+which+'Btn.IsLockedForSkill');image(q('._'+which+'Btn.DisplayIcon'),icon(which.toLowerCase()));button(q('._'+which+'Btn'),word('GENERAL_CH_SELEC_'+(value?23:24)),()=>{const before={...draft};draft.gender=value;draft.cls=0;motionHistory.raceInput(before,draft);update();});}
+    for(let i=0;i<5;i++){const path='._RaceList.Item_'+i;hide(path+'.IsLockedForSkill');image(q(path+'.DisplayIcon'),icon('race_'+raceNames[i]));button(q(path),word('GENERAL_CH_SELEC_'+raceTitles[i]),()=>{const before={...draft};draft.race=i;if(i===4)draft.gender=0;draft.cls=0;motionHistory.raceInput(before,draft);update('race-selection');});}
+    for(const[which,value]of [['Male',0],['Female',1]]){hide('._'+which+'Btn.IsLockedForSkill');image(q('._'+which+'Btn.DisplayIcon'),icon(which.toLowerCase()));button(q('._'+which+'Btn'),word('GENERAL_CH_SELEC_'+(value?23:24)),()=>{const before={...draft};draft.gender=value;draft.cls=0;motionHistory.raceInput(before,draft);update('race-selection');});}
     // Original txt_select_class -> ScrollPane -> UIComponent constructor
     // hides its mc_bounds authoring rectangle (code SHA 24e6fc6e…279df6).
     hide('._RaceDescMC._Detail.mc_bounds');hide('._RaceDescMC._ScrollBar');update();

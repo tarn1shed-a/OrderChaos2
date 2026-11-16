@@ -1,4 +1,5 @@
 import {validateCreationStagesDelivery} from './creation_stages_profile.mjs';
+import {creationMotionEventPlan} from './creation_motion.mjs';
 // Original source-backed Race/Class/Part scene. Legacy race renderer stays unchanged.
 // Account/character creation and played-world appearance are separate systems.
 import {createSelectionScene} from '/source-selection-scene.js';
@@ -164,7 +165,7 @@ export function createSourceCreationStages(root,{profileURL,motionHistory=null,i
   return pending;
  }
  function dropActor(){motion?.dispose();motion=null;if(actor){actor.dispose();actor=null;}}
- async function loadActor(e,race,gender){
+ async function loadActor(e,race,gender,{sourcePoseOwner=null}={}){
   // Existing public proposal bytes are immutable. The versioned additional
   // API validates all incoming resources; v1-v3 retain the old actual factory.
   const extended=e.p.format===CREATION_RACES_FORMAT||e.p.format==='oc2-source-creation-preview-delivery-v5';
@@ -217,7 +218,9 @@ export function createSourceCreationStages(root,{profileURL,motionHistory=null,i
    }
    applyCreationStageTransform(preview.root,e.profile);
    const conditionalReady=conditional?security.completeElfConditionalPreview(e.THREE,{manifest,data,preview}):null;
-   return {...preview,conditionalReady,dispose:release};
+   const next={...preview,conditionalReady,dispose:release};
+   if(sourcePoseOwner){const {attachRaceSourcePose}=await import('./creation_control/race_actor_pose_v1.mjs');attachRaceSourcePose({THREE:e.THREE,actor:next,data,race,gender,current:sourcePoseOwner});}
+   return {actor:next,data};
   }catch(error){release();throw error;}
  }
  async function loadStageActor(e,identity,{sourcePoseOwner=null}={}){
@@ -265,7 +268,7 @@ export function createSourceCreationStages(root,{profileURL,motionHistory=null,i
   const seconds=resumed?0:(time-lastTime)/1000;resumeClock=false;
   try{
    actor?.update(seconds);
-   if(motion){const state=motion.update(elapsed,actor);motionHistory.classFrame(state);root.dataset.sourceCreationMotion=JSON.stringify({kind:motion.kind,key:motion.key,...state});}
+   if(motion){const state=motion.update(elapsed,actor);if(motion.kind.startsWith('race-'))motionHistory.raceFrame(state);else motionHistory.classFrame(state);root.dataset.sourceCreationMotion=JSON.stringify({kind:motion.kind,key:motion.key,...state});}
   }catch(error){motion?.dispose();motion=null;motionHistory?.unresolvedClassCarrier();root.dataset.sourceCreationMotionError=error.message;}
   lastTime=time;
   engine.camera.setPose(engine.track.update());engine.renderer.render(engine.scene,engine.camera.camera);
@@ -275,9 +278,10 @@ export function createSourceCreationStages(root,{profileURL,motionHistory=null,i
  function hide(){serial++;active=false;canvas.hidden=true;cancelAnimationFrame(raf);dropActor();root.dataset.sourceCreationPreview='hidden';delete root.dataset.sourceCreationDisplay;delete root.dataset.sourceCreationStage;delete root.dataset.sourceCreationDrawCalls;delete root.dataset.sourceCreationAssembly;delete root.dataset.sourceCreationConditionalReady;delete root.dataset.sourceCreationAppearanceComplete;delete root.dataset.sourceCreationMissingOverride;delete root.dataset.sourceCreationSharedGeometry;delete root.dataset.sourceCreationError;delete root.dataset.sourceCreationMotion;delete root.dataset.sourceCreationMotionError;requested=null;}
  return {
   async show({screen,race,gender,professionIndex,event='page-enter'}){
-   // Original same-index Class call returns without replacing the wrapper.
-   if(requested&&screen==='CharacterChooseClass'&&requested.screen===screen&&requested.race===race&&requested.gender===gender&&requested.professionIndex===professionIndex)return;
-   const ownerBefore=acceptedSelection?.race===race&&acceptedSelection?.gender===gender?{...acceptedSelection}:null;
+   const version=profileURL.endsWith('/manifest-stages-v6.json')?2:profileURL.endsWith('/manifest-stages-v5.json')?1:0;
+   const plan=creationMotionEventPlan({version,screen,event,target:{race,gender,professionIndex},ownerSelection:acceptedSelection,requested,history:motionHistory});
+   if(plan.noop)return;
+   const {ownerBefore,initialGlobals}=plan;
    hide();requested={screen,race,gender,professionIndex};if(closed||!['CharacterChooseRace','CharacterChooseClass','CharacterChoosePart'].includes(screen))return;
    const token=serial;root.dataset.sourceCreationPreview='loading';
    try{
@@ -289,32 +293,25 @@ export function createSourceCreationStages(root,{profileURL,motionHistory=null,i
     // must not leave a previous race on screen or remove the proven background.
     root.prepend(canvas);canvas.hidden=false;active=true;lastTime=performance.now();raf=requestAnimationFrame(frame);
     root.dataset.sourceCreationAssembly=JSON.stringify(e.assembly);
-    const sourcePoseOwner=e.stages.sourceMotion&&identity.panel===1?()=>token===serial&&!closed:null;
-    const built=identity.panel===0?{actor:await loadActor(e,race,gender)}:await loadStageActor(e,identity,{sourcePoseOwner});
+    const sourcePoseOwner=e.stages.sourceMotion&&(identity.panel===1||e.stages.sourceMotion.version===2&&identity.panel===0)?()=>token===serial&&!closed:null;
+    const built=identity.panel===0?await loadActor(e,race,gender,{sourcePoseOwner}):await loadStageActor(e,identity,{sourcePoseOwner});
     const next=built?.actor;
     if(token!==serial||closed){next?.dispose();return;}
     if(!next){root.dataset.sourceCreationPreview='scene-only';return;}actor=next;if(identity.panel!==0)applyCreationStageTransform(actor.root,e.profile);e.scene.add(actor.root);
     if(identity.panel===0&&acceptedSelection){acceptedSelection={...acceptedSelection,race,gender};}
-    if(identity.panel===1){
-     acceptedSelection={race,gender,professionIndex};
-     if(e.stages.sourceMotion){
+    if(identity.panel===1)acceptedSelection={race,gender,professionIndex};
+    if(plan.kind&&e.stages.sourceMotion){
       try{
        if(!motionHistory)throw Error('Explicit session animation history required');
-       const initialGlobals=motionHistory.read();
-       // The new finite carrier cannot certify the retired controller's history.
-       // Only its current actual source selection frame can make it known again.
-       motionHistory.unresolvedClassCarrier();
        if(!e.motionLibrary){const {createCreationMotionLibrary}=await import('./creation_motion.mjs');e.motionLibrary=createCreationMotionLibrary({json,crypto:globalThis.crypto,bytes:async url=>{
         const r=await fetch(url);if(!r.ok)throw Error('Original Class motion input unavailable');return new Uint8Array(await r.arrayBuffer());
-       }});}
+       },version:e.stages.sourceMotion.version});}
        // Class.Init's synchronous show request is superseded by EnterPanel1's
        // new generic wrapper. Only a later actual Class binding retains show.
-       const kind=event==='class-selection'&&ownerBefore&&ownerBefore.professionIndex!==professionIndex?'show':'initial';
-       const prepared=await e.motionLibrary.prepare({identity,data:built.data,kind,ownerBefore,initialGlobals,current:sourcePoseOwner});
+       const prepared=await e.motionLibrary.prepare({identity,data:built.data,kind:plan.kind,ownerBefore,initialGlobals,current:sourcePoseOwner});
        if(!sourcePoseOwner()){prepared?.dispose();return;}
        if(prepared){try{actor.claimSourcePoseWriter();motion=prepared;resumeClock=true;root.dataset.sourceCreationMotion=JSON.stringify({kind:motion.kind,key:motion.key,pending:true});}catch(error){prepared.dispose();motion=null;throw error;}}
       }catch(error){if(sourcePoseOwner())root.dataset.sourceCreationMotionError=error.message;}
-     }
     }
     if(token!==serial||closed)return;
     lastTime=performance.now();

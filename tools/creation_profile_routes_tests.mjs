@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import {selectCreationProfile} from '../deploy/prepare_delivery.mjs';
 import {creationPreviewPlan} from '../deploy/creation_plan.mjs';
 import {prepareQuestDelivery} from '../deploy/quest_delivery.mjs';
-import {CREATION_STAGES_PROFILE_V4} from '../deploy/creation_stages_profile.mjs';
+import {CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V6} from '../deploy/creation_stages_profile.mjs';
+import {CREATION_ENTRY_PROFILES,isCreationEntryProfile} from '../deploy/creation_routes.mjs';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,copyFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -13,6 +14,11 @@ const legacy=['manifest.json','manifest-v2.json','manifest-v3.json','manifest-ra
 const next='/assets/source-creation-stage/manifest-conditional-v1.json';
 const needed=['/character_creation_race_preview_v2.mjs','/creation_elf_source_ready.mjs',
  '/assets/source-creation-elf-conditional-v1/manifest.json','/assets/source-creation-elf-conditional-v1/assets/character.json'];
+test('both server entry overlays share explicit legacy and current source profile routes',()=>{
+ assert.equal(CREATION_ENTRY_PROFILES.length,11);
+ for(const url of [...legacy,next,CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V6])assert.equal(isCreationEntryProfile(url),true);
+ for(const url of [null,'https://external.invalid/profile','/assets/source-creation-stage/manifest-stages-v7.json'])assert.equal(isCreationEntryProfile(url),false);
+});
 test('existing bundles keep their old creation profile; incomplete conditional bundles are refused',()=>{
  for(let mask=0;mask<16;mask++){
   const files=Object.fromEntries(legacy.filter((_,i)=>mask&(1<<i)).map(k=>[k,{}]));
@@ -55,6 +61,9 @@ test('actual task delivery opts into the same verified preview and never rewrite
   const staged=readFileSync(batch['/__delivery/quest_world.mjs'].path,'utf8');
   assert(staged.includes('entry=createSourceEntry({connect,previewURL:'+JSON.stringify(CREATION_STAGES_PROFILE_V4)+'});'));
   assert.equal(staged.replace(',previewURL:'+JSON.stringify(CREATION_STAGES_PROFILE_V4),''),originals['quest_world.mjs'].toString());
+  const newest=fixture();newest[CREATION_STAGES_PROFILE_V6]={};
+  await prepareQuestDelivery(root,destination,newest,{creationProfile:CREATION_STAGES_PROFILE_V6});
+  assert(readFileSync(newest['/__delivery/quest_world.mjs'].path,'utf8').includes('previewURL:'+JSON.stringify(CREATION_STAGES_PROFILE_V6)));
   await assert.rejects(prepareQuestDelivery(root,destination,fixture(),{creationProfile:'https://external.invalid/profile'}),/unavailable/);
   const absent=fixture();delete absent[next];await assert.rejects(prepareQuestDelivery(root,destination,absent,{creationProfile:next}),/unavailable/);
   for(const[n,bytes]of Object.entries(originals))assert.deepEqual(readFileSync(join(root,'deploy',n)),bytes);

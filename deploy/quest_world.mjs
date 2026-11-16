@@ -28,6 +28,8 @@ const focus=new THREE.Vector3(),avatars=new Map(),actors=new Map(),objects=new M
 const raycaster=new THREE.Raycaster(),pointerNDC=new THREE.Vector2();let pointer=null,destination=null,interactionBusy=false;
 let joystick,joystickInput={active:false,x:0,y:0},jumpControl,mobileHUD,healthProgress,retryTimer=null;
 let gatherUI=null,gatherPresenter=null,gatherRoomKey=null,playerDataText=null,actorEpoch=0,collectionAttempt=null,interactionEpoch=0;
+let sourcePlayers=null,sourceWorldContext=0,sourceWorldFailed=false;
+const sourceWorldOwner={};
 const room=new URLSearchParams(location.search).get('room')?.slice(0,16)||'QUEST-01';
 const note=message=>{if($('load-note')){$('load-note').textContent=String(message||'');$('load-note').hidden=!message;}};
 const send=data=>{if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(data));};
@@ -142,8 +144,10 @@ function updateHUD(p){
 }
 function syncPlayers(at){
   const ids=new Set(players.map(p=>p.id));
-  for(const [id,a]of avatars)if(!ids.has(id)){gatherPresenter?.remove(id);disposeCharacterAnimation(a.body);a.root.removeFromParent();avatars.delete(id);}
+  for(const [id,a]of avatars)if(!a.source&&!ids.has(id)){gatherPresenter?.remove(id);disposeCharacterAnimation(a.body);a.root.removeFromParent();avatars.delete(id);}
+  if(sourcePlayers){const connection=generation;void sourcePlayers.sync(players.filter(p=>p.sourceAvatar),at,{current:()=>connected&&connection===generation&&npcPageLive});}
   for(const p of players){
+    if(p.sourceAvatar)continue;
     const point=localPosition(p);if(!point)continue;
     let a=avatars.get(p.id);
     if(!a){const root=new THREE.Group(),body=playerFactory();root.add(body);root.position.copy(point);scene.add(root);
@@ -159,6 +163,7 @@ function syncPlayers(at){
 }
 function clearConnection(){invalidateCollection();gatherPresenter?.invalidate();gatherRoomKey=null;interactionEpoch++;interactionBusy=false;npcProjection?.invalidate();npcMarkerSession=null;npcMarkerAttempt=-1;npcMarkerPending=null;connected=false;selfId=null;players=[];questState=null;skills?.disconnect();stop();questUI?.invalidate();
   questTracking?.clear();
+  sourcePlayers?.clear();
   for(const a of avatars.values()){disposeCharacterAnimation(a.body);a.root.removeFromParent();}avatars.clear();
   for(const view of objects.values())view.instance.root.visible=false;
   $('field-hud').hidden=true;$('field-actions').hidden=true;$('touch-controls').hidden=true;$('field-quests').disabled=true;
@@ -171,7 +176,7 @@ function connect(name,credentials,profession){
   ws.addEventListener('message',async event=>{
     if(token!==generation)return;let msg;try{msg=JSON.parse(event.data);}catch{return;}
     if(msg.type==='welcome'){
-      if(msg.character?.sourceAvatar||msg.character?.appearance&&(msg.character.appearance.race!==2||msg.character.appearance.gender!==1)){
+      if(msg.character?.sourceAvatar?sourceWorldFailed||!sourcePlayers?.accepts(msg.character):msg.character?.appearance&&(msg.character.appearance.race!==2||msg.character.appearance.gender!==1)){
         denied=true;ws.close();entry.error('这个角色的原模型尚未接入当前地图，请选择已支持的角色。');openEntry();return;
       }
       selfId=msg.id;world=msg.world;character=msg.character;identity={characterId:msg.character.id,resumeToken:msg.resumeToken};gatherRoomKey='resources:ordinary-map:'+msg.room;connected=true;if(npcProjection){npcMarkerSession=npcProjection.beginSession();npcMarkerAttempt=-1;}entry.hide();skills?.sync();
@@ -189,7 +194,32 @@ function connect(name,credentials,profession){
     else if(msg.type==='notice')note(msg.message);
   });
   ws.addEventListener('close',()=>{if(token!==generation)return;clearConnection();
-    if(!denied){note('连接中断，正在重连…');retryTimer=setTimeout(()=>connect(name,credentials,profession),1500);}else openEntry();});
+    if(!denied&&!(sourceWorldFailed&&character?.sourceAvatar)){note('连接中断，正在重连…');retryTimer=setTimeout(()=>connect(name,credentials,profession),1500);}else openEntry();});
+}
+async function loadSourcePlayers(){
+  if(document.documentElement.dataset.sourceHumanFemaleWorld!=='1')return;
+  const readScope=()=>({owner:sourceWorldOwner,active:npcPageLive,mapGeneration:npcPageEpoch,contextGeneration:sourceWorldContext,scene,renderer,sourceMap});
+  const loadBytes=async url=>{const r=await fetch(url);if(!r.ok)throw Error('角色资源未就绪');return new Uint8Array(await r.arrayBuffer());};
+  const registryBytes=await loadBytes('/assets/player-human-female-actions-v1/dbcf8a00bc3c67b03c2449ae0ca549e7bee95c9838fa6fb75367ee14230ff615.json');
+  const digest=[...new Uint8Array(await crypto.subtle.digest('SHA-256',registryBytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
+  if(digest!=='dbcf8a00bc3c67b03c2449ae0ca549e7bee95c9838fa6fb75367ee14230ff615')throw Error('角色资料未就绪');
+  const [{createQuestSourcePlayers},{createPlayerChoiceRegistry}]=await Promise.all([import('/__delivery/quest_source_players.mjs'),import('/__delivery/player_choice_registry.mjs')]);
+  const made=await createQuestSourcePlayers({THREE,renderer,scene,camera,sourceMap,origin,readScope,loadBytes,
+    registry:createPlayerChoiceRegistry(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(registryBytes))),
+    decodeTexture:async({bytes})=>{const url=URL.createObjectURL(new Blob([bytes],{type:'image/png'}));try{return await textureLoader.loadAsync(url);}finally{URL.revokeObjectURL(url);}},
+    createCharacterFactory,characterAnimationState,disposeCharacterAnimation,
+    install(view,p,at){const point=localPosition(p);if(!point||avatars.has(p.id))throw Error('Current source actor position required');
+      const root=new THREE.Group();root.add(view.body);root.position.copy(point);scene.add(root);
+      const a={root,body:view.body,source:true,view,epoch:++actorEpoch,profession:p.profession,target:point.clone(),previous:null,lastAt:at,latest:p};avatars.set(p.id,a);return a;},
+    update(a,p,at){const point=localPosition(p);if(!point)throw Error('Current source actor position required');
+      a.view.apply(p);a.target.copy(point);
+      // Existing web movement-facing adaptation, independent of native pose time.
+      if(a.previous){const dx=point.x-a.previous.x,dz=point.z-a.previous.z;if(Math.hypot(dx,dz)>.0001)a.body.rotation.y=Math.atan2(dx,dz);}
+      a.previous={x:point.x,z:point.z};a.lastAt=at;a.latest=p;},
+    remove(a){gatherPresenter?.remove(a.latest.id);a.root.removeFromParent();if(avatars.get(a.latest.id)===a)avatars.delete(a.latest.id);},
+    onError(error){sourceWorldFailed=true;console.error('Source character world unavailable:',error);if(character?.sourceAvatar){socket?.close();entry.error('角色画面加载失败，请刷新后重试。');openEntry();}},
+  });
+  if(!npcPageLive){made.dispose();return;}sourcePlayers=made;
 }
 async function loadPlayer(entry){
   const response=await fetch(entry.url);if(!response.ok)throw Error('原玩家资源不完整');playerDataText=await response.text();
@@ -227,6 +257,7 @@ async function init(){
   const playerManifest=await json('/assets/source-temple-sampling/manifest.json');
   [sourceMap,actorAssets,playerFactory]=await Promise.all([createOrdinaryScene(THREE,{scene,renderer,json,texture,origin,manifest}),
     loadOrdinaryQuestActorAssets(THREE,{json,texture}),loadPlayer(playerManifest.player)]);
+  await loadSourcePlayers();
   const npcRows=actorAssets.profile.npc.sourceSpawns,objectRows=actorAssets.profile.object.sourcePhase0Phasing0Manual0Candidates;
   if(!Array.isArray(npcRows)||!Array.isArray(objectRows))throw Error('原人物与齿轮摆放资料未就绪');
   for(const actor of profile.actors){const row=npcRows.find(r=>'npc:'+r.id===actor.id);if(!row)throw Error('原人物摆放缺失');
@@ -244,7 +275,7 @@ async function init(){
     const page=npcPageEpoch,[uiModule,poseModule]=await Promise.all([import('/__delivery/quest_channel_ui.mjs'),import('/__delivery/quest_gather_presenter.mjs')]);
     const made=await Promise.allSettled([uiModule.createQuestChannelUI(),poseModule.createQuestGatherPresenter({legacyDataText:playerDataText,characterAnimationState,
       readHost:()=>({connected,connection:socket,epoch:generation,characterId:identity?.characterId,roomKey:gatherRoomKey}),
-      readActor:actorKey=>{const a=avatars.get(actorKey);return a?{actorKey,body:a.body,epoch:a.epoch,profession:a.profession,displayed:a.root.parent===scene&&a.root.visible}:null;},
+      readActor:actorKey=>{const a=avatars.get(actorKey);return a&&!a.source?{actorKey,body:a.body,epoch:a.epoch,profession:a.profession,displayed:a.root.parent===scene&&a.root.visible}:null;},
       queryReplay:()=>api('presentation'),onFault:error=>console.error('Gather presentation unavailable:',error)})]);
     if(made.some(r=>r.status==='rejected')||!npcPageLive||page!==npcPageEpoch){for(const r of made)if(r.status==='fulfilled')r.value.dispose();if(!npcPageLive||page!==npcPageEpoch)return;throw made.find(r=>r.status==='rejected').reason;}
     [gatherUI,gatherPresenter]=made.map(r=>r.value);
@@ -263,13 +294,15 @@ function draw(now){
   const dt=Math.min(.1,(now-lastFrame)/1000);lastFrame=now;
   const w=viewport.clientWidth,h=viewport.clientHeight,pixel=renderer.getPixelRatio();
   if(canvas.width!==Math.round(w*pixel)||canvas.height!==Math.round(h*pixel)){renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
-  for(const a of avatars.values()){a.root.position.lerp(a.target,1-Math.exp(-dt*16));updateCharacterAnimation(a.body,dt,a.motion,Date.now()+serverOffset);
+  for(const a of avatars.values()){a.root.position.lerp(a.target,1-Math.exp(-dt*16));if(a.source)continue;updateCharacterAnimation(a.body,dt,a.motion,Date.now()+serverOffset);
     const pose=characterAnimationState(a.body);a.body.position.y=pose?.jumpWorldMotion?0:pose?.jumpHeight||0;}
   gatherPresenter?.afterBaseUpdate();
   for(const view of actors.values())view.instance.update(dt);
   const self=avatars.get(selfId);if(self)focus.lerp(self.root.position.clone().add(new THREE.Vector3(0,1,0)),1-Math.exp(-dt*10));
   camera.position.copy(focus).add(new THREE.Vector3(Math.sin(cameraYaw)*Math.cos(cameraPitch)*cameraDistance,Math.sin(cameraPitch)*cameraDistance,Math.cos(cameraYaw)*Math.cos(cameraPitch)*cameraDistance));camera.lookAt(focus);
-  sourceMap?.update();npcProjection?.update();renderer.render(scene,camera);requestAnimationFrame(draw);
+  sourceMap?.update();npcProjection?.update();
+  const renderToken={};const sourcePrepared=sourcePlayers?.beforeRender(renderToken);
+  renderer.render(scene,camera);if(sourcePrepared)sourcePlayers.afterRender(renderToken);requestAnimationFrame(draw);
 }
 function pick(event){
   if(blocked())return;const r=canvas.getBoundingClientRect();pointerNDC.set((event.clientX-r.left)/r.width*2-1,1-(event.clientY-r.top)/r.height*2);raycaster.setFromCamera(pointerNDC,camera);
@@ -307,5 +340,6 @@ setInterval(()=>{
   const n=Math.hypot(x,y);if(n>1){x/=n;y/=n;}send({type:'input',x,y});
 },50);
 setInterval(()=>{if(connected&&!document.hidden)api('state').catch(()=>{});},1000);
-window.addEventListener('pagehide',()=>{npcPageLive=false;npcPageEpoch++;invalidateCollection();gatherPresenter?.dispose();gatherUI?.dispose();npcProjection?.dispose();npcProjection=null;npcMarkerSession=null;npcMarkerPending=null;generation++;clearTimeout(retryTimer);stop();skills?.dispose();socket?.close();questUI?.dispose();questTracking?.dispose();actorAssets?.dispose();sourceMap?.dispose();renderer?.dispose();});
+canvas.addEventListener('webglcontextlost',()=>{sourceWorldContext++;sourcePlayers?.dispose();sourcePlayers=null;sourceWorldFailed=true;stop();if(character?.sourceAvatar)socket?.close();});
+window.addEventListener('pagehide',()=>{npcPageLive=false;npcPageEpoch++;sourcePlayers?.dispose();sourcePlayers=null;invalidateCollection();gatherPresenter?.dispose();gatherUI?.dispose();npcProjection?.dispose();npcProjection=null;npcMarkerSession=null;npcMarkerPending=null;generation++;clearTimeout(retryTimer);stop();skills?.dispose();socket?.close();questUI?.dispose();questTracking?.dispose();actorAssets?.dispose();sourceMap?.dispose();renderer?.dispose();});
 init().catch(error=>{console.error(error);note(error.message);entry?.error(error.message);openEntry();});

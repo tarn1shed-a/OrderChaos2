@@ -216,7 +216,14 @@ export function createSourceCreationStages(root,{profileURL}){
  async function loadStageActor(e,identity){
   const route=e.stages.candidates[`${identity.panel}:${identity.race}:${identity.gender}:${identity.professionIndex}`];
   if(!route)return null; // A missing source candidate never reuses a race costume.
-  const actorAPI=e.stages.actorVersion===3?await import('./creation_class_stage/actor_v3.mjs'):{checkedStageModel,buildCreationStageActor};
+  const shared=route.provider==='shared-source-geometry-v1';
+  if(shared&&!e.sharedStageFactory)e.sharedStageFactory=(async()=>{
+   const {createSharedStageFactory}=await import('./creation_geometry.mjs');
+   return createSharedStageFactory({profile:e.stages.sharedGeometry,crypto:globalThis.crypto,loadBytes:async url=>{
+    const r=await fetch(url);if(!r.ok)throw Error('Original shared stage input unavailable');return new Uint8Array(await r.arrayBuffer());
+   }});
+  })().catch(error=>{e.sharedStageFactory=null;throw error;});
+  const actorAPI=shared?await e.sharedStageFactory:e.stages.actorVersion===3?await import('./creation_class_stage/actor_v3.mjs'):{checkedStageModel,buildCreationStageActor};
   const url=path=>stageResourceURL(route.baseURL,path),manifest=await json(url('manifest.json'));
   checkedStageCandidate(manifest,identity);
   const data=await json(url(manifest.model));actorAPI.checkedStageModel(manifest,data,identity);
@@ -226,7 +233,7 @@ export function createSourceCreationStages(root,{profileURL}){
   await Promise.all([...requests.map(async([path,src])=>textures.set(path,await e.texture(src))),
    ...models.map(async([path,src])=>attachmentData.set(path,await json(src)))]);
   const programs=await loadSourceCharacterPrograms();
-  return actorAPI.buildCreationStageActor({THREE:e.THREE,manifest,data,identity,textures,attachmentData,
+  return (shared?actorAPI.build:actorAPI.buildCreationStageActor)({THREE:e.THREE,renderer:e.renderer,manifest,data,identity,textures,attachmentData,
    createMaterial:(THREE,row,maps,colors,object)=>createSourceCreationMaterial(THREE,row,maps,programs,object,
     {...colors,eye:e.profile.transform.freshModelEyeColor},e.fresh.sourceCharacterLight,e.lighting,e.profile.sourceControllerLight.direction)});
  }
@@ -237,7 +244,7 @@ export function createSourceCreationStages(root,{profileURL}){
   root.dataset.sourceCreationDrawCalls=String(engine.renderer.info.render.calls);
   raf=requestAnimationFrame(frame);
  }
- function hide(){serial++;active=false;canvas.hidden=true;cancelAnimationFrame(raf);dropActor();root.dataset.sourceCreationPreview='hidden';delete root.dataset.sourceCreationDisplay;delete root.dataset.sourceCreationStage;delete root.dataset.sourceCreationDrawCalls;delete root.dataset.sourceCreationAssembly;delete root.dataset.sourceCreationConditionalReady;delete root.dataset.sourceCreationAppearanceComplete;delete root.dataset.sourceCreationMissingOverride;}
+ function hide(){serial++;active=false;canvas.hidden=true;cancelAnimationFrame(raf);dropActor();root.dataset.sourceCreationPreview='hidden';delete root.dataset.sourceCreationDisplay;delete root.dataset.sourceCreationStage;delete root.dataset.sourceCreationDrawCalls;delete root.dataset.sourceCreationAssembly;delete root.dataset.sourceCreationConditionalReady;delete root.dataset.sourceCreationAppearanceComplete;delete root.dataset.sourceCreationMissingOverride;delete root.dataset.sourceCreationSharedGeometry;delete root.dataset.sourceCreationError;}
  return {
   async show({screen,race,gender,professionIndex}){
    hide();if(closed||!['CharacterChooseRace','CharacterChooseClass','CharacterChoosePart'].includes(screen))return;
@@ -255,11 +262,12 @@ export function createSourceCreationStages(root,{profileURL}){
     if(token!==serial||closed){next?.dispose();return;}
     if(!next){root.dataset.sourceCreationPreview='scene-only';return;}actor=next;if(identity.panel!==0)applyCreationStageTransform(actor.root,e.profile);e.scene.add(actor.root);
     root.dataset.sourceCreationPreview='ready';root.dataset.sourceCreationDisplay=String(identity.request.displayId);root.dataset.sourceCreationStage=String(identity.panel);
+    if(next.sharedSource){root.dataset.sourceCreationSharedGeometry=JSON.stringify(next.sharedSource);root.dataset.sourceCreationAppearanceComplete=String(!next.sharedSource.bodyOnly);}
     if(next.conditionalReady){root.dataset.sourceCreationConditionalReady=JSON.stringify(next.conditionalReady);root.dataset.sourceCreationAppearanceComplete='false';root.dataset.sourceCreationMissingOverride=next.conditionalReady.omittedOverride;}
     root.dataset.sourceCreationAssembly=JSON.stringify(e.assembly);
    }catch(error){if(token===serial&&!closed){if(!active)canvas.hidden=true;root.dataset.sourceCreationPreview=active?'scene-only':'unavailable';root.dataset.sourceCreationError=error.message;}}
   },
   hide,
-  dispose(){hide();closed=true;canvas.remove();if(engine){for(const p of engine.parts)p.dispose();engine.renderer.dispose();}for(const t of loaderCache.values())t.then(v=>v.dispose()).catch(()=>{});loaderCache.clear();},
+  dispose(){hide();closed=true;canvas.remove();if(engine){engine.sharedStageFactory?.then(f=>f.dispose()).catch(()=>{});for(const p of engine.parts)p.dispose();engine.renderer.dispose();}for(const t of loaderCache.values())t.then(v=>v.dispose()).catch(()=>{});loaderCache.clear();},
  };
 }

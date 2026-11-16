@@ -3,7 +3,7 @@ import {checkedCreationMotionDelivery} from './creation_motion_delivery.mjs';
 import {readFile}from'node:fs/promises';
 import {resolve}from'node:path';
 import {createHash,webcrypto}from'node:crypto';
-import {CREATION_STAGES_PROFILES,CREATION_STAGES_PROFILE_V2,CREATION_STAGES_PROFILE_V3,CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5,validateCreationStagesDelivery,stageCandidateChoice}from'./creation_stages_profile.mjs';
+import {CREATION_STAGES_PROFILES,CREATION_STAGES_PROFILE_V2,CREATION_STAGES_PROFILE_V3,CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5,CREATION_STAGES_PROFILE_V6,validateCreationStagesDelivery,stageCandidateChoice}from'./creation_stages_profile.mjs';
 import {checkedStageContract,selectStageIdentity,checkedStageCandidate,stageResourceURL}from'../tools/creation_class_stage/stage_switch.mjs';
 const digest=b=>createHash('sha256').update(b).digest('hex');
 export async function prepareCreationStagesDelivery(root,files){
@@ -59,18 +59,20 @@ export async function prepareCreationStagesDelivery(root,files){
  }finally{shared?.dispose();}
  }
  const modules=[['creation_stages.mjs','deploy/creation_stages.mjs'],['creation_stages_profile.mjs','deploy/creation_stages_profile.mjs'],
+  ['creation_motion.mjs','deploy/creation_motion.mjs'],
   ['creation_class_stage/stage_switch.mjs','tools/creation_class_stage/stage_switch.mjs'],
   ['creation_class_stage/actor_v2.mjs','tools/creation_class_stage/actor_v2.mjs'],
   ['creation_class_stage/material_v2.mjs','tools/creation_class_stage/material_v2.mjs']];
- if([CREATION_STAGES_PROFILE_V2,CREATION_STAGES_PROFILE_V3,CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5].some(p=>profiles.includes(p)))modules.push(['creation_class_stage/actor_v3.mjs','tools/creation_class_stage/actor_v3.mjs']);
- if([CREATION_STAGES_PROFILE_V3,CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5].some(p=>profiles.includes(p))){
+ if([CREATION_STAGES_PROFILE_V2,CREATION_STAGES_PROFILE_V3,CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5,CREATION_STAGES_PROFILE_V6].some(p=>profiles.includes(p)))modules.push(['creation_class_stage/actor_v3.mjs','tools/creation_class_stage/actor_v3.mjs']);
+ if([CREATION_STAGES_PROFILE_V3,CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5,CREATION_STAGES_PROFILE_V6].some(p=>profiles.includes(p))){
   modules.push(['creation_geometry.mjs','deploy/creation_geometry.mjs'],['creation_class_stage/actor_v6.mjs','tools/creation_class_stage/actor_v6.mjs']);
   for(const name of ['geometry_core','contracts','stage_guard','stage_adapters_v1','stage_adapter_core_v1','source_capabilities_v1'])modules.push(['creation_batch/'+name+'.mjs','tools/creation_batch/'+name+'.mjs']);
  }
- if([CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5].some(p=>profiles.includes(p)))for(const name of ['stage_batch_guard','stage_adapters_all_v1','stage_adapters_v5','typed_armor_root'])modules.push(['creation_batch/'+name+'.mjs','tools/creation_batch/'+name+'.mjs']);
- if([CREATION_STAGES_PROFILE_V3,CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5].some(p=>profiles.includes(p)))
+ if([CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5,CREATION_STAGES_PROFILE_V6].some(p=>profiles.includes(p)))for(const name of ['stage_batch_guard','stage_adapters_all_v1','stage_adapters_v5','typed_armor_root'])modules.push(['creation_batch/'+name+'.mjs','tools/creation_batch/'+name+'.mjs']);
+ if([CREATION_STAGES_PROFILE_V3,CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5,CREATION_STAGES_PROFILE_V6].some(p=>profiles.includes(p)))
   modules.push(['creation_control/source_pose_applier_v1.mjs','tools/creation_control/source_pose_applier_v1.mjs'],['creation_control/source_pose_writer_v1.mjs','tools/creation_control/source_pose_writer_v1.mjs']);
- if(profiles.includes(CREATION_STAGES_PROFILE_V5))modules.push(['creation_motion.mjs','deploy/creation_motion.mjs'],['creation_control/legacy_actor_pose_v1.mjs','tools/creation_control/legacy_actor_pose_v1.mjs']);
+ if([CREATION_STAGES_PROFILE_V5,CREATION_STAGES_PROFILE_V6].some(p=>profiles.includes(p)))modules.push(['creation_control/legacy_actor_pose_v1.mjs','tools/creation_control/legacy_actor_pose_v1.mjs']);
+ if(profiles.includes(CREATION_STAGES_PROFILE_V6))modules.push(['creation_control/race_actor_pose_v1.mjs','deploy/creation_control/race_actor_pose_v1.mjs']);
  for(const [name,relative]of modules){const path=resolve(root,relative),raw=await readFile(path);files['/__delivery/'+name]={path,bytes:raw.length,sha256:digest(raw),type:'text/javascript; charset=utf-8'};}
  return true;
 }

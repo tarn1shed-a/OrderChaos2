@@ -4,7 +4,8 @@ export const CREATION_STAGES_PROFILE_V2='/assets/source-creation-stage/manifest-
 export const CREATION_STAGES_PROFILE_V3='/assets/source-creation-stage/manifest-stages-v3.json';
 export const CREATION_STAGES_PROFILE_V4='/assets/source-creation-stage/manifest-stages-v4.json';
 export const CREATION_STAGES_PROFILE_V5='/assets/source-creation-stage/manifest-stages-v5.json';
-export const CREATION_STAGES_PROFILES=[CREATION_STAGES_PROFILE_V5,CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V3,CREATION_STAGES_PROFILE_V2,CREATION_STAGES_PROFILE];
+export const CREATION_STAGES_PROFILE_V6='/assets/source-creation-stage/manifest-stages-v6.json';
+export const CREATION_STAGES_PROFILES=[CREATION_STAGES_PROFILE_V6,CREATION_STAGES_PROFILE_V5,CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V3,CREATION_STAGES_PROFILE_V2,CREATION_STAGES_PROFILE];
 export const SHARED_STAGE_POLICY='/assets/source-creation-shared-v1/policy.json';
 export const SHARED_STAGE_REGISTRY='/assets/source-creation-shared-v1/capabilities.json';
 export const SHARED_POLICY_SHA='bca0b324a56c3e7c577b6b0b63761f4b4ec6efb66e50c1dd4ca1a626aeefdac4';
@@ -39,7 +40,7 @@ export function validateCreationStagesDelivery(p,{profileURL=null}={}){
   throw Error('Original stage factory version differs');
  const shared=p.sharedGeometry,batch=shared?.version===2;
  if(batch){
-  if(profileURL!==null&&![CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5].includes(profileURL)||p.actorVersion!==3||
+  if(profileURL!==null&&![CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5,CREATION_STAGES_PROFILE_V6].includes(profileURL)||p.actorVersion!==3||
    shared.registryURL!==SHARED_STAGE_REGISTRY||shared.registrySHA256!==SHARED_REGISTRY_SHA||
    shared.fullClassQueueRestored!==false||shared.initialSourceIdleOnly!==true||
    Object.keys(shared.bodies||{}).sort().join(',')!==Object.keys(SHARED_BODY_POLICIES).sort().join(',')||
@@ -52,13 +53,18 @@ export function validateCreationStagesDelivery(p,{profileURL=null}={}){
    shared.policySHA256!==SHARED_POLICY_SHA||shared.registrySHA256!==SHARED_REGISTRY_SHA||
    shared.fullClassQueueRestored!==false||shared.initialSourceIdleOnly!==true)
     throw Error('Original shared geometry policy differs');
- }else if([CREATION_STAGES_PROFILE_V3,CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5].includes(profileURL))throw Error('Original shared geometry policy absent');
- if([CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5].includes(profileURL)&&!batch)throw Error('Original source body batch policy absent');
+ }else if([CREATION_STAGES_PROFILE_V3,CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5,CREATION_STAGES_PROFILE_V6].includes(profileURL))throw Error('Original shared geometry policy absent');
+ if([CREATION_STAGES_PROFILE_V4,CREATION_STAGES_PROFILE_V5,CREATION_STAGES_PROFILE_V6].includes(profileURL)&&!batch)throw Error('Original source body batch policy absent');
  if(profileURL===CREATION_STAGES_PROFILE_V5){
   const m=p.sourceMotion;
   if(!m||Object.keys(m).sort().join(',')!=='classManifestURL,initialManifestURL,version'||m.version!==1||
    m.classManifestURL!=='/assets/source-creation-control-v1/manifest-class-v1.json'||
    m.initialManifestURL!=='/assets/source-creation-initial-idle-v1/manifest.json')throw Error('Own source motion delivery differs');
+ }else if(profileURL===CREATION_STAGES_PROFILE_V6){
+  const m=p.sourceMotion;
+  if(!m||Object.keys(m).sort().join(',')!=='classManifestURL,initialManifestURL,partialManifestURL,raceManifestURL,version'||m.version!==2||
+   m.classManifestURL!=='/assets/source-creation-control-v1/manifest-class-v1.json'||m.initialManifestURL!=='/assets/source-creation-initial-all-v1/manifest.json'||
+   m.raceManifestURL!=='/assets/source-creation-race-control-v1/manifest.json'||m.partialManifestURL!=='/assets/source-creation-partial-class-v1/manifest.json')throw Error('Own Race/Class motion delivery differs');
  }else if(p.sourceMotion!==undefined)throw Error('Finite-only delivery cannot enable new Class motion');
  for(const [key,row]of Object.entries(p.candidates)){
   const parts=key.split(':');

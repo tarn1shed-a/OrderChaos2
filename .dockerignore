@@ -26,6 +26,14 @@
 !tools/preview/tutorial_terrain_grouping_policy.js
 !tools/preview/quest_journal_program.mjs
 !tools/preview/quest_journal_widgets.mjs
+!tools/preview/ordinary-quest461-gather.mjs
+!tools/preview/ordinary-quest461-gather-browser.mjs
+!tools/preview/ordinary-quest461-gather-pose.mjs
+!tools/preview/ordinary-quest461-gather-events.mjs
+!tools/preview/source-property-math-v1.mjs
+!tools/preview/source-world-layer-compose-v1.mjs
+!tools/preview/source-world-track-queue-v1.mjs
+!tools/preview/source-gather-controller-v1.mjs
 !tools/local_mvp_runtime.json
 !tools/requirements-native.txt
 !tools/requirements-resources.txt

@@ -5,6 +5,9 @@ import {createHash} from 'node:crypto';
 import {CHARACTER_CHOICE_SKILL_DEPENDENCIES} from './character_choice_skills.mjs';
 import {prepareNPCMarkerDelivery} from './npc_marker_delivery.mjs';
 import {prepareJournalDelivery,stageQuestJournalWorld} from './quest_journal_delivery.mjs';
+import {COLLECTION_PROFILE,checkCollectionProfile} from './quest_collection.mjs';
+import {createSource461GatherProgress} from '../tools/preview/ordinary-quest461-gather.mjs';
+import {GATHER_BROWSER_SOURCE_SHA256,GATHER_BROWSER_BINDING_SHA256} from '../tools/preview/ordinary-quest461-gather-browser.mjs';
 
 export async function prepareQuestDelivery(root,destination,files,{creationProfile=null}={}){
   if(!files['/assets/ordinary-quests/profile.json'])return false;
@@ -19,6 +22,24 @@ export async function prepareQuestDelivery(root,destination,files,{creationProfi
   const skills=Boolean(files['/assets/character-source/panels.json']);
   const npcMarker=await prepareNPCMarkerDelivery(root,files,add);
   const journal=await prepareJournalDelivery(root,files,add);
+  const channel=Boolean(files[COLLECTION_PROFILE]);
+  if(channel){
+    const read=async url=>{if(!files[url])throw Error('Original collection delivery incomplete: '+url);return readFile(files[url].path,'utf8');};
+    checkCollectionProfile(JSON.parse(await read(COLLECTION_PROFILE)));
+    await createSource461GatherProgress(await read('/assets/source-quest461-channel-v1/program.json'),await read('/assets/source-quest461-channel-v1/profile.json'));
+    const art='/assets/source-quest461-channel-v1/manifest.json';
+    if(!files[art]||files[art].sha256!=='6f3f2ae104dc1eb5d659b30136a5137ef2d718a8e7833514490d3218e69e10b3')throw Error('Original channel art identity differs');
+    const manifest=JSON.parse(await read(art));
+    for(const row of [manifest.svg,...Object.values(manifest.assets)])if(!files[row.url]||files[row.url].sha256!==row.sha256)throw Error('Original channel artwork closure differs');
+    for(const [name,sha]of [['source.json',GATHER_BROWSER_SOURCE_SHA256],['binding.json',GATHER_BROWSER_BINDING_SHA256]])
+      if(files['/assets/source-quest461-gather-v1/'+name]?.sha256!==sha)throw Error('Original Gather source closure differs');
+    for(const name of ['quest_channel_ui','source_channel_view','channel_timeline','quest_gather_presenter'])
+      await add('/__delivery/'+name+'.mjs',resolve(root,'deploy',name+'.mjs'),'text/javascript; charset=utf-8');
+    await add('/__delivery/quest_channel_ui.css',resolve(root,'deploy/quest_channel_ui.css'),'text/css; charset=utf-8');
+    await add('/__delivery/quest461_gather_program.mjs',resolve(root,'tools/preview/ordinary-quest461-gather.mjs'),'text/javascript; charset=utf-8');
+    for(const name of ['ordinary-quest461-gather-browser','ordinary-quest461-gather-pose','ordinary-quest461-gather-events','source-property-math-v1','source-world-layer-compose-v1','source-world-track-queue-v1','source-gather-controller-v1'])
+      await add('/__delivery/quest_gather/'+name+'.mjs',resolve(root,'tools/preview/'+name+'.mjs'),'text/javascript; charset=utf-8');
+  }
   if(skills)for(const url of CHARACTER_CHOICE_SKILL_DEPENDENCIES)if(!files[url])throw Error('Original skill directory delivery is incomplete: '+url);
   for(const name of ['quest_world.mjs','quest_ui.mjs','quest_tracking.mjs','character_choice_skills.mjs']){
     let path=resolve(root,'deploy',name);
@@ -38,9 +59,10 @@ export async function prepareQuestDelivery(root,destination,files,{creationProfi
   files['/__delivery/mission_program.mjs']=files['/mission_program.mjs'];
   // Start from the same original entry page, without restoring the old camp UI.
   const path=resolve(destination,'quests.html');
-  const tracking=(files['/assets/source-quest-tracking/tracking.json']?' data-source-quest-tracking="1"':'')+(skills?' data-source-character-skills="1"':'')+(npcMarker?' data-source-npc-quest-marker="1"':'')+(journal?' data-source-quest-journal="1"':'');
+  const tracking=(files['/assets/source-quest-tracking/tracking.json']?' data-source-quest-tracking="1"':'')+(skills?' data-source-character-skills="1"':'')+(npcMarker?' data-source-npc-quest-marker="1"':'')+(journal?' data-source-quest-journal="1"':'')+(channel?' data-source-quest-channel="1"':'');
   const raw=Buffer.from((await readFile(files['/explore-map.html'].path,'utf8')).replace('<html ',`<html${tracking} `)
-    .replace(/<script type="module" src="[^"]*explore-map\.js[^"]*"><\/script>/,'<script type="module" src="/__delivery/quest_world.mjs"></script>'));
+    .replace(/<script type="module" src="[^"]*explore-map\.js[^"]*"><\/script>/,'<script type="module" src="/__delivery/quest_world.mjs"></script>')
+    .replace('</head>',(channel?'<link rel="stylesheet" href="/__delivery/quest_channel_ui.css">':'')+'</head>'));
   if(!raw.includes(Buffer.from('/__delivery/quest_world.mjs')))throw Error('Ordinary world entry script anchor differs');
   await writeFile(path,raw);await add('/quests.html',path,'text/html; charset=utf-8',raw);
   return true;

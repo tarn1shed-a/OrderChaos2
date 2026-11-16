@@ -38,3 +38,47 @@ test('HTTP routes enforce origin/size/auth and do not leak private credentials',
     assert.equal(calls[0].ctx.level,1);
   }finally{await new Promise(resolve=>server.close(resolve));}
 });
+test('optional channel routes use the active connection and block direct collection bypass',async()=>{
+  const f=fixture(),calls=[];
+  const ledger={profile:{mapId:1},snapshot:()=>({revision:0}),act:()=>{throw Error('direct ledger called');}};
+  const collection={questId:461,
+    begin:(ctx,owner,command)=>{calls.push({ctx,owner,command});return {id:'fixture-channel'};},
+    finish:(ctx,owner,id)=>{calls.push({ctx,owner,id});return {pending:true,retryAfterMs:5};},
+    cancel:(ctx,owner,id)=>{calls.push({ctx,owner,id});return {revision:0};}};
+  const server=http.createServer();installQuestTransport(server,{ledger,store:f.store,active:f.active,collection});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const url='http://127.0.0.1:'+server.address().port;
+  const post=command=>fetch(url+'/__quests/action',{method:'POST',headers:{'Content-Type':'application/json',Origin:url},
+    body:JSON.stringify({identity:{characterId:id,resumeToken:token},command,position:[0,0,0]})});
+  try{
+    const start=await post({type:'collect-start',questId:461,revision:0,objectId:'object:1'});
+    assert.equal(start.status,200);assert.equal((await start.json()).channel.id,'fixture-channel');
+    assert.equal(calls[0].owner,f.ws);assert.deepEqual(calls[0].ctx.position,[11,3,22]);
+    assert.equal((await post({type:'collect',questId:461,revision:0})).status,400);
+    const finish=await post({type:'collect-finish',channelId:'fixture-channel'});
+    assert.deepEqual(await finish.json(),{pending:true,retryAfterMs:5});
+    f.active.set(id,{...f.ws});await post({type:'collect-cancel',channelId:'fixture-channel'});
+    assert.notEqual(calls.at(-1).owner,f.ws);
+    f.active.clear();assert.equal((await post({type:'collect-finish',channelId:'fixture-channel'})).status,400);
+  }finally{await new Promise(resolve=>server.close(resolve));}
+});
+test('presentation replay is authenticated to the current authoritative room without accepting client room or actor fields',async()=>{
+  const f=fixture(),rooms=[];f.ws.roomId='resources:ordinary-map:ROOM-A';
+  const ledger={profile:{mapId:1},snapshot:()=>({revision:0})};
+  const collection={snapshotRoom:room=>{rooms.push(room);return {roomKey:room,tick:12,records:[]};}};
+  const server=http.createServer();installQuestTransport(server,{ledger,store:f.store,active:f.active,collection});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const url='http://127.0.0.1:'+server.address().port,identity={characterId:id,resumeToken:token};
+  const post=(body,origin=url)=>fetch(url+'/__quests/presentation',{method:'POST',headers:{'Content-Type':'application/json',Origin:origin},body:JSON.stringify(body)});
+  try{
+    assert.equal((await fetch(url+'/__quests/presentation')).status,405);
+    assert.equal((await post({identity},'https://elsewhere.test')).status,403);
+    assert.equal((await post({identity:{...identity,resumeToken:'00'.repeat(32)}})).status,400);
+    const reply=await post({identity,roomKey:'ROOM-B',actorKey:'someone-else',position:[0,0,0]});
+    assert.deepEqual(await reply.json(),{presentation:{roomKey:f.ws.roomId,tick:12,records:[]}});
+    assert.deepEqual(rooms,[f.ws.roomId]);
+    f.active.set(id,{...f.ws,roomId:'resources:ordinary-map:ROOM-C'});
+    await post({identity});assert.equal(rooms.at(-1),'resources:ordinary-map:ROOM-C');
+    f.active.clear();assert.equal((await post({identity})).status,400);assert.equal(rooms.length,2);
+  }finally{await new Promise(resolve=>server.close(resolve));}
+});

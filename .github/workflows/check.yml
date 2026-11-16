@@ -220,6 +220,10 @@ jobs:
           python -m py_compile tools/player_choice_matrix.py tools/player_choice_inventory.py tools/player_choice_world_source.py tools/character_human_male_probe.py tools/character_choice_skill_audit.py
       - name: Ordinary quest client and deployment syntax (original assets stay private)
         run: |
+          node --test tools/quest_collection_tests.mjs tools/quest_collection_reuse_tests.mjs tools/quest_transport_tests.mjs
+          python tools/quest_collection_art_tests.py
+          node --check deploy/quest_collection.mjs
+          node --check deploy/source_channel_view.mjs
           node --check deploy/quest_world.mjs
           node --check deploy/quest_ui.mjs
           node --check deploy/quest_tracking.mjs

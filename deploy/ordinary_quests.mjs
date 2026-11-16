@@ -140,6 +140,17 @@ export class OrdinaryQuestLedger{
       completedQuestIds:Object.entries(role.quests).flatMap(([id,s])=>s.phase==='completed'?[Number(id)]:[]),
       inventory:copy(role.items),rewards:copy(role.rewards)};
   }
+  validateCollect(context,command){
+    requireValue(object(command)&&command.type==='collect'&&positive(command.questId)&&uint(command.revision),'任务请求无效');
+    const quest=this.quest(command.questId),role=this.role(context.characterId),state=role.quests[key(quest.id)];
+    requireValue(command.revision===role.revision,'任务状态已更新，请重新打开');
+    this.eligible(context,quest,role);
+    requireValue(state?.phase==='accepted','请先接取任务或交回已收集物品');
+    requireValue(quest.collect.objectIds.includes(command.objectId),'此对象不属于当前目标');
+    this.proximity(context,this.objects.get(command.objectId));
+    requireValue(!state.collected.includes(command.objectId),'此处已经收集过');
+    return {quest,object:this.objects.get(command.objectId)};
+  }
   act(context,command){
     requireValue(object(command)&&positive(command.questId)&&uint(command.revision),'任务请求无效');
     requireValue(['accept','collect','complete','abandon'].includes(command.type),'任务操作尚未支持');
@@ -150,10 +161,7 @@ export class OrdinaryQuestLedger{
       this.proximity(context,this.actors.get(quest.startActor));requireValue(!state,'任务已经接取或完成');
       role.quests[id]={phase:'accepted',collected:[],acceptedAt:this.clock()};
     }else if(command.type==='collect'){
-      requireValue(state?.phase==='accepted','请先接取任务或交回已收集物品');
-      requireValue(quest.collect.objectIds.includes(command.objectId),'此对象不属于当前目标');
-      this.proximity(context,this.objects.get(command.objectId));
-      requireValue(!state.collected.includes(command.objectId),'此处已经收集过');
+      this.validateCollect(context,command);
       state.collected.push(command.objectId);role.items[key(quest.collect.itemId)]=(role.items[key(quest.collect.itemId)]||0)+1;
       if(state.collected.length===quest.collect.count)state.phase='ready';
     }else if(command.type==='complete'){

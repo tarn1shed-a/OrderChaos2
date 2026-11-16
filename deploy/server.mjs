@@ -19,6 +19,7 @@ import {stageOrdinaryQuestServer} from './quest_server_overlay.mjs';
 import {OrdinaryQuestLedger} from './ordinary_quests.mjs';
 import {createQuestMotion} from './quest_motion.mjs';
 import {installQuestTransport} from './quest_transport.mjs';
+import {createQuestCollection} from './quest_collection.mjs';
 
 const root=resolve(new URL('../',import.meta.url).pathname);
 const runtime=resolve(root,'analysis/raw/portable/running-preview');
@@ -39,6 +40,8 @@ const questProfileFile=resolve(runtime,'game-data/converted/ordinary-quests/prof
 const questConfigFile=resolve(runtime,'native-inputs/ordinary-quest/native-physics.json');
 if(existsSync(questProfileFile)!==existsSync(questConfigFile))throw Error('Incomplete ordinary-quest runtime');
 const ordinaryQuestLayer=existsSync(questProfileFile)?new OrdinaryQuestLedger(JSON.parse(readFileSync(questProfileFile,'utf8')),{saveFile:'/data/saves/ordinary-quests.json'}):null;
+const collectionFile=resolve(runtime,'game-data/converted/source-quest461-channel-v1/execution.json');
+const collection=existsSync(collectionFile)?createQuestCollection({ledger:ordinaryQuestLayer,profile:JSON.parse(readFileSync(collectionFile,'utf8'))}):null;
 let serverSource=stageInspectorServer(stageSourceAvatarServer(entryServer(readFileSync(new URL('server.mjs',base),'utf8'),new URL('./movement_trace.mjs',import.meta.url).href)));
 if(ordinaryQuestLayer)serverSource=stageOrdinaryQuestServer(serverSource);
 writeFileSync(observed,serverSource);
@@ -63,7 +66,7 @@ try {
   installEntryRead(game.server,'/data/saves/characters.json');
   installNameDraw(game.server,createNameDrawer(root));
   installEntryManagement(game.server,trialRoleManager(game.entryStore,game.entryActive,{entryPosition:()=>trialEntryPosition(motion)}));
-  if(ordinaryQuestLayer)installQuestTransport(game.server,{ledger:ordinaryQuestLayer,store:game.entryStore,active:game.entryActive});
+  if(ordinaryQuestLayer)installQuestTransport(game.server,{ledger:ordinaryQuestLayer,store:game.entryStore,active:game.entryActive,collection});
   installAdmin(game.server,{inspector,store:game.entryStore,active:game.entryActive,passwordHash:process.env.OC2_ADMIN_PASSWORD_HASH,secureCookies:process.env.OC2_ADMIN_LOCAL_HTTP!=='1'});
   await new Promise((ok,fail)=>{game.server.once('error',fail);game.server.listen(port,'0.0.0.0',()=>{game.server.off('error',fail);ok();});});
 } catch(error) { if(game)await game.close();else await motion.close();throw error; }

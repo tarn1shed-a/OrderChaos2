@@ -115,7 +115,14 @@ export function createSourceCreationStages(root,{profileURL}){
    const uniforms=Object.fromEntries(Object.entries(fresh.uniformInputs).map(([key,v])=>[key,{value:Array.isArray(v)?(v.length===2?new THREE.Vector2(...v):new THREE.Vector3(...v)):v}]));
    const lighting={sourceSelectionRegion:211,uniforms},origin=new THREE.Vector3(),loader=new THREE.TextureLoader();
    const texture=url=>{
-    if(!loaderCache.has(url))loaderCache.set(url,loader.loadAsync(url).then(t=>{t.colorSpace=THREE.NoColorSpace;t.flipY=false;t.needsUpdate=true;return t;}));
+    if(closed)return Promise.reject(Error('Preview disposed'));
+    if(!loaderCache.has(url)){
+     const pendingTexture=loader.loadAsync(url).then(t=>{
+      if(closed){t.dispose();throw Error('Preview disposed');}
+      t.colorSpace=THREE.NoColorSpace;t.flipY=false;t.needsUpdate=true;return t;
+     }).catch(error=>{if(loaderCache.get(url)===pendingTexture)loaderCache.delete(url);throw error;});
+     loaderCache.set(url,pendingTexture);
+    }
     return loaderCache.get(url);
    };
    const renderer=new THREE.WebGLRenderer({canvas,antialias:true});renderer.outputColorSpace=THREE.LinearSRGBColorSpace;
@@ -216,7 +223,7 @@ export function createSourceCreationStages(root,{profileURL}){
  async function loadStageActor(e,identity){
   const route=e.stages.candidates[`${identity.panel}:${identity.race}:${identity.gender}:${identity.professionIndex}`];
   if(!route)return null; // A missing source candidate never reuses a race costume.
-  const shared=route.provider==='shared-source-geometry-v1';
+  const shared=['shared-source-geometry-v1','shared-source-geometry-v2'].includes(route.provider);
   if(shared&&!e.sharedStageFactory)e.sharedStageFactory=(async()=>{
    const {createSharedStageFactory}=await import('./creation_geometry.mjs');
    return createSharedStageFactory({profile:e.stages.sharedGeometry,crypto:globalThis.crypto,loadBytes:async url=>{

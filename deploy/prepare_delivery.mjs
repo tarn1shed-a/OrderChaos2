@@ -17,7 +17,8 @@ import {stageFire10Entry,stageFire10Plan,FIRE10_MANIFEST} from '../tools/preview
 import {stageUnstuckEntry} from './unstuck_entry.mjs';
 import {stageInspectorEntry} from './map_inspector_ui.mjs';
 import {stageTutorialSkyEntry,stageTutorialSkyPlan,SKY_MANIFEST} from '../tools/preview/source-tutorial-sky-overlay.mjs';
-import {creationPreviewPlan} from './creation_plan.mjs';
+import {creationPreviewPlan,isCreationPreviewResource} from './creation_plan.mjs';
+import {planDocument} from './plan_documents.mjs';
 import {CREATION_STAGES_PROFILES}from'./creation_stages_profile.mjs';
 import {prepareCreationStagesDelivery}from'./creation_stages_delivery.mjs';
 import {prepareQuestDelivery} from './quest_delivery.mjs';
@@ -129,7 +130,12 @@ export async function prepare(root,{stage=false}={}){
     return [...found];
   }
   const texts=new Map();
-  for(const url of urls)if(['.json','.js','.mjs'].includes(extname(url)))texts.set(url,await readFile(files[url].path,'utf8'));
+  // These same resources are excluded from both preload queues below. Keep
+  // their verified files available on demand, without retaining every model's
+  // JSON text while the map plan also parses its terrain and scenery.
+  const onDemandCreation=stage&&Boolean(files['/assets/source-creation-stage/manifest.json']);
+  for(const url of urls)if(['.json','.js','.mjs'].includes(extname(url))&&!(onDemandCreation&&isCreationPreviewResource(url)))
+    texts.set(url,planDocument(files[url].path));
   const plans={};for(const entry of ['/explore-map.js','/explore.js'])if(files[entry])plans[entry]=closure(entry);
   if(stage)plans['/explore-map.js']=texts.has(INSIDE_MANIFEST)?await stageInsidePlan(stagePlan,texts,closure):await stagePlan(texts,closure);
   if(stage&&texts.has(CHARACTER_PANEL_MANIFEST))plans['/explore-map.js']=stageCharacterPanelsPlan(plans['/explore-map.js']);

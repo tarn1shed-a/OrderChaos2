@@ -20,6 +20,7 @@ import {OrdinaryQuestLedger} from './ordinary_quests.mjs';
 import {createQuestMotion} from './quest_motion.mjs';
 import {installQuestTransport} from './quest_transport.mjs';
 import {createQuestCollection} from './quest_collection.mjs';
+import {createQuestGatherServer} from './quest_gather_server.mjs';
 
 const root=resolve(new URL('../',import.meta.url).pathname);
 const runtime=resolve(root,'analysis/raw/portable/running-preview');
@@ -51,6 +52,8 @@ if(!motion?.sourceNative)throw Error('Original collision inputs are unavailable;
 const gameplay=loadGameplay();
 if(!gameplay)throw Error('Reviewed gameplay data unavailable');
 let game;
+const gather=collection?await createQuestGatherServer({runtime,collection,readGame:()=>game,
+ onFault:fault=>console.error('Compatible gather presentation:',JSON.stringify(fault))}):null;
 const inspector=createMapInspector({identityFile:'/data/map-inspector.json',entryPosition:()=>trialEntryPosition(motion)});
 const recovery=createRuntimeRecovery({close:()=>game.close(),exit:code=>process.exit(code)});
 // The second original scene's CPU worker is started only when a player enters
@@ -59,18 +62,18 @@ let questMotion;
 const loadQuestMotion=()=>questMotion||=createQuestMotion(JSON.parse(readFileSync(questConfigFile,'utf8')),new URL('game/native-physics-thread.mjs',base),ordinaryQuestLayer.profile.entryPosition||ordinaryQuestLayer.profile.actors[0].position);
 const ordinaryQuestMotion=ordinaryQuestLayer?{get world(){return loadQuestMotion().world;},fork:()=>loadQuestMotion().fork(),close:()=>questMotion?.close()}:null;
 try {
-  game=createGameServer({inspector,maxPlayersPerRoom:maxPlayers,saveFile:'/data/saves/characters.json',gameplay,motion:null,mapWindowMotion:motion,navigation:null,onRuntimeFailure:error=>recovery.fail(error),...(ordinaryQuestLayer?{ordinaryQuestLayer,ordinaryQuestMotion}:{})});
+  game=createGameServer({inspector,maxPlayersPerRoom:maxPlayers,saveFile:'/data/saves/characters.json',gameplay,motion:null,mapWindowMotion:motion,navigation:null,onRuntimeFailure:error=>recovery.fail(error),...(ordinaryQuestLayer?{ordinaryQuestLayer,ordinaryQuestMotion,ordinaryGatherEvents:gather?.tape}:{})});
   try{const repaired=applyPositionRepair(game.entryStore,'/data/role-position-repair.json',()=>trialEntryPosition(motion));if(repaired)console.log(JSON.stringify({positionRepair:repaired}));}
   catch(error){console.error('Position repair refused: '+error.message);}
   await installDelivery(game.server,root);
   installEntryRead(game.server,'/data/saves/characters.json');
   installNameDraw(game.server,createNameDrawer(root));
   installEntryManagement(game.server,trialRoleManager(game.entryStore,game.entryActive,{entryPosition:()=>trialEntryPosition(motion)}));
-  if(ordinaryQuestLayer)installQuestTransport(game.server,{ledger:ordinaryQuestLayer,store:game.entryStore,active:game.entryActive,collection});
+  if(ordinaryQuestLayer)installQuestTransport(game.server,{ledger:ordinaryQuestLayer,store:game.entryStore,active:game.entryActive,collection:gather?.collection||collection});
   installAdmin(game.server,{inspector,store:game.entryStore,active:game.entryActive,passwordHash:process.env.OC2_ADMIN_PASSWORD_HASH,secureCookies:process.env.OC2_ADMIN_LOCAL_HTTP!=='1'});
   await new Promise((ok,fail)=>{game.server.once('error',fail);game.server.listen(port,'0.0.0.0',()=>{game.server.off('error',fail);ok();});});
-} catch(error) { if(game)await game.close();else await motion.close();throw error; }
+} catch(error) { try{if(game)await game.close();else await motion.close();}finally{gather?.dispose();}throw error; }
 console.log(JSON.stringify({listening:port,host:'0.0.0.0',saveFile:'/data/saves/characters.json',maxPlayers,sourceNative:true}));
 let closing=false;
-async function stop(){if(closing)return;closing=true;try{await game.close();process.exit(0);}catch(error){console.error(error.message);process.exit(1);}}
+async function stop(){if(closing)return;closing=true;try{await game.close();gather?.dispose();process.exit(0);}catch(error){console.error(error.message);process.exit(1);}}
 process.on('SIGTERM',stop);process.on('SIGINT',stop);

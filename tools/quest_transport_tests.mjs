@@ -62,3 +62,23 @@ test('optional channel routes use the active connection and block direct collect
     f.active.clear();assert.equal((await post({type:'collect-finish',channelId:'fixture-channel'})).status,400);
   }finally{await new Promise(resolve=>server.close(resolve));}
 });
+test('presentation replay is authenticated to the current authoritative room without accepting client room or actor fields',async()=>{
+  const f=fixture(),rooms=[];f.ws.roomId='resources:ordinary-map:ROOM-A';
+  const ledger={profile:{mapId:1},snapshot:()=>({revision:0})};
+  const collection={snapshotRoom:room=>{rooms.push(room);return {roomKey:room,tick:12,records:[]};}};
+  const server=http.createServer();installQuestTransport(server,{ledger,store:f.store,active:f.active,collection});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const url='http://127.0.0.1:'+server.address().port,identity={characterId:id,resumeToken:token};
+  const post=(body,origin=url)=>fetch(url+'/__quests/presentation',{method:'POST',headers:{'Content-Type':'application/json',Origin:origin},body:JSON.stringify(body)});
+  try{
+    assert.equal((await fetch(url+'/__quests/presentation')).status,405);
+    assert.equal((await post({identity},'https://elsewhere.test')).status,403);
+    assert.equal((await post({identity:{...identity,resumeToken:'00'.repeat(32)}})).status,400);
+    const reply=await post({identity,roomKey:'ROOM-B',actorKey:'someone-else',position:[0,0,0]});
+    assert.deepEqual(await reply.json(),{presentation:{roomKey:f.ws.roomId,tick:12,records:[]}});
+    assert.deepEqual(rooms,[f.ws.roomId]);
+    f.active.set(id,{...f.ws,roomId:'resources:ordinary-map:ROOM-C'});
+    await post({identity});assert.equal(rooms.at(-1),'resources:ordinary-map:ROOM-C');
+    f.active.clear();assert.equal((await post({identity})).status,400);assert.equal(rooms.length,2);
+  }finally{await new Promise(resolve=>server.close(resolve));}
+});

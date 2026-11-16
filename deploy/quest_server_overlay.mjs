@@ -2,7 +2,7 @@
 // the authorized compatible task executor. Legacy character files are retained.
 export function stageOrdinaryQuestServer(source){
   const replace=(from,to)=>{if(source.split(from).length!==2)throw Error('Ordinary quest server anchor differs: '+from.slice(0,80));source=source.replace(from,to);};
-  replace('createGameServer({ inspector=null, onRuntimeFailure=null,','createGameServer({ ordinaryQuestLayer=null, ordinaryQuestMotion=null, inspector=null, onRuntimeFailure=null,');
+  replace('createGameServer({ inspector=null, onRuntimeFailure=null,','createGameServer({ ordinaryQuestLayer=null, ordinaryQuestMotion=null, ordinaryGatherEvents=null, inspector=null, onRuntimeFailure=null,');
   replace("        const sourceWindow=scene==='resources'&&msg.mapWindow==='tutorial';",
     "        const ordinary=scene==='resources'&&msg.mapWindow==='heaven-landing';\n        if(ordinary&&(!ordinaryQuestLayer||!ordinaryQuestMotion))return reject(ws,'原任务区域尚未就绪');\n        const sourceWindow=scene==='resources'&&(msg.mapWindow==='tutorial'||ordinary);");
   replace('const selectedMotion=sourceWindow?mapWindowMotion:motion;','const selectedMotion=ordinary?ordinaryQuestMotion:sourceWindow?mapWindowMotion:motion;');
@@ -23,6 +23,9 @@ export function stageOrdinaryQuestServer(source){
     "      } else if (msg.type === 'save' && ws.player) {\n        if(ws.ordinaryQuestMap){savePosition(ws);ordinaryQuestLayer.flush();notice(ws,'角色进度已保存');}else{changed(ws, true); notice(ws, '角色进度已保存');}");
   replace('      encounter.tick(clock(), 0.05);','      if(![...room.values()][0]?.ordinaryQuestMap)encounter.tick(clock(), 0.05);');
   replace('monsters: encounter.snapshot(),','monsters: [...room.values()][0]?.ordinaryQuestMap?[]:encounter.snapshot(),');
+  replace("    ws.on('close', () => {\n      clearTimeout(deadline);", "    ws.on('close', () => {\n      ordinaryGatherEvents?.closeOwner(ws);\n      clearTimeout(deadline);");
+  replace('      for (const ws of room.values()) send(ws, {...snapshot,',
+    '      if(ordinaryGatherEvents&&[...room.values()][0]?.ordinaryQuestMap===1) snapshot.questGather=ordinaryGatherEvents.tickRoom(roomKey,{tick,milliseconds:50,serverTime:snapshot.serverTime});\n      for (const ws of room.values()) send(ws, {...snapshot,');
   replace('    if (storageError || !store.dirty) return;','    try{if(!storageError)ordinaryQuestLayer?.flush();}catch(error){storageFailure(error);return;}\n    if (storageError || !store.dirty) return;');
   replace('          store.flush();\n        } finally {','          store.flush();ordinaryQuestLayer?.flush();\n        } finally {');
   replace('          await mapWindowMotion?.close?.();','          await mapWindowMotion?.close?.();await ordinaryQuestMotion?.close?.();');

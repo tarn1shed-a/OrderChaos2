@@ -66,7 +66,26 @@ export async function createSourceChannelView(host,{load=fetch}={}){
    svg.setAttribute('display',state.shown===true?'inline':'none');
    svg.setAttribute('data-source-channel-shown',state.shown===true?'1':'0');
   };
-  return Object.freeze({render,
+  const measureInitialSourceBounds=()=>{
+   if(disposed||!svg.isConnected)throw Error('Attached original source drawing required');
+   const previous=names.map(name=>{const use=uses.get(name);return {use,href:use.getAttribute('href'),display:use.getAttribute('display')};});
+   const display=svg.getAttribute('display');
+   try{
+    // Measure the original first display list, including the children made
+    // invisible by AS. Never substitute the SWF stage header for content.
+    svg.setAttribute('display','inline');
+    for(const name of names){const use=uses.get(name);use.setAttribute('href','#'+ids.get(art.clips[name].frames[0]));use.setAttribute('display','inline');}
+    const box=svg.getBBox(),scale=svg.width.baseVal.value/svg.viewBox.baseVal.width;
+    if(!(box.width>0&&box.height>0&&scale>0)||scale!==svg.height.baseVal.value/svg.viewBox.baseVal.height)
+     throw Error('Original drawing cannot be measured');
+    return Object.freeze({x:box.x*scale,y:box.y*scale,width:box.width*scale,height:box.height*scale,
+     measurement:'browser-original-SVG-content',nativeFlashBoundsObserved:false});
+   }finally{
+    const put=(node,name,value)=>value===null?node.removeAttribute(name):node.setAttribute(name,value);
+    put(svg,'display',display);for(const row of previous){put(row.use,'href',row.href);put(row.use,'display',row.display);}
+   }
+  };
+  return Object.freeze({render,measureInitialSourceBounds,
    sourceWindow:structuredClone(art.sourceWindow),
    dispose(){if(disposed)return;disposed=true;svg.remove();},
    scope:{sourceFrames:612,sourcePNGAtlases:assets.length,originalMasksRetained:true,

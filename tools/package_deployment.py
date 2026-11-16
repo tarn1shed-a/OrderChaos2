@@ -157,6 +157,7 @@ def build_context(archive, destination):
     sources += ['tools/preview/tutorial_terrain_grouping_policy.js']
     sources += ['tools/preview/quest_journal_program.mjs','tools/preview/quest_journal_widgets.mjs']
     sources += ['tools/creation_class_stage/stage_switch.mjs','tools/creation_class_stage/actor_v2.mjs','tools/creation_class_stage/actor_v3.mjs','tools/creation_class_stage/material_v2.mjs']
+    sources += ['tools/creation_class_stage/actor_v6.mjs', 'tools/creation_batch/geometry_core.mjs', 'tools/creation_batch/contracts.mjs', 'tools/creation_batch/stage_adapters_v1.mjs', 'tools/creation_batch/stage_adapter_core_v1.mjs', 'tools/creation_batch/stage_guard.mjs', 'tools/creation_batch/source_capabilities_v1.mjs']
     # Optional original human composition code. Its private inputs/configuration
     # are not activated or appended to the unchanged base runtime archive.
     sources += python_closure('source_human_pose_worker')

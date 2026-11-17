@@ -60,7 +60,7 @@ class NormalOwnAir(ExistingOwnAir):
                 self.set('W0',receipt['durationRaw32']);self.set('PC',self.get('X30'));return
         return super().hook(uc,pc,size,data)
 
-normal_load=FunctionType(load_existing.__code__,{**load_existing.__globals__,'OwnAir':NormalOwnAir})
+normal_load=FunctionType(load_existing.__code__,{**load_existing.__globals__,'OwnAir':NormalOwnAir},argdefs=load_existing.__defaults__)
 class NormalLoader(ExistingLoader):pass
 NormalLoader.prepare=FunctionType(ExistingLoader.prepare.__code__,{**ExistingLoader.prepare.__globals__,'load_own':normal_load})
 class NormalSyncRPC(RuntimeAirRPC,NormalLoader):pass

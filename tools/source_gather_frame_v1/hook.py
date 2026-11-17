@@ -172,7 +172,7 @@ def compose_start(normal_module,original_readable,*,read_native_facts,on_fault=s
  """
  from types import FunctionType
  path=inspect.getsourcefile(normal_module.NormalSyncRPC)
- if not path or hashlib.sha256(open(path,'rb').read()).hexdigest()!='eea0e66919c7647f0db7a4e2af6a66a66266cd213fd8e4ad4192e3298b51335a':raise ValueError('Exact final unique NormalSync core required')
+ if not path or hashlib.sha256(open(path,'rb').read()).hexdigest()!='2587dbabcc6cfdf6b671a96c1336c30c8e628fc1587c6fb4eacecb95b7723ceb':raise ValueError('Exact final unique NormalSync core required')
  observed=with_gather_frame_observer(normal_module.readable_runtime_type(original_readable),read_native_facts=read_native_facts,on_fault=on_fault);holder=[]
  class Tracked(observed):
   def __init__(self,*a,**kw):super().__init__(*a,**kw);holder.append(self)

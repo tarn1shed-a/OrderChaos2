@@ -16,7 +16,6 @@ const ACTOR_PLAN='fe46b8b06b4bd65bb242f46be7123f8f7331961bba1d658f4f7fd8cd81fcb4
 const REGISTRY='dbcf8a00bc3c67b03c2449ae0ca549e7bee95c9838fa6fb75367ee14230ff615';
 const GATHER_PLAN='1fa54692c65662fbe755ba9cc84c124f4ec32ba8a08981e52cfafc0422f5ad1d';
 const NATIVE_INIT_PLAN='3e963547241980c799c26c5712d1b2dfae8fcde05f0c6ae1556b1cb448b38363';
-const LATEST_PLAN='84fc8046abdfa131fc4332ca9c23df7f82a944476ddc770bb2473194d8619991';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 
 export async function loadSourceWorldRuntime({root,runtime,enabledBodyKeys=['human-female'],gatherEnabled=false}){
@@ -65,11 +64,14 @@ export async function loadSourceWorldRuntime({root,runtime,enabledBodyKeys=['hum
   const transportFile=resolve(runtime,'prototype/game/player-human-female-actions-v1/quest_motion_native_transport_v1.mjs');
   writeFileSync(transportFile,transportSource+'\nexport {NativeQuestRPC};\n');
   const transport=await import(pathToFileURL(transportFile));
-  function privatePlan(path,pin){const bytes=readFileSync(resolve(runtime,path));if(digest(bytes)!==pin)throw Error('Reviewed source-world plan differs');return JSON.parse(bytes);}
+  function privatePlan(path,pin,expectedBytes){const bytes=readFileSync(resolve(runtime,path));if(digest(bytes)!==pin||(expectedBytes!==undefined&&bytes.length!==expectedBytes))throw Error('Reviewed source-world plan differs');return JSON.parse(bytes);}
   function verifyPrivateFile(path,row){const file=resolve(runtime,path);if(!file.startsWith(runtime+'/'))throw Error('Source-world private path escapes runtime');const raw=readFileSync(file);if(raw.length!==row.bytes||digest(raw)!==row.sha256)throw Error('Source-world private source differs: '+path);}
   // One verified index supplies identities, code paths and bindings to both
   // operator modes. Gather adds presentation ports to the same normal core.
-  const latestPlan=privatePlan('native-inputs/world-latest-v1/append-plan.json',LATEST_PLAN);
+  const sourceCode=JSON.parse(readFileSync(resolve(root,'tools/source_world_python.json'),'utf8'));
+  const latestPin=sourceCode.plans?.latestWorld;
+  if(sourceCode.format!=='oc2-source-world-python-closure-v1'||!latestPin||Object.keys(latestPin).sort().join(',')!=='bytes,path,sha256'||latestPin.path!=='native-inputs/world-latest-v1/append-plan.json'||!/^[a-f0-9]{64}$/.test(latestPin.sha256)||!Number.isSafeInteger(latestPin.bytes)||latestPin.bytes<=0)throw Error('Reviewed common world plan declaration required');
+  const latestPlan=privatePlan(latestPin.path,latestPin.sha256,latestPin.bytes);
   if(latestPlan.actualFactsHostCompiled!==true||latestPlan.normalRepairIndependentOfGatherFlag!==true)throw Error('Complete common world source required');
   for(const [path,row]of Object.entries({...latestPlan.newPayloadFiles,...latestPlan.reusedBasePayloadFiles}))verifyPrivateFile(path,row);
   const ownActorPlan=privatePlan('native-inputs/world-latest-v1/browser-import-plan.json',latestPlan.browserImportPlanSHA256);

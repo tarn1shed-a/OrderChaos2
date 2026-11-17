@@ -8,6 +8,8 @@ DELEGATES={'human-male':('character_human_idle02_worker','sourceHumanPose',1992)
 
 class SharedOwnAirRPC:
     def __init__(self,config):
+        from source_runtime_resources import SourceRuntimeResources
+        self.resources=SourceRuntimeResources()
         self.config=json.loads(Path(config).read_text());self.engines={};self.infos={};self.owners={}
         if self.config.get('format')!='oc2-shared-own-air-rpc-v1'or not self.config.get('bodies')or set(self.config['bodies'])-(set(SPECS)|set(DELEGATES)):raise ValueError('Explicit supported own body RPC subset required')
         self.configs={key:pinned(row)[0]for key,row in self.config['bodies'].items()}
@@ -30,7 +32,7 @@ class SharedOwnAirRPC:
             if key in DELEGATES:
                 import importlib
                 module=importlib.import_module(DELEGATES[key][0]);e,info=module.load(self.configs[key])
-            else:e,info=load_own(self.configs[key])
+            else:e,info=load_own(self.configs[key],resources=self.resources)
             if info.get('sourceSpeciesKeys')!=[key]:raise ValueError('Actual own loader identity differs')
             if self.infos:
                 old=next(iter(self.infos.values()))

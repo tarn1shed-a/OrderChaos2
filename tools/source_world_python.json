@@ -77,16 +77,16 @@
     "tools/player_world_air_control/__init__.py": "21999323e48f1b8dc456192acc84d3af470d00314fc85f4f70978f3a11946eae",
     "tools/player_world_air_control/bres_port.py": "e3621a49d0914c75ee9d80495f343e23a98b1d56e1b336061ebb91a652fad4d7",
     "tools/player_world_air_control/c_locale.py": "e837320f909368eaefbaf65bcf7b48b595021b65f712792ffe03ad5271ae4a8a",
-    "tools/player_world_air_control/core.py": "d5d66e04e0be7387a25a3bbe0066274c0c7549284eb0860e9c885879c80fa763",
+    "tools/player_world_air_control/core.py": "6394baf9cea9e0ead325270bf31014de6938532e13be0fedee5ec07ef11d73c0",
     "tools/player_world_air_control/keyframe_port.py": "1799950f3995a3853d2e5e1cec2e4d58cf8f6b6c66ffedd0ee135c1a139bf6a7",
     "tools/player_world_air_control/marker_port.py": "1db4c28127a24db781d061369339f0335973f5abd7981fb90d88a18a8ab7475d",
-    "tools/player_world_air_control/worker.py": "dc8e99fbb04086c36ea6911350c1541ae8756d5d58f8c2709dc35bd60e9b068c",
+    "tools/player_world_air_control/worker.py": "c53f3c5189e009bca731ab7eec746a34cc221648dcc62f6cae9d06165e40b384",
     "tools/player_world_air_existing.py": "ff38106ca07aabd754daf964d7470d82d026da41e31ca1e3372135fd50a463f8",
     "tools/player_world_eight_motion/__init__.py": "1f59c4c169eabf07d01c7f54cb72e4151a9e7a731dfb1facb7db44083d066045",
     "tools/player_world_eight_motion/worker.py": "b60c09657f69dd03dd7fcae01c61f92fbdd4d672e669c98bf3f93e74d6e603ed",
     "tools/player_world_first_history.py": "480f45670911e5e87b866883a2746f7c57896b135d92a8a3f0ba952bee9e1c7a",
     "tools/player_world_normal_sync_v1/__init__.py": "368bc4df0e49b7627c00423bacbc9de1017194cded84dfebeb9a5f5e2fc40da4",
-    "tools/player_world_normal_sync_v1/worker.py": "eea0e66919c7647f0db7a4e2af6a66a66266cd213fd8e4ad4192e3298b51335a",
+    "tools/player_world_normal_sync_v1/worker.py": "2587dbabcc6cfdf6b671a96c1336c30c8e628fc1587c6fb4eacecb95b7723ceb",
     "tools/resource_packs.py": "72b908cc10296a6f03c901c89cec790122450d89109d3601d7363cfde8c29767",
     "tools/scene_active_lighting.py": "ffa5b919138a6cc1316118bbb17f064931cbeb9006199f2dc0f4ce5be743f410",
     "tools/scene_alpha.py": "314ea046ded93eb157fdf373f2fa599395f72235909635ce376135c8e54cb543",
@@ -109,7 +109,7 @@
     "tools/source_diving.py": "be29cd1153a23fa23e9b3397ec1b489f07df43d1afe6ade26d623c817e253d68",
     "tools/source_gather_common_v1/marker_queue_reader.py": "a214f8c411b46981d001419d63f0667fa92eeaa546a015c1a85f48c6536fca85",
     "tools/source_gather_frame_v1/__init__.py": "5b366d4027d2f3f865f3dbad92db3b90e7e27af4defa2779102574be2ef6a9b4",
-    "tools/source_gather_frame_v1/hook.py": "237079b5742b610be8072867c941a54cf72402f9c0b81770e5a11923b0b793ee",
+    "tools/source_gather_frame_v1/hook.py": "162f293b9f0feff6ff1cd601bb8815514c0e994fe8d3f2d9a9235774d766703e",
     "tools/source_gather_seed_v1/context_base_v1.py": "9b632b72590fdf8776b820404e1631b43f2f66d5196b52816ff0272f717efefc",
     "tools/source_gather_seed_v1/context_posture_v1.py": "9be2d4cd2c07beb5a876122dbed6606e52389a9c11828d9d00e23db7cec622f6",
     "tools/source_gather_seed_v1/context_v2.py": "10fdaebf5d40d9c737a1f4f40cc838285db52d37f4adbea71acc7ab751db5690",
@@ -129,6 +129,7 @@
     "tools/source_physics.py": "11d24a7154b7e9f3bbab3300662694abf9ae837e922b11edf697f7e80e34d24d",
     "tools/source_physics_worker.py": "736784c9841b0c771cf311459f4dbcd449fedab1ce88e0b931ac07f44d6b9e32",
     "tools/source_queue_pristine_constructor.py": "32d229209f7efc5f60ecf5154361dee016c942f3f4a3d3aa0b3a81bd14c6fc4e",
+    "tools/source_runtime_resources.py": "182063bc3d7f16619d35d9ad8091fb5eea937cdc96615cfc38a8cf724672f6e5",
     "tools/source_shore.py": "50f36353a52f861a9b1a848bd57cb7b8c0a340fd3808ad3a8a68e62f1f996fec",
     "tools/source_species_queue.py": "8efdfb10c07ac9c06ef4cdb9d3ab6ced0facfd18809f657054da4e5ba7f94c34",
     "tools/source_species_worker.py": "8889165e85b9def0deb4ce5fb6a445efab7e1fa3e63d88bde62d278fe676a27d",
@@ -184,5 +185,12 @@
     "tools/world_latest_delivery_v1/runtime.py": "ddaa7426e270178df372c01b0691cee480d89f2c06de279081c965fc6d1d4893",
     "tools/world_latest_delivery_v1/worker.py": "e5db5910d90f5530ae973ba87b1c5ca607c0b13f0de9563f259f938420cbc3b8"
   },
-  "format": "oc2-source-world-python-closure-v1"
+  "format": "oc2-source-world-python-closure-v1",
+  "plans": {
+    "latestWorld": {
+      "path": "native-inputs/world-latest-v1/append-plan.json",
+      "sha256": "e33f9470390c4d6be2823b75a9d4669fdaa292aa7c103b500276f0dac2ea152c",
+      "bytes": 134515
+    }
+  }
 }

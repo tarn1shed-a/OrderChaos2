@@ -174,6 +174,17 @@ class ImageArchiveTests(unittest.TestCase):
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
             self.assertEqual(bootstrap.install_world_latest_support(runtime, root, digest), plan)
             self.assertEqual((root / name).read_bytes(), raw)
+            index = root / 'tools/source_world_python.json'
+            index.parent.mkdir()
+            index.write_text(json.dumps({'format': 'oc2-source-world-python-closure-v1',
+                'plans': {'latestWorld': {'path': 'native-inputs/world-latest-v1/append-plan.json',
+                                         'sha256': digest, 'bytes': path.stat().st_size}}}))
+            self.assertEqual(bootstrap.install_world_latest_support(runtime, root), plan)
+            declaration = json.loads(index.read_text())
+            declaration['plans']['latestWorld']['sha256'] = '0' * 64
+            index.write_text(json.dumps(declaration))
+            with self.assertRaisesRegex(ValueError, 'Common world source plan differs'):
+                bootstrap.install_world_latest_support(runtime, root)
             source.write_bytes(b'changed')
             with self.assertRaisesRegex(ValueError, 'Original world helper differs'):
                 bootstrap.install_world_latest_support(runtime, root, digest)

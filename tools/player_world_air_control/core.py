@@ -223,7 +223,7 @@ def pinned(row):
     if hashlib.sha256(b).hexdigest()!=row['sha256']:raise ValueError('Own native input changed')
     return p,b
 
-def load_own(config):
+def load_own(config,resources=None):
     from analyze_native_resources import NativeImage
     from bdae_convert import BDAE
     from bdae_animation import BDAEAnimation
@@ -233,7 +233,8 @@ def load_own(config):
     started=time.perf_counter();cfg=json.loads(Path(config).read_text());key=cfg['bodyKey']
     if cfg.get('format')!='oc2-shared-own-world-air-body-v1'or key not in SPECS or type(cfg.get('qaOriginalPoseEvidence'))is not bool:raise ValueError('Explicit bounded own body air config required')
     files={k:pinned(v)for k,v in cfg['inputs'].items()}
-    image=NativeImage(files['library'][1]);profile=json.loads(files['queue'][1]);data=json.loads(files['bodyData'][1]);mask=json.loads(files['mask'][1]);binding=json.loads(files['binding'][1])
+    image=NativeImage(files['library'][1]) if resources is None else resources.native_image(files['library'][1],NativeImage)
+    profile=json.loads(files['queue'][1]);data=json.loads(files['bodyData'][1]);mask=json.loads(files['mask'][1]);binding=json.loads(files['binding'][1])
     if hashlib.sha256(image.data).hexdigest()!=NATIVE:raise ValueError('Original native image changed')
     validate_profile(profile['species'],NATIVE)
     if profile['sha256']!=profile_hash(profile)or profile['species']['dataSHA256']!=cfg['inputs']['bodyData']['sha256']or mask['bodyDataSHA256']!=cfg['inputs']['bodyData']['sha256']or mask['sourceBodySHA256']!=cfg['inputs']['body']['sha256']or mask['sourceAnimationSHA256']!=cfg['inputs']['animation']['sha256']or binding['sourceMaskSHA256']!=mask['sha256']:raise ValueError('Own exact bank/body/mask/binding required')
@@ -290,4 +291,5 @@ def load_own(config):
       'entryMode':'web-owned-event','fullHeroV20OrZeroTimerBranchClaimed':False,'sharedMethods':METHODS,
       'originalQueuePorts':{'nativeSynchronousRequests':True,'nativeActorMarkerConsumer':True,'nativeAudioApplicationConstructor':'389070','actualRegisteredAudioBanks':0,'nativeClock':engine.clock_port,'keyframeTableSHA256':engine.keyframe_port['sourceSHA256'],'nativeModelOrGPUResourceReadyClaimed':False},
       'firstNormalTickImmediatePressVerified':False,'creationEnabled':False}
+    if resources is not None:resources.retain_compositor(vm)
     return engine,info

@@ -23,7 +23,6 @@ FORMAT = 'oc2-private-runtime-v1'
 MAX_EXPANDED = 2 * 1024**3
 WORLD_PATH_INDEX_SHA = '5adc87f4f9d95cce1a563cf5809cc48b3fff24c996826a390afe96c3cd23d3e8'
 WORLD_GATHER_PLAN_SHA = 'b5e0be53fcd9680e9c8b5eb672a0b66de6eb8440815c6390809050e0faf7eebe'
-WORLD_LATEST_PLAN_SHA = '84fc8046abdfa131fc4332ca9c23df7f82a944476ddc770bb2473194d8619991'
 
 
 def sha(path):
@@ -106,9 +105,29 @@ def project_world_support(runtime, root, rows, namespace):
     return rows
 
 
-def install_world_latest_support(runtime, root=ROOT, expected=WORLD_LATEST_PLAN_SHA):
+def latest_world_plan(root=ROOT):
+    """The image and Node host read one versioned runtime-plan declaration."""
+    try:
+        source = json.loads((Path(root) / 'tools/source_world_python.json').read_text())
+        row = source['plans']['latestWorld']
+        if (source.get('format') != 'oc2-source-world-python-closure-v1' or
+                set(row) != {'path', 'sha256', 'bytes'} or
+                row['path'] != 'native-inputs/world-latest-v1/append-plan.json' or
+                len(row['sha256']) != 64 or any(c not in '0123456789abcdef' for c in row['sha256']) or
+                type(row['bytes']) is not int or row['bytes'] <= 0):
+            raise ValueError('Invalid common world plan declaration')
+        return row
+    except (OSError, KeyError, TypeError, ValueError) as error:
+        raise ValueError('Common world source plan differs: missing or invalid image declaration') from error
+
+
+def install_world_latest_support(runtime, root=ROOT, expected=None):
     """Install the one index-driven normal/facts closure for either host flag."""
+    declaration = latest_world_plan(root) if expected is None else None
+    expected = declaration['sha256'] if declaration is not None else expected
     plan_file = Path(runtime) / 'native-inputs/world-latest-v1/append-plan.json'
+    if declaration is not None and plan_file.stat().st_size != declaration['bytes']:
+        raise ValueError('Common world source plan differs')
     if sha(plan_file) != expected:
         raise ValueError('Common world source plan differs')
     plan = json.loads(plan_file.read_text())

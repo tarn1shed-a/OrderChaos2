@@ -11,6 +11,8 @@ COPY deploy/package.json deploy/package-lock.json ./deploy/
 RUN npm ci --omit=dev --prefix deploy
 COPY tools/ ./tools/
 COPY deploy/ ./deploy/
+RUN python3 -c "from deploy.bootstrap import verify_source_world_code; verify_source_world_code()"
+RUN if [ -f deploy/private-runtime.tar.gz ]; then cd deploy && sha256sum -c private-runtime.sha256; fi
 EXPOSE 8080
 STOPSIGNAL SIGTERM
 HEALTHCHECK --start-period=180s --interval=30s --timeout=5s --retries=3 \

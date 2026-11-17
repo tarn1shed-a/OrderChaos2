@@ -21,6 +21,9 @@ ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / 'analysis/raw/portable/running-preview'
 FORMAT = 'oc2-private-runtime-v1'
 MAX_EXPANDED = 2 * 1024**3
+WORLD_PATH_INDEX_SHA = '5adc87f4f9d95cce1a563cf5809cc48b3fff24c996826a390afe96c3cd23d3e8'
+WORLD_GATHER_PLAN_SHA = 'b5e0be53fcd9680e9c8b5eb672a0b66de6eb8440815c6390809050e0faf7eebe'
+WORLD_LATEST_PLAN_SHA = '84fc8046abdfa131fc4332ca9c23df7f82a944476ddc770bb2473194d8619991'
 
 
 def sha(path):
@@ -33,6 +36,89 @@ def relative(name):
     if not name or path.is_absolute() or '..' in path.parts or '\\' in name or str(path) != name:
         raise ValueError('Unsafe bundle member')
     return path
+
+
+def verify_source_world_code(root=ROOT):
+    """Check the image's complete reviewed code closure before native startup."""
+    root = Path(root)
+    source_code = json.loads((root / 'tools/source_world_python.json').read_text())
+    if (source_code.get('format') != 'oc2-source-world-python-closure-v1' or
+            not isinstance(source_code.get('files'), dict) or not source_code['files']):
+        raise ValueError('Source world Python closure differs')
+    for name, expected in source_code['files'].items():
+        relative(name)
+        if not name.startswith('tools/') or not name.endswith('.py'):
+            raise ValueError('Invalid source world code path')
+        if not (root / name).is_file() or sha(root / name) != expected:
+            raise ValueError('Source world Python bytes differ: ' + name)
+    return source_code
+
+
+def install_world_path_index(runtime, root=ROOT, expected=WORLD_PATH_INDEX_SHA):
+    """Project one original private lookup table; never overwrite other data."""
+    source = Path(runtime) / 'native-inputs/world-own-air-v1/root-support/matrix.json'
+    target = Path(root) / 'analysis/raw/character-world-matrix-20261116/candidate-final/matrix.json'
+    if not source.is_file() or sha(source) != expected:
+        raise ValueError('Original world model-path index differs')
+    if target.exists():
+        if not target.is_file() or sha(target) != expected:
+            raise ValueError('Existing world model-path index differs')
+        return target
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open('xb') as output, source.open('rb') as incoming:
+        shutil.copyfileobj(incoming, output)
+    target.chmod(0o600)
+    return target
+
+
+def install_world_gather_support(runtime, root=ROOT, expected=WORLD_GATHER_PLAN_SHA):
+    """Project the three frozen dynamic helpers into disposable image paths."""
+    runtime, root = Path(runtime), Path(root)
+    plan = runtime / 'native-inputs/world-gather-v1/append-plan.json'
+    if sha(plan) != expected:
+        raise ValueError('Original Gather support plan differs')
+    rows = {name: row for name, row in json.loads(plan.read_text())['newRootFiles'].items()
+            if name.startswith('analysis/raw/')}
+    if len(rows) != 3:
+        raise ValueError('Original Gather helper set differs')
+    return project_world_support(runtime, root, rows, 'world-gather-v1')
+
+
+def project_world_support(runtime, root, rows, namespace):
+    """Use one checked projection for frozen helpers and original lookup data."""
+    runtime, root = Path(runtime), Path(root)
+    for name, row in rows.items():
+        relative(name)
+        if not name.startswith('analysis/raw/'):
+            raise ValueError('Private world support path differs')
+        source = runtime / 'native-inputs' / namespace / 'root-support' / name
+        target = root / name
+        if not source.is_file() or source.stat().st_size != row['bytes'] or sha(source) != row['sha256']:
+            raise ValueError('Original world helper differs: ' + name)
+        if target.exists():
+            if not target.is_file() or sha(target) != row['sha256']:
+                raise ValueError('Existing world helper differs: ' + name)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open('xb') as output, source.open('rb') as incoming:
+            shutil.copyfileobj(incoming, output)
+        target.chmod(0o600)
+    return rows
+
+
+def install_world_latest_support(runtime, root=ROOT, expected=WORLD_LATEST_PLAN_SHA):
+    """Install the one index-driven normal/facts closure for either host flag."""
+    plan_file = Path(runtime) / 'native-inputs/world-latest-v1/append-plan.json'
+    if sha(plan_file) != expected:
+        raise ValueError('Common world source plan differs')
+    plan = json.loads(plan_file.read_text())
+    if plan.get('actualFactsHostCompiled') is not True or plan.get('normalRepairIndependentOfGatherFlag') is not True:
+        raise ValueError('Complete same-core world source required')
+    rows = plan['explicitRootSupport']
+    if not rows:
+        raise ValueError('Original world support index required')
+    project_world_support(runtime, root, rows, 'world-latest-v1')
+    return plan
 
 
 def members_checked(bundle):
@@ -130,6 +216,18 @@ def archive_from_env():
     digest = os.environ.get('OC2_BUNDLE_SHA256', '')
     if not re.fullmatch('[0-9a-f]{64}', digest):
         raise ValueError('Set OC2_BUNDLE_SHA256 to the migration receipt; no fallback runtime')
+    if os.environ.get('OC2_BUNDLE_CACHE') == '0':
+        # A private CLI image already owns this complete immutable archive.
+        # Read it in place; preserve every existing /data cache and save for
+        # rollback instead of requiring two full archives on the save volume.
+        source = Path(os.environ.get('OC2_BUNDLE_PATH', str(ROOT / 'deploy/private-runtime.tar.gz')))
+        if os.environ.get('OC2_BUNDLE_URL') or not source.is_file() or sha(source) != digest:
+            raise ValueError('Uncached deployment requires the exact bundled private archive')
+        with tarfile.open(source, 'r:gz') as packed:
+            _, names, _ = members_checked(packed)
+            if 'bundle-base.json' in names:
+                raise ValueError('Uncached deployment requires a complete private archive')
+        return source, digest
     cache = Path('/data/bundles')
     cache.mkdir(parents=True, exist_ok=True, mode=0o700)
     archive = cache / (digest + '.tar.gz')
@@ -187,6 +285,22 @@ def main():
         raise ValueError('This deployment volume already has an active server') from None
     archive, digest = archive_from_env()
     manifest = extract_verified(archive, digest, DEST)
+    if os.environ.get('OC2_HUMAN_FEMALE_WORLD') == '1':
+        # Only the appended, verified own-body recipe is projected. The base
+        # physics inputs, original library and existing save files are untouched.
+        verify_source_world_code()
+        subprocess.run([sys.executable, str(ROOT / 'tools/female_world_delivery/materialize.py'), sys.executable], check=True)
+        install_world_path_index(DEST)
+        # This projects verified file paths only. No body engine, actor, seed,
+        # tick or ready receipt is created; native preparation stays lazy on
+        # the selected authenticated body in the one existing game server.
+        plan = install_world_latest_support(DEST)
+        materializer = plan['materializer']
+        relative(materializer['target'])
+        if not materializer['target'].startswith('tools/') or materializer['sameForBothGatherFlags'] is not True:
+            raise ValueError('Shared world materializer differs')
+        subprocess.run([sys.executable, str(ROOT / materializer['target']),
+                        sys.executable, materializer['entryKey'], *plan['bodies']], check=True)
     subprocess.run(['node', str(ROOT / 'deploy/prepare_delivery.mjs')], check=True)
     Path('/data/saves').mkdir(exist_ok=True, mode=0o700)
     os.ftruncate(lock, 0)

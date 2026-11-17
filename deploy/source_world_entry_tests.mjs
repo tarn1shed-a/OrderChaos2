@@ -1,0 +1,12 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {sourceWorldEntryURL,rememberSourceWorldEntry,takeSourceWorldEntry}from'./source_world_entry.mjs';
+const role={sourceAvatar:{key:'human-female'}},href='https://example.invalid/explore-map.html?room=RAILWAY-01&trialEntry=cinematic7&resumeToken=must-not-forward';
+test('only an explicitly enabled source body is routed to its actual world',()=>{assert.equal(sourceWorldEntryURL(role,href,['human-female']),'https://example.invalid/quests.html?room=RAILWAY-01');});
+test('legacy and disabled source bodies keep the existing entry',()=>{assert.equal(sourceWorldEntryURL({},href,['human-female']),null);assert.equal(sourceWorldEntryURL(role,href,[]),null);assert.equal(sourceWorldEntryURL({sourceAvatar:{key:'orc-female'}},href,['human-female']),null);});
+test('a character already in the correct world is not navigated or reconnected',()=>{assert.equal(sourceWorldEntryURL(role,'http://127.0.0.1:1234/quests.html?room=OWN',['human-female']),null);});
+test('credentials and the incompatible legacy restore query are never forwarded',()=>{const u=new URL(sourceWorldEntryURL(role,href,['human-female']));assert.deepEqual([...u.searchParams.keys()],['room']);assert.equal(u.origin,'https://example.invalid');});
+function storage(){const m=new Map();return {setItem:(k,v)=>m.set(k,v),getItem:k=>m.get(k)||null,removeItem:k=>m.delete(k),values:()=>[...m.values()]};}
+const id='00000000-0000-0000-0000-000000000001',target='https://example.invalid/quests.html?room=OWN';
+test('a deliberate start is transferred once without copying credentials',()=>{const s=storage();rememberSourceWorldEntry(s,id,target);assert.deepEqual(JSON.parse(s.values()[0]),{characterId:id,target});assert.equal(takeSourceWorldEntry(s,target),id);assert.equal(takeSourceWorldEntry(s,target),null);});
+test('a transfer cannot start in another room, origin or path',()=>{for(const url of ['https://else.invalid/quests.html?room=OWN','https://example.invalid/quests.html?room=OTHER','https://example.invalid/explore-map.html?room=OWN']){const s=storage();rememberSourceWorldEntry(s,id,target);assert.equal(takeSourceWorldEntry(s,url),null);assert.equal(s.values().length,0);}});
+test('bad transfer payload and credential-bearing destinations are refused',()=>{const s=storage();assert.throws(()=>rememberSourceWorldEntry(s,id,target+'&resumeToken=secret'));s.setItem('oc2.source-world-entry.v1','{bad');assert.equal(takeSourceWorldEntry(s,target),null);});

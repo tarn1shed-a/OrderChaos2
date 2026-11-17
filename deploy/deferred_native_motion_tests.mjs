@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {deferNativeMotion} from './deferred_native_motion.mjs';
+test('closing an unused map never constructs a worker',async()=>{let loads=0;const m=deferNativeMotion(()=>{loads++;});assert.equal(m.sourceNative,false);await m.close();assert.equal(loads,0);assert.throws(()=>m.world,/closed/);});
+test('first map operation prepares once and forwards the actual native result',async()=>{let loads=0,closed=0;const world={},result={},fork={sourceNative:true};const actual={sourceNative:true,world,place(p){assert.equal(this,actual);return p;},fork(){return fork;},close(){closed++;}};const m=deferNativeMotion(()=>{loads++;return actual;});assert.equal(m.world,world);assert.equal(m.place(result),result);assert.equal(m.fork(),fork);assert.equal(m.sourceNative,true);assert.equal(loads,1);await m.close();await m.close();assert.equal(closed,1);});
+test('failed original preparation is propagated without substitute motion',()=>{const error=Error('native input missing'),m=deferNativeMotion(()=>{throw error;});assert.throws(()=>m.world,e=>e===error);assert.equal(m.sourceNative,false);});

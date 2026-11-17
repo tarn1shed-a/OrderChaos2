@@ -162,9 +162,23 @@ def build_context(archive, destination):
     sources += ['tools/creation_batch/'+name+'.mjs' for name in ['stage_batch_guard', 'stage_adapters_all_v1', 'stage_adapters_v5', 'typed_armor_root']]
     sources += ['tools/creation_control/'+name+'.mjs' for name in ['source_pose_applier_v1','source_pose_writer_v1','legacy_actor_pose_v1']]
     sources += ['deploy/creation_control/race_actor_pose_v1.mjs']
+    sources += ['deploy/world_admission/'+name+'.mjs' for name in ['contracts','pending','first_pose','gate','human_female']]
+    sources += ['deploy/world_route/'+name+'.mjs' for name in ['assembly','route','eight_domain','selector']]
     # Optional original human composition code. Its private inputs/configuration
     # are not activated or appended to the unchanged base runtime archive.
     sources += python_closure('source_human_pose_worker')
+    source_world = ROOT / 'tools/source_world_python.json'
+    if source_world.exists():
+        code = json.loads(source_world.read_text())
+        if code.get('format') != 'oc2-source-world-python-closure-v1':
+            raise ValueError('Unknown source-world Python closure')
+        for name, expected in code['files'].items():
+            path = Path(name)
+            if (not name.startswith('tools/') or path.suffix != '.py' or
+                    '..' in path.parts or path.is_absolute() or
+                    digest((ROOT / path).read_bytes()) != expected):
+                raise ValueError('Unreviewed source-world Python input')
+        sources += ['tools/source_world_python.json', *code['files']]
     sources += ['deploy/prepare_delivery.mjs', 'deploy/static_delivery.mjs',
                 'deploy/delivery_boot.mjs', 'deploy/delivery_worker.mjs', 'deploy/delivery_audit.mjs',
                 'deploy/stage_runtime.mjs', 'deploy/stage_plan.mjs', 'deploy/staged_scene.mjs', 'deploy/streaming_window.mjs']
@@ -179,8 +193,14 @@ def build_context(archive, destination):
         output = destination / name
         output.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / name, output)
-    shutil.copyfile(archive, destination / 'deploy/private-runtime.tar.gz')
-    (destination / 'deploy/private-runtime.tar.gz').chmod(0o600)
+    bundled = destination / 'deploy/private-runtime.tar.gz'
+    shutil.copyfile(archive, bundled)
+    bundled.chmod(0o600)
+    with bundled.open('rb') as stream:
+        if hashlib.file_digest(stream, 'sha256').hexdigest() != receipt['sha256']:
+            raise ValueError('Copied private image archive differs from its receipt')
+    # BuildKit must reject a corrupt COPY before a private image is published.
+    (destination / 'deploy/private-runtime.sha256').write_text(receipt['sha256'] + '  private-runtime.tar.gz\n')
     return {'context': str(destination), 'bundleSHA256': receipt['sha256'], 'privateBundleIncluded': True,
             'sourceFiles': len(sources), 'localSavesImported': False,
             'fileSHA256': {name: digest((destination / name).read_bytes()) for name in sources}}

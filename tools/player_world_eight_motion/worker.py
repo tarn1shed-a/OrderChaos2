@@ -91,7 +91,9 @@ class RuntimeAirRPC(ExistingAirRPC):
   if operation in('reset','press','release','tick','input-state','water','forget')and self.source_runtime is None:raise ValueError('QA inputs are not a production runtime initializer')
   key=data.get('bodyKey')if isinstance(data,dict)else None
   if operation=='prepareOwnBody':key=data.get('species')
-  if key is None and operation in('init','ground','sample','ray'):key=next(iter(self.configs))
+  # Resolve before the try/finally: rejected init/query envelopes must not
+  # pull an unrelated, possibly idle VM's old globals into the live carrier.
+  if operation in('init','ground','sample','ray'):key=self.static_body_for(operation,data)
   try:
    result=super().request(operation,data)
    if operation=='prepareOwnBody':result={**result,'sourceRuntimeInitialized':key in self.runtime_bindings}

@@ -1,8 +1,8 @@
 import{selectWorldContract,preparedWorldContract,readyWorldContract,LEGACY_WORLD_CONTRACT_SET,assertTrustedWorldContractSet,bindWorldContractSetReceipt}from'./contracts.mjs';
 // Source-only web join transaction on the existing server tick. No new timer,
 // native frame, clock, original game rule, pose or client approval is produced.
-export function createSourceWorldPendingJoins({registry,contractSet=LEGACY_WORLD_CONTRACT_SET,readPreparedBody,readNativeReady,resolveContract=null,clock=Date.now,onFault=()=>{}}){
- if(registry?.count!==45||typeof registry.check!=='function'||typeof readPreparedBody!=='function'||typeof readNativeReady!=='function'||typeof clock!=='function'||resolveContract!==null&&typeof resolveContract!=='function')throw Error('Explicit same-body native ports required');
+export function createSourceWorldPendingJoins({registry,contractSet=LEGACY_WORLD_CONTRACT_SET,readPreparedBody,readNativeReady,resolveContract=null,prepareJoin=null,clock=Date.now,onFault=()=>{}}){
+ if(registry?.count!==45||typeof registry.check!=='function'||typeof readPreparedBody!=='function'||typeof readNativeReady!=='function'||typeof clock!=='function'||resolveContract!==null&&typeof resolveContract!=='function'||prepareJoin!==null&&typeof prepareJoin!=='function')throw Error('Explicit same-body native ports required');
  assertTrustedWorldContractSet(contractSet);
  const pending=new Map(),byCharacter=new Map(),byPlayer=new WeakMap();let runtime=null,generation=0,context=null,disposed=false;
  function staticBody(record){
@@ -32,8 +32,24 @@ export function createSourceWorldPendingJoins({registry,contractSet=LEGACY_WORLD
   stage(ws,{room,roomKey,message,commit}){
    if(!api.preflight(ws,ws.character,message)||typeof commit!=='function')throw Error('Source join preparation is unavailable');
    const contract=selectWorldContract(registry,ws.character,resolveContract,contractSet);if(!contract)throw Error('Pinned own body contract required');
-   const r={ws,player:ws.player,record:ws.character,contract,room,roomKey,message:structuredClone(message),commit,phase:'pending',generation:++generation,identity:null,capability:null};
+   const r={ws,player:ws.player,record:ws.character,contract,room,roomKey,message:structuredClone(message),commit,phase:'pending',generation:++generation,identity:null,capability:null,preparation:null};
    pending.set(ws,r);byCharacter.set(r.record.id,r);byPlayer.set(r.player,r);
+   if(prepareJoin){
+    // Keep the existing slot/character reservation while actual resources load.
+    // Resource readiness alone never creates a native pose or join capability.
+    const preparation={state:'loading',error:null};r.preparation=preparation;
+    Promise.resolve().then(()=>{
+     if(!current(r)||r.phase!=='pending')return;
+     return prepareJoin({record:r.record,contract:r.contract});
+    }).then(value=>{
+     if(!current(r)||r.phase!=='pending')return;
+     if(value!==true)throw Error('Actual source admission resources were not prepared');
+     preparation.state='ready';
+    }).catch(error=>{
+     if(!current(r)||r.phase!=='pending')return;
+     preparation.error=error instanceof Error?error:new Error('Source admission resource preparation failed',{cause:error});preparation.state='failed';
+    });
+   }
   },
   readOwner(player,id){const r=byPlayer.get(player);if(!r||!current(r))return null;if(r.identity===null)r.identity=id;else if(r.identity!==id)throw Error('Same player cannot change native fork');
    return{player,characterId:r.record.id,socket:r.ws,generation:r.generation,identity:id,connected:true,mapId:r.contract.policy.mapId,roomKey:r.roomKey,phase:r.phase};},
@@ -71,6 +87,8 @@ export function createSourceWorldPendingJoins({registry,contractSet=LEGACY_WORLD
    for(const r of [...pending.values()]){
     try{
      if(!current(r))throw Error('角色连接已变更，请重新进入');
+     if(r.preparation?.state==='loading')continue;
+     if(r.preparation?.state==='failed')throw r.preparation.error;
      api.withMotion(r.ws,tick,()=>r.ws.motion.move(r.player,r.ws.input,.05,r.ws.world));
      const ready=readNativeReady(r.player);if(!readyWorldContract(r.contract,r,ready,contractSet))throw Error('原角色首姿势尚未就绪');
      r.capability=bindWorldContractSetReceipt(Object.freeze({...r.contract.policy,actorKey:r.record.id,identity:r.identity,generation:r.generation}),contractSet);

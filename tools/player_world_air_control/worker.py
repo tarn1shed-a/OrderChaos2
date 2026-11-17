@@ -10,7 +10,7 @@ class SharedOwnAirRPC:
     def __init__(self,config):
         from source_runtime_resources import SourceRuntimeResources
         self.resources=SourceRuntimeResources()
-        self.config=json.loads(Path(config).read_text());self.engines={};self.infos={};self.owners={}
+        self.config=json.loads(Path(config).read_text());self.engines={};self.infos={};self.owners={};self.static_body_key=None
         if self.config.get('format')!='oc2-shared-own-air-rpc-v1'or not self.config.get('bodies')or set(self.config['bodies'])-(set(SPECS)|set(DELEGATES)):raise ValueError('Explicit supported own body RPC subset required')
         self.configs={key:pinned(row)[0]for key,row in self.config['bodies'].items()}
         records={key:json.loads(p.read_text())for key,p in self.configs.items()}
@@ -40,13 +40,34 @@ class SharedOwnAirRPC:
             self.engines[key]=e;self.infos[key]=info
         return self.engines[key],self.infos[key]
 
+    def static_body_for(self,operation,data):
+        """Resolve a static query owner without preparing or changing native state.
+
+        The first successful preparation binds this owner. An omitted initial
+        key preserves the original first-config behavior; later actors may use
+        other bodies without retargeting the shared static-query world.
+        """
+        if not isinstance(data,dict):raise ValueError('Structured actual RPC input required')
+        key=self.static_body_key or next(iter(self.configs))
+        if operation=='init':
+            if set(data) not in (set(),{'bodyKey'}):raise ValueError('Exact optional static body init required')
+            key=data.get('bodyKey',key)
+            if type(key)is not str or key not in self.configs:raise ValueError('Configured first static body required')
+            if self.static_body_key is not None and key!=self.static_body_key:raise ValueError('A live static query body cannot change')
+        elif operation in('ground','sample','ray'):
+            allowed=({'from','to'},{'from','to','capsule'}) if operation=='ray' else ({'point'},)
+            if set(data) not in allowed:raise ValueError('Exact original static query required')
+        else:raise ValueError('Explicit static world operation required')
+        return key
+
     def request(self,operation,data):
         if not isinstance(data,dict):raise ValueError('Structured actual RPC input required')
         if operation=='init':
-            if data:raise ValueError('No invented init data')
+            key=self.static_body_for(operation,data)
             # Real loaded static geometry is shared only after identical source
             # world pins are independently checked by each own config loader.
-            _,info=self.prepare(next(iter(self.configs)))
+            _,info=self.prepare(key)
+            self.static_body_key=key
             return{**copy.deepcopy(info),**copy.deepcopy(self.declarations),'sourceSpeciesKeys':list(self.configs),'otherBodiesPrepared':False,'bindingDeclarationsArePreparationPromises':False}
         if operation=='prepareOwnBody':
             if set(data)!={'species'}:raise ValueError('Explicit own body preparation required')
@@ -56,7 +77,8 @@ class SharedOwnAirRPC:
             from player_choice_all_worker import resident_bytes
             return{'key':key,'ready':True,'pose':{'field':field,'bindingId':info[field]['bindingId'],'valueBytes':size},'milliseconds':e.preparation_milliseconds,'rssBytes':resident_bytes()}
         if operation in('ground','sample','ray'):
-            e,_=self.prepare(next(iter(self.configs)))
+            key=self.static_body_for(operation,data);e,_=self.prepare(key)
+            self.static_body_key=key
             if operation=='ground'and set(data)=={'point'}:return e.ground(*data['point'])
             if operation=='sample'and set(data)=={'point'}:return e.sample(*data['point'])
             if operation=='ray'and set(data)in({'from','to'},{'from','to','capsule'}):return e.ray(data['from'],data['to'],data.get('capsule',False))

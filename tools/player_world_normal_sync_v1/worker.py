@@ -76,7 +76,7 @@ def start(config):
 def readable_runtime_type(original_readable):
     """Inject only the loader into the frozen GA9 readonly worker MRO."""
     import inspect
-    expected='e234a87e5be59752f6ccaa130ce37cb46f6e8652c50c890318d21e917250fed6'
+    expected='0a5639b8278bd452411340073f914f34187ffdc72c16f855ef8d2870cb703c38'
     if not issubclass(original_readable,RuntimeAirRPC)or hashlib.sha256(Path(inspect.getsourcefile(original_readable)).read_bytes()).hexdigest()!=expected:
         raise ValueError('Exact existing readable GA9 worker required')
     return type('NormalSyncReadableRPC',(original_readable,NormalLoader),{})

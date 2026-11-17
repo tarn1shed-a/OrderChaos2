@@ -8,7 +8,7 @@ import sys,json,hashlib,inspect,importlib.util,copy
 HERE=Path(__file__).resolve().parent;ROOT=next(p for p in HERE.parents if (p/'tools/player_world_eight_motion/worker.py').is_file())
 sys.path[:0]=[str(HERE),str(ROOT/'tools'),str(ROOT/'tools/creation_playback')]
 from player_world_eight_motion.worker import RuntimeAirRPC
-ORIGINAL_SHA='b60c09657f69dd03dd7fcae01c61f92fbdd4d672e669c98bf3f93e74d6e603ed'
+ORIGINAL_SHA='9b3801a1879f29c2d1e63f303bfa55ccaf0375d6cd7d3cad759069b166616cb1'
 if hashlib.sha256(Path(inspect.getsourcefile(RuntimeAirRPC)).read_bytes()).hexdigest()!=ORIGINAL_SHA:raise ValueError('Exact frozen eight-body native worker required')
 
 def module(name,path,digest):

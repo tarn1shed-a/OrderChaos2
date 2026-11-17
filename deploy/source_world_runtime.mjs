@@ -119,9 +119,10 @@ export async function loadSourceWorldRuntime({root,runtime,enabledBodyKeys=['hum
         humanProfile:ownProfile,eightDescriptors,enabledBodyKeys,creationKeys:enabledBodyKeys,startupPrepareKeys:[],
         createFemaleInputFactory:entry.createFemaleActionsInputFactory,createSharedOwnAirInputBridge:latest.createSharedOwnAirInputBridge,
         loadHumanFemaleMotion:({entryPosition,options})=>nativeMotion.createQuestMotion({...config,worker:resolve(root,'tools/source_gather_seed_v1/worker_native_init_v1.py')},threadURL,entryPosition,options),
-        loadEightNativePort(){const rpc=new transport.NativeQuestRPC(eightConfig,threadURL);try{return{rpc,info:rpc.request('init'),bindQuestMotion:latest.bindQuestMotion};}catch(error){rpc.close();throw error;}},
+        loadEightNativePort({bodyKey}={}){if(bodyKey!==undefined&&!eightKeys.includes(bodyKey))throw Error('Actual configured first body required');const rpc=new transport.NativeQuestRPC(eightConfig,threadURL);try{return{rpc,info:rpc.request('init',bodyKey===undefined?{}:{bodyKey}),bindQuestMotion:latest.bindQuestMotion};}catch(error){rpc.close();throw error;}},
         canGather:ws=>gatherEnabled&&gather?.canPresent(ws)===true,
         readGatherHost:()=>gather,
+        prepareJoin:gatherEnabled?({record,contract})=>{if(!gather)throw Error('Actual Gather preparation host unavailable');return gather.prepareAdmission(record,contract);}:null,
       });
       route=assembly.createRoute({legacyMotion,entryPosition,clock,onFault});
       return route;
@@ -141,7 +142,7 @@ export async function loadSourceWorldRuntime({root,runtime,enabledBodyKeys=['hum
         const prefix='/assets/quest461-world-gather-v2/data/';
         return {sourceBytes:bytes(prefix+bodyKey+(bodyKey==='human-female'?'-seeded-source-v1.json':'-source.json')),bindingBytes:bytes(prefix+bodyKey+'-binding.json')};
       };
-      gather=await latest.createCommonWorldGatherHost({contractSet,enabled:true,registry,sourceBodyKeys:eightKeys,collection,readGame,onFault,nextSessionKey:randomUUID,
+      gather=await latest.createCommonWorldGatherHost({contractSet,enabled:true,prepareMode:'on-demand',registry,sourceBodyKeys:eightKeys,collection,readGame,onFault,nextSessionKey:randomUUID,
         randomWords:()=>{const seed=randomBytes(32);return [0,8,16,24].map(at=>seed.readBigUInt64LE(at).toString());},
         readPresentationContext:ws=>ws.motion?.readGatherPresentationContext?.(ws.player)??null,
         readPresentationOwner:ws=>ws.motion?.readGatherPresentationOwner?.(ws.player)??null,

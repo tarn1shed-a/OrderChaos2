@@ -53,6 +53,10 @@ class NativeImage:
         plt = self.elf.get_section_by_name('.plt')['sh_addr']
         for index, relocation in enumerate(self.elf.get_section_by_name('.rela.plt').iter_relocations()):
             self.imports[plt + 32 + index * 16] = symbols.get_symbol(relocation['r_info_sym']).name
+        # Host backing only; the helper admits only this already-verified build.
+        # Default/unsupported platforms retain the original private-copy path.
+        from source_code_pages import create_code_pages
+        self.code_pages = create_code_pages(data)
 
     def read(self, address, size):
         for segment in self.elf.iter_segments():

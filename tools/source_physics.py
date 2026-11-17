@@ -30,14 +30,18 @@ class SourcePhysics:
         from unicorn import arm64_const
         self.reg=arm64_const;self.uc=Uc(UC_ARCH_ARM64,UC_MODE_ARM);self.image=image
         reloc=list(image.elf.get_section_by_name('.rela.dyn').iter_relocations())
+        code_pages=getattr(image,'code_pages',None)
         for seg in image.elf.iter_segments():
             if seg['p_type']!='PT_LOAD':continue
             start=seg['p_vaddr'];size=seg['p_memsz'];lo=start&~4095;hi=(start+size+4095)&~4095
-            self.uc.mem_map(lo,hi-lo);raw=bytearray(size);raw[:seg['p_filesz']]=seg.data()
+            if code_pages is None:self.uc.mem_map(lo,hi-lo)
+            raw=bytearray(size);raw[:seg['p_filesz']]=seg.data()
             for r in reloc:
                 if r['r_info_type']==1027 and start<=r['r_offset']<start+size:
                     struct.pack_into('<Q',raw,r['r_offset']-start,r['r_addend'])
-            self.uc.mem_write(start,bytes(raw))
+            if code_pages is None:self.uc.mem_write(start,bytes(raw))
+            elif not code_pages.map_segment(self.uc,start,size,raw):
+                self.uc.mem_map(lo,hi-lo);self.uc.mem_write(start,bytes(raw))
         self.uc.mem_map(self.ARENA,0x4000000);self.uc.mem_map(0x20000000,0x20000);self.uc.mem_map(self.EXIT,4096)
         self.cursor=self.ARENA+0x10000;self.imports=image.imports;self.objects={};self.elapsed=0
         self.scratch=self.ARENA;self.stream=self.ARENA+0x100;self.vtable=self.ARENA+0x200

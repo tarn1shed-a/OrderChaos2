@@ -18,6 +18,7 @@ jobs:
       - run: python -m pip install -r tools/requirements-resources.txt -r tools/requirements-native.txt
       - run: python tools/deployment_tests.py
       - run: python tools/source_runtime_resources_tests.py
+      - run: python tools/source_code_pages_tests.py
       - run: python tools/runtime_delta_tests.py
       - run: python tools/resource_tests.py
       - run: python tools/bdae_tests.py
@@ -268,6 +269,7 @@ jobs:
       - run: python tools/source_species_worker_tests.py
       - run: node --test tools/source_avatar_state_tests.mjs tools/source_avatar_transport_tests.mjs
       - run: node --experimental-vm-modules --test deploy/quest_source_players_tests.mjs deploy/source_world_pending_tests.mjs deploy/source_world_entry_tests.mjs deploy/source_gather_intent_tests.mjs deploy/quest_world_gather_tests.mjs deploy/deferred_native_motion_tests.mjs deploy/source_world_bodies_tests.mjs
+      - run: node --test deploy/source_resource_reader_tests.mjs
       - run: python deploy/test_bootstrap_image_bundle.py
       - run: node --test tools/tutorial_terrain_groups_delivery_tests.mjs
       - run: python tools/source_human_pose_worker_tests.py

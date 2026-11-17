@@ -26,6 +26,11 @@ def digest(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
+def file_digest(path):
+    with Path(path).open('rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
 def python_closure(entry='source_physics_worker'):
     pending, found = [entry], set()
     while pending:
@@ -145,7 +150,7 @@ def build_context(archive, destination):
     if not destination.is_relative_to(ROOT / 'backups/deployment') or destination.exists():
         raise ValueError('Use a new ignored backups/deployment/ context directory')
     receipt = json.loads(archive.with_suffix(archive.suffix + '.receipt.json').read_text())
-    if digest(archive.read_bytes()) != receipt['sha256']:
+    if file_digest(archive) != receipt['sha256']:
         raise ValueError('Migration archive differs from its receipt')
     with tarfile.open(archive, 'r:gz') as packed:
         manifest = json.load(packed.extractfile('bundle-manifest.json'))
@@ -176,7 +181,7 @@ def build_context(archive, destination):
             path = Path(name)
             if (not name.startswith('tools/') or path.suffix != '.py' or
                     '..' in path.parts or path.is_absolute() or
-                    digest((ROOT / path).read_bytes()) != expected):
+                    file_digest(ROOT / path) != expected):
                 raise ValueError('Unreviewed source-world Python input')
         sources += ['tools/source_world_python.json', *code['files']]
     sources += ['deploy/prepare_delivery.mjs', 'deploy/static_delivery.mjs',
@@ -186,7 +191,7 @@ def build_context(archive, destination):
     # unchanged private archive's physics-host hash set.
     sources += ['tools/head_name_evidence.py','tools/native_font_draw.py','tools/source_name_worker.py']
     sources=sorted(set(sources)|{'deploy/'+p.name for p in (ROOT/'deploy').iterdir()if p.is_file()and p.suffix in ('.mjs','.css')}|{'deploy/admin.html','deploy/admin.js'})
-    if manifest['pythonFiles'] != {name: digest((ROOT / name).read_bytes()) for name in python_closure()}:
+    if manifest['pythonFiles'] != {name: file_digest(ROOT / name) for name in python_closure()}:
         raise ValueError('Physics host modules changed since packing')
     destination.mkdir(parents=True, mode=0o700)
     for name in sources:
@@ -196,14 +201,13 @@ def build_context(archive, destination):
     bundled = destination / 'deploy/private-runtime.tar.gz'
     shutil.copyfile(archive, bundled)
     bundled.chmod(0o600)
-    with bundled.open('rb') as stream:
-        if hashlib.file_digest(stream, 'sha256').hexdigest() != receipt['sha256']:
-            raise ValueError('Copied private image archive differs from its receipt')
+    if file_digest(bundled) != receipt['sha256']:
+        raise ValueError('Copied private image archive differs from its receipt')
     # BuildKit must reject a corrupt COPY before a private image is published.
     (destination / 'deploy/private-runtime.sha256').write_text(receipt['sha256'] + '  private-runtime.tar.gz\n')
     return {'context': str(destination), 'bundleSHA256': receipt['sha256'], 'privateBundleIncluded': True,
             'sourceFiles': len(sources), 'localSavesImported': False,
-            'fileSHA256': {name: digest((destination / name).read_bytes()) for name in sources}}
+            'fileSHA256': {name: file_digest(destination / name) for name in sources}}
 
 
 if __name__ == '__main__':

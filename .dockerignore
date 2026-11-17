@@ -363,4 +363,5 @@
 !tools/world_latest_delivery_v1/runtime.py
 !tools/world_latest_delivery_v1/worker.py
 !tools/source_runtime_resources.py
+!tools/source_code_pages.py
 # END REVIEWED SOURCE WORLD

@@ -10,6 +10,7 @@ import {stageSourceWorldCommandGate} from './source_world_command_stage.mjs';
 import {stageHumanFemalePendingServer} from './source_world_pending_stage.mjs';
 import {verifyHumanFemaleWorldAssets} from './source_world_assets.mjs';
 import {SOURCE_WORLD_BODY_KEYS} from './source_world_bodies.mjs';
+import {createPinnedResourceReader} from './source_resource_reader.mjs';
 
 const WORLD_PLAN='4e6e660a8ea3b94c5ca28c940e14261d1a6a6fb1013d31b1a5241c1c780a3823';
 const ACTOR_PLAN='fe46b8b06b4bd65bb242f46be7123f8f7331961bba1d658f4f7fd8cd81fcb433';
@@ -21,22 +22,23 @@ const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 export async function loadSourceWorldRuntime({root,runtime,enabledBodyKeys=['human-female'],gatherEnabled=false}){
   if(!Array.isArray(enabledBodyKeys)||!enabledBodyKeys.length||new Set(enabledBodyKeys).size!==enabledBodyKeys.length||enabledBodyKeys.some(k=>!SOURCE_WORLD_BODY_KEYS.includes(k)))throw Error('Explicit supported source-world bodies required');
   const delivery=resolve(root,'analysis/raw/delivery'),index=JSON.parse(readFileSync(resolve(delivery,'index.json'),'utf8'));
-  function readURL(row){
+  const resourceReader=createPinnedResourceReader({roots:[runtime,delivery,resolve(root,'deploy')]});
+  function pinURL(row){
     const meta=index.files[row.url];
     if(!meta||meta.bytes!==row.bytes||meta.sha256!==row.sha256)throw Error('Source world delivery identity differs');
     const path=resolve(meta.path);
     if(!path.startsWith(runtime+'/')&&!path.startsWith(delivery+'/')&&!path.startsWith(resolve(root,'deploy')+'/'))throw Error('Source world file outside current delivery');
-    const bytes=readFileSync(path);
-    if(bytes.length!==row.bytes||digest(bytes)!==row.sha256)throw Error('Source world file bytes differ');
-    return new Uint8Array(bytes);
+    return {path,bytes:row.bytes,sha256:row.sha256};
   }
+  function verifyURL(row){return resourceReader.verify(pinURL(row));}
+  function readURL(row){return resourceReader.readBytes(pinURL(row));}
   const planBytes=new Uint8Array(readFileSync(resolve(runtime,'native-inputs/player-human-female-world-v1/asset-plan.json')));
   const assets=await verifyHumanFemaleWorldAssets({planBytes,expectedSHA256:WORLD_PLAN,loadBytes:readURL,crypto:webcrypto});
   const actorPlan=readFileSync(resolve(runtime,'native-inputs/player-human-female-world-v1/actor-plan.json'));
   if(digest(actorPlan)!==ACTOR_PLAN)throw Error('Reviewed shared actor closure differs');
   const actorFiles=JSON.parse(actorPlan).files;
   if(!Array.isArray(actorFiles)||actorFiles.length!==202)throw Error('Shared actor closure incomplete');
-  for(const file of actorFiles)readURL(file);
+  for(const file of actorFiles)verifyURL(file);
   const registryURL='/assets/player-human-female-actions-v1/'+REGISTRY+'.json',row=index.files[registryURL];
   if(!row||row.sha256!==REGISTRY)throw Error('Reviewed source registry unavailable');
   const registry=createPlayerChoiceRegistry(JSON.parse(new TextDecoder().decode(readURL({...row,url:registryURL}))));
@@ -53,8 +55,9 @@ export async function loadSourceWorldRuntime({root,runtime,enabledBodyKeys=['hum
   const nativeInitPlan=JSON.parse(nativeInitBytes);
   if(nativeInitPlan.format!=='oc2-source-native-init-closure-v1'||nativeInitPlan.files.length!==2)throw Error('Incomplete native initialization closure');
   for(const row of nativeInitPlan.files){
-    const path=resolve(runtime,row.path),data=readFileSync(path);
-    if(!path.startsWith(resolve(runtime,'prototype/game/player-human-female-actions-v1')+'/')||data.length!==row.bytes||digest(data)!==row.sha256)throw Error('Native initialization source identity differs');
+    const path=resolve(runtime,row.path);
+    if(!path.startsWith(resolve(runtime,'prototype/game/player-human-female-actions-v1')+'/'))throw Error('Native initialization source path differs');
+    resourceReader.verify({path,bytes:row.bytes,sha256:row.sha256});
   }
   const nativeMotion=await import(new URL('quest_motion_native_init_v1.mjs',ownBase));
   // Expose the existing, byte-checked shared-buffer transport once. Its class,
@@ -65,7 +68,7 @@ export async function loadSourceWorldRuntime({root,runtime,enabledBodyKeys=['hum
   writeFileSync(transportFile,transportSource+'\nexport {NativeQuestRPC};\n');
   const transport=await import(pathToFileURL(transportFile));
   function privatePlan(path,pin,expectedBytes){const bytes=readFileSync(resolve(runtime,path));if(digest(bytes)!==pin||(expectedBytes!==undefined&&bytes.length!==expectedBytes))throw Error('Reviewed source-world plan differs');return JSON.parse(bytes);}
-  function verifyPrivateFile(path,row){const file=resolve(runtime,path);if(!file.startsWith(runtime+'/'))throw Error('Source-world private path escapes runtime');const raw=readFileSync(file);if(raw.length!==row.bytes||digest(raw)!==row.sha256)throw Error('Source-world private source differs: '+path);}
+  function verifyPrivateFile(path,row){const file=resolve(runtime,path);if(!file.startsWith(runtime+'/'))throw Error('Source-world private path escapes runtime');resourceReader.verify({path:file,bytes:row.bytes,sha256:row.sha256});}
   // One verified index supplies identities, code paths and bindings to both
   // operator modes. Gather adds presentation ports to the same normal core.
   const sourceCode=JSON.parse(readFileSync(resolve(root,'tools/source_world_python.json'),'utf8'));
@@ -76,7 +79,7 @@ export async function loadSourceWorldRuntime({root,runtime,enabledBodyKeys=['hum
   for(const [path,row]of Object.entries({...latestPlan.newPayloadFiles,...latestPlan.reusedBasePayloadFiles}))verifyPrivateFile(path,row);
   const ownActorPlan=privatePlan('native-inputs/world-latest-v1/browser-import-plan.json',latestPlan.browserImportPlanSHA256);
   if(!Array.isArray(ownActorPlan.files)||!ownActorPlan.files.length)throw Error('Incomplete own-body actor source closure');
-  for(const row of ownActorPlan.files)readURL(row);
+  for(const row of ownActorPlan.files)verifyURL(row);
   const latest=await import(pathToFileURL(resolve(runtime,latestPlan.latestEntry)));
   const admission=latest.COMMON_WORLD_ADMISSION;
   const contractSet=gatherEnabled?latest.GATHER_WORLD_CONTRACT_SET:latest.SOURCE_WORLD_CONTRACT_SET;
@@ -94,7 +97,7 @@ export async function loadSourceWorldRuntime({root,runtime,enabledBodyKeys=['hum
     for(const row of plan.files){
       const path=resolve(runtime,row.path);
       if(!path.startsWith(runtime+'/')||gatherRows.has(row.path))throw Error('Invalid Gather source path');
-      const data=readFileSync(path);if(data.length!==row.bytes||digest(data)!==row.sha256)throw Error('Gather source identity differs');
+      resourceReader.verify({path,bytes:row.bytes,sha256:row.sha256});
       gatherRows.set(row.path,row);
     }
   }

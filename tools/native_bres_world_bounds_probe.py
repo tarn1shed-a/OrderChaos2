@@ -19,13 +19,16 @@ class NativeBresWorldBoundsProbe:
         verify_native(im)
         self.im = im
         self.uc = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
+        code_pages = getattr(im, 'code_pages', None)
         for s in im.elf.iter_segments():
             if s['p_type'] != 'PT_LOAD':
                 continue
             start = s['p_vaddr'] & ~0xfff
             end = (s['p_vaddr'] + s['p_memsz'] + 0xfff) & ~0xfff
-            self.uc.mem_map(start, end - start)
-            self.uc.mem_write(s['p_vaddr'], s.data())
+            raw = s.data()
+            if code_pages is None or not code_pages.map_segment(self.uc, s['p_vaddr'], s['p_memsz'], raw):
+                self.uc.mem_map(start, end - start)
+                self.uc.mem_write(s['p_vaddr'], raw)
         for rel in im.elf.get_section_by_name('.rela.dyn').iter_relocations():
             if rel['r_info_type'] == 0x403:
                 self.w(rel['r_offset'], 'Q', rel['r_addend'])

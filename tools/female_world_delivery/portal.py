@@ -23,6 +23,8 @@ def projected(recipe,plan,python):
  out['sourceFemalePortable']={'format':'oc2-female-actions-portable-v1','projection':plan['projectionTarget'],'baselineQueue':paths[plan['baselineQueueOriginal']],'runtimeContext':copy.deepcopy(plan['runtimeContext'])}
  return out
 def validate(cfg):
+ from source_immutable_inputs import source_pages_enabled
+ source_pages=source_pages_enabled()
  from bdae_animation import BDAEAnimation
  meta=cfg.get('sourceFemalePortable')
  if not isinstance(meta,dict)or meta.get('format')!='oc2-female-actions-portable-v1':raise ValueError('Explicit own portable recipe required')
@@ -33,10 +35,18 @@ def validate(cfg):
  if sha(meta['baselineQueue'])!=QUEUE_SHA or hashlib.sha256(json.dumps(meta['runtimeContext'],sort_keys=True,separators=(',',':')).encode()).hexdigest()!=CONTEXT_SHA:raise ValueError('Frozen original queue or explicit constructor context changed')
  seen=set()
  for r in plan['resources']:
-  if r['original']in seen or sha(inside(r['target']))!=r['sha256']:raise ValueError('Original bytes or source path mapping differs')
+  if source_pages:
+   from source_immutable_inputs import verify_source
+   if r['original']in seen:raise ValueError('Original bytes or source path mapping differs')
+   verify_source(ROOT,{'path':str(inside(r['target'])),'sha256':r['sha256']})
+  elif r['original']in seen or sha(inside(r['target']))!=r['sha256']:raise ValueError('Original bytes or source path mapping differs')
   seen.add(r['original'])
  species=json.loads(Path(cfg['sourceSpeciesProfiles']['path']).read_text())['human-female']
  if species['sha256']!='c5c940718e49f560ed7160209687b1417d6231cf5ec479a723bc89c1b42763d1':raise ValueError('Own15 motion identity changed')
+ if source_pages:
+  from source_immutable_inputs import open_source
+  path,raw=open_source(ROOT,cfg['sourceFemaleComposition']['animation'])
+  return species,BDAEAnimation(path,source_buffer=raw)
  return species,BDAEAnimation(cfg['sourceFemaleComposition']['animation']['path'])
 def load(path,qa_evidence=False):
  from female_world_actions import source

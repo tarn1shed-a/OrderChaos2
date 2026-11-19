@@ -28,21 +28,31 @@ class SourcePhysics:
     def __init__(self,image):
         from unicorn import Uc,UC_ARCH_ARM64,UC_MODE_ARM,UC_HOOK_CODE
         from unicorn import arm64_const
+        from source_guest_pages import map_native_region
+        from source_code_pages import try_map_original_rx
         self.reg=arm64_const;self.uc=Uc(UC_ARCH_ARM64,UC_MODE_ARM);self.image=image
-        reloc=list(image.elf.get_section_by_name('.rela.dyn').iter_relocations())
+        from source_uc_tcg import configure_uc_tcg_before_init
+        configure_uc_tcg_before_init(self.uc)
+        image_views=getattr(image,'native_image_views',False) is True
+        reloc=None if image_views else list(image.elf.get_section_by_name('.rela.dyn').iter_relocations())
         code_pages=getattr(image,'code_pages',None)
         for seg in image.elf.iter_segments():
             if seg['p_type']!='PT_LOAD':continue
             start=seg['p_vaddr'];size=seg['p_memsz'];lo=start&~4095;hi=(start+size+4095)&~4095
-            if code_pages is None:self.uc.mem_map(lo,hi-lo)
+            if image_views and try_map_original_rx(self.uc,image,seg):continue
+            if code_pages is None:map_native_region(self.uc,lo,hi-lo)
             raw=bytearray(size);raw[:seg['p_filesz']]=seg.data()
-            for r in reloc:
-                if r['r_info_type']==1027 and start<=r['r_offset']<start+size:
-                    struct.pack_into('<Q',raw,r['r_offset']-start,r['r_addend'])
+            if image_views:
+                for offset,addend in image.iter_relative_relocations():
+                    if start<=offset<start+size:struct.pack_into('<Q',raw,offset-start,addend)
+            else:
+                for r in reloc:
+                    if r['r_info_type']==1027 and start<=r['r_offset']<start+size:
+                        struct.pack_into('<Q',raw,r['r_offset']-start,r['r_addend'])
             if code_pages is None:self.uc.mem_write(start,bytes(raw))
             elif not code_pages.map_segment(self.uc,start,size,raw):
-                self.uc.mem_map(lo,hi-lo);self.uc.mem_write(start,bytes(raw))
-        self.uc.mem_map(self.ARENA,0x4000000);self.uc.mem_map(0x20000000,0x20000);self.uc.mem_map(self.EXIT,4096)
+                map_native_region(self.uc,lo,hi-lo);self.uc.mem_write(start,bytes(raw))
+        map_native_region(self.uc,self.ARENA,0x4000000);map_native_region(self.uc,0x20000000,0x20000);map_native_region(self.uc,self.EXIT,4096)
         self.cursor=self.ARENA+0x10000;self.imports=image.imports;self.objects={};self.elapsed=0
         self.scratch=self.ARENA;self.stream=self.ARENA+0x100;self.vtable=self.ARENA+0x200
         self.descriptor=self.ARENA+0x300;self.filename=self.ARENA+0x400

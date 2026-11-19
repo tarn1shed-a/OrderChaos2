@@ -14,8 +14,17 @@ def load_female_pose(engine,cfg,root):
     if not isinstance(descriptor,dict)or set(descriptor)!={'bodyData','body','animation','mask','binding'} or \
       not cfg.get('sourceSpeciesProfiles')or not cfg.get('layerQueue'):
         raise ValueError('All pinned own female composition inputs required')
-    inputs={name:read_input(root,item)for name,item in descriptor.items()}
-    data,mask,binding=(json.loads(inputs[k][1])for k in('bodyData','mask','binding'))
+    from source_server_body_data import load_server_body_data,source_server_body_data_index,reuse_animation_reader
+    server_index=source_server_body_data_index(root)
+    shared_reader=getattr(getattr(engine,'bank',None),'reader',None)if server_index else None
+    inputs={name:read_input(root,item)for name,item in descriptor.items()if name not in('bodyData','animation')}
+    if shared_reader is None:
+        inputs['animation']=read_input(root,descriptor['animation'])
+        animation=BDAEAnimation(inputs['animation'][0])
+    else:
+        animation=reuse_animation_reader(root,descriptor['animation'],shared_reader)
+    data=load_server_body_data(root,descriptor['bodyData'],descriptor['mask'],server_index)
+    mask,binding=(json.loads(inputs[k][1])for k in('mask','binding'))
     profile=engine.species_profiles.get('human-female')
     if not profile or profile['dataSHA256']!=descriptor['bodyData']['sha256'] or \
       mask['bodyDataSHA256']!=descriptor['bodyData']['sha256'] or mask['sourceBodySHA256']!=descriptor['body']['sha256'] or \
@@ -23,7 +32,7 @@ def load_female_pose(engine,cfg,root):
       binding['sourceMotion']!={k:profile[k]for k in('format','sha256','key','race','gender','sourceModelId')}:
         raise ValueError('Actual registered female queue and body must agree')
     bind_female_mask(mask,data)
-    body=BDAE(inputs['body'][0]);animation=BDAEAnimation(inputs['animation'][0])
+    body=BDAE(inputs['body'][0])
     skin=source_controller(body,{'meshes':[data['meshes'][0]]},data['rig']['nodes'],0)
     vm=FemaleCompositionProbe(engine.image,body,body,skin,0);vm.animation(animation)
     vm.female_mask_file=inputs['mask'][0];vm.prepare_female(data,mask);vm.remove_passive_observer();vm.prepare_batch();vm.bind_female_profile(profile);vm.enable_temporary_recycling()

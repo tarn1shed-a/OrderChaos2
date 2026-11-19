@@ -10,6 +10,7 @@ from character_human_queue_composition_probe import HumanCompositionProbe
 from character_human_queue_bones_probe import mask_hash
 from player_choice_orc_pose import binding_id
 from bdae_character import aliases
+from source_server_body_data import body_data_canonical
 
 ROOT=Path(__file__).resolve().parents[1]
 RAW=ROOT/'analysis/raw/player-choice-remaining-20261115'
@@ -23,7 +24,7 @@ def bind_body_mask(report,data):
     source=data.get('sourcePlayerChoiceBody',{});key=source.get('key')
     if key not in IDENTITIES or (source.get('sourceModelId'),source.get('race'),source.get('gender'))!=IDENTITIES[key]or \
       report.get('key')!=key or report.get('format')!='oc2-source-own-body-mask-v1'or report.get('sha256')!=mask_hash(report)or \
-      report.get('nativeSHA256')!=NATIVE or report.get('bodyDataCanonicalSHA256')!=canonical(data)or \
+      report.get('nativeSHA256')!=NATIVE or report.get('bodyDataCanonicalSHA256')!=body_data_canonical(data)or \
       report.get('compatible',{}).get('propertiesCompatible')is not True:
         raise ValueError('Verified exact own-body original property mask required')
     names=aliases(data['rig']['nodes']);order=report['sourcePropertyOrder'];weights=report['compatible']['sourcePropertyWeights']

@@ -224,6 +224,8 @@ def pinned(row):
     return p,b
 
 def load_own(config,resources=None):
+    from source_immutable_inputs import source_pages_enabled
+    source_pages=source_pages_enabled()
     from analyze_native_resources import NativeImage
     from bdae_convert import BDAE
     from bdae_animation import BDAEAnimation
@@ -232,13 +234,22 @@ def load_own(config,resources=None):
     from species_world_profiles import validate_profile
     started=time.perf_counter();cfg=json.loads(Path(config).read_text());key=cfg['bodyKey']
     if cfg.get('format')!='oc2-shared-own-world-air-body-v1'or key not in SPECS or type(cfg.get('qaOriginalPoseEvidence'))is not bool:raise ValueError('Explicit bounded own body air config required')
-    files={k:pinned(v)for k,v in cfg['inputs'].items()}
-    image=NativeImage(files['library'][1]) if resources is None else resources.native_image(files['library'][1],NativeImage)
-    profile=json.loads(files['queue'][1]);data=json.loads(files['bodyData'][1]);mask=json.loads(files['mask'][1]);binding=json.loads(files['binding'][1])
+    from source_server_body_data import load_server_body_data,source_server_body_data_index
+    if source_pages:
+        from source_immutable_inputs import open_source
+        files={k:pinned(v)for k,v in cfg['inputs'].items()if k not in('bodyData','animation','library')}
+        files['animation']=open_source(ROOT,cfg['inputs']['animation'])
+        image=NativeImage(pinned(cfg['inputs']['library'])[1])if resources is None else resources.native_image_file(ROOT,cfg['inputs']['library'],NativeImage)
+    else:
+        files={k:pinned(v)for k,v in cfg['inputs'].items()if k!='bodyData'}
+        image=NativeImage(files['library'][1]) if resources is None else resources.native_image(files['library'][1],NativeImage)
+    data=load_server_body_data(ROOT,cfg['inputs']['bodyData'],cfg['inputs']['mask'],source_server_body_data_index(ROOT))
+    profile=json.loads(files['queue'][1]);mask=json.loads(files['mask'][1]);binding=json.loads(files['binding'][1])
     if hashlib.sha256(image.data).hexdigest()!=NATIVE:raise ValueError('Original native image changed')
     validate_profile(profile['species'],NATIVE)
     if profile['sha256']!=profile_hash(profile)or profile['species']['dataSHA256']!=cfg['inputs']['bodyData']['sha256']or mask['bodyDataSHA256']!=cfg['inputs']['bodyData']['sha256']or mask['sourceBodySHA256']!=cfg['inputs']['body']['sha256']or mask['sourceAnimationSHA256']!=cfg['inputs']['animation']['sha256']or binding['sourceMaskSHA256']!=mask['sha256']:raise ValueError('Own exact bank/body/mask/binding required')
-    animation=BDAEAnimation(files['animation'][0]);engine=OwnAir(image,profile,animation,cfg['sourceRuntimeInputs'],key)
+    animation=BDAEAnimation(files['animation'][0],source_buffer=files['animation'][1])if source_pages else BDAEAnimation(files['animation'][0])
+    engine=OwnAir(image,profile,animation,cfg['sourceRuntimeInputs'],key)
     matrix_file=ROOT/'analysis/raw/character-world-matrix-20261116/candidate-final/matrix.json'
     if hashlib.sha256(matrix_file.read_bytes()).hexdigest()!='5adc87f4f9d95cce1a563cf5809cc48b3fff24c996826a390afe96c3cd23d3e8':raise ValueError('Frozen own model-path index changed')
     source=next(r['sourceBody']for r in json.loads(matrix_file.read_text())['bodies']if r['key']==key)

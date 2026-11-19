@@ -21,8 +21,14 @@ RX_ADDRESS = 0
 RX_MEMORY_BYTES = 37726440
 PAGE_BYTES = 4096
 SHARED_BYTES = 37724160  # 9,210 full original RX pages; tail remains original copy.
+NATIVE_FILE_BYTES = 38892376
 PERMISSIONS = 7  # Same UC_PROT_ALL used by both original mapping constructors.
 _FAILED_FINALIZATIONS = []
+_UC_LIFETIMES = weakref.WeakKeyDictionary()
+
+
+class _LifetimeTransferError(ValueError):
+    pass
 
 
 def _supported():
@@ -46,7 +52,7 @@ def _digest_fd(fd, size):
     return digest.hexdigest()
 
 
-def _open_backing(view, digest, cache_dir):
+def _open_backing(view, digest, cache_dir, *, size=SHARED_BYTES, filename=None, source_fd=None):
     root = Path('/tmp').resolve()  # Never route original code into /data via TMPDIR.
     directory = Path(cache_dir or root / 'oc2-native-code-pages-v1').resolve()
     if not directory.is_relative_to(root):
@@ -55,18 +61,23 @@ def _open_backing(view, digest, cache_dir):
     info = directory.stat()
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid():
         raise ValueError('Code cache directory owner differs')
-    target = directory / (NATIVE_SHA256 + '-' + digest + '.rx')
+    target = directory / (filename or (NATIVE_SHA256 + '-' + digest + '.rx'))
     temporary = None
     try:
         if not target.exists():
             fd, temporary = tempfile.mkstemp(prefix='.rx-', dir=directory)
             try:
                 offset = 0
-                while offset < SHARED_BYTES:
-                    count = os.write(fd, view[offset:SHARED_BYTES])
+                while offset < size:
+                    block = view[offset:size] if source_fd is None else os.pread(source_fd, min(1048576, size-offset), offset)
+                    if not block:
+                        raise ValueError('Truncated original native program source')
+                    count = os.write(fd, block)
                     if count <= 0:
                         raise OSError('Incomplete code backing write')
                     offset += count
+                if source_fd is not None and _digest_fd(fd, size) != digest:
+                    raise ValueError('Copied native program differs before CAS publication')
                 os.fsync(fd)
                 os.fchmod(fd, 0o444)
             finally:
@@ -80,8 +91,8 @@ def _open_backing(view, digest, cache_dir):
         try:
             info = os.fstat(fd)
             if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or
-                    info.st_size != SHARED_BYTES or info.st_mode & 0o222 or
-                    _digest_fd(fd, SHARED_BYTES) != digest):
+                    info.st_size != size or info.st_mode & 0o222 or
+                    _digest_fd(fd, size) != digest):
                 raise ValueError('Exact read-only code backing differs')
             return fd, str(target), (info.st_dev, info.st_ino)
         except BaseException:
@@ -106,11 +117,28 @@ class _Mapping:
 
 class _Lifetime:
     def __init__(self, mapping):
+        # Keep the original single-mapping attributes for code-page callers.
+        # None of these objects may retain the Python Uc itself.
         self.mapping = mapping
+        self.mappings = [mapping]
         self.engine_closed = False
         self.mapping_closed = False
         self.order = []
         self.error = None
+        self.close_attempted = False
+        self.closed_mappings = 0
+        self.thread = threading.get_ident()
+        self.finalizer = None
+        self.handle = None
+
+    def add(self, mapping):
+        if self.close_attempted or self.error is not None:
+            raise ValueError('Closed or quarantined Uc backing owner')
+        if threading.get_ident() != self.thread:
+            raise ValueError('Uc backing requires its serial resource owner')
+        if any(item is mapping for item in self.mappings):
+            raise ValueError('Backing already belongs to this Uc')
+        self.mappings.append(mapping)
 
 
 def _close_then_release(close_handle, handle, lifetime,
@@ -120,6 +148,9 @@ def _close_then_release(close_handle, handle, lifetime,
     Capture the official ctypes uc_close function while the binding is alive.
     A failed/unknown close retains backing; it never unmaps a possibly live Uc.
     """
+    if lifetime.close_attempted:
+        return  # Even a failed official close must not be attempted twice.
+    lifetime.close_attempted = True
     try:
         status = close_handle(handle)
         if status != 0:
@@ -131,10 +162,14 @@ def _close_then_release(close_handle, handle, lifetime,
         quarantine.append(lifetime)
         return
     try:
-        lifetime.mapping.close()
+        for mapping in lifetime.mappings:
+            mapping.close()
+            lifetime.closed_mappings += 1
+            lifetime.order.append('mmap_close')
         lifetime.mapping_closed = True
-        lifetime.order.append('mmap_close')
     except BaseException as error:
+        # Keep the entire group reachable. Remaining backings are not closed
+        # after an unexpected failure; already completed closes are recorded.
         lifetime.error = repr(error)
         quarantine.append(lifetime)
 
@@ -156,6 +191,55 @@ def _original_finalizer(uc):
     if not isinstance(close, ctypes._CFuncPtr):
         return None
     return finalizer, close, uc._uch
+
+
+def _existing_lifetime(uc):
+    """Return the sole active owner, refusing a changed/closed binding handle."""
+    try:
+        lifetime = _UC_LIFETIMES.get(uc)
+    except TypeError:  # An arbitrary object is not an official weakrefable Uc.
+        return None
+    if lifetime is None:
+        return None
+    if (lifetime.close_attempted or lifetime.error is not None or
+            lifetime.finalizer is not getattr(uc, '_Uc__finalizer', None) or
+            not lifetime.finalizer.alive or lifetime.handle is not uc._uch):
+        raise ValueError('Uc backing lifetime or official handle changed')
+    if threading.get_ident() != lifetime.thread:
+        raise ValueError('Uc backing requires its serial resource owner')
+    return lifetime
+
+
+def _attach_mapping(uc, mapping):
+    """Transfer a not-yet-exposed mapping to ONE official Uc close owner.
+
+    On failure the caller still owns the unexposed mapping. Once returned,
+    only the aggregate finalizer may release it, including on mapping errors.
+    """
+    lifetime = _existing_lifetime(uc)
+    if lifetime is not None:
+        lifetime.add(mapping)
+        return lifetime
+    lifecycle = _original_finalizer(uc)
+    if lifecycle is None:
+        raise ValueError('Exact official ARM64 Uc lifecycle required')
+    original, close, handle = lifecycle
+    lifetime = _Lifetime(mapping)
+    finalizer = weakref.finalize(uc, _close_then_release, close, handle, lifetime)
+    if original.detach() is None:
+        finalizer.detach()
+        raise _LifetimeTransferError('Official Uc finalizer could not be transferred')
+    lifetime.finalizer, lifetime.handle = finalizer, handle
+    uc._Uc__finalizer = finalizer
+    _UC_LIFETIMES[uc] = lifetime
+    return lifetime
+
+
+def _abort_mapping(uc, lifetime):
+    """A partial constructor failure is fatal, never an ordinary-map fallback."""
+    lifetime.finalizer()
+    uc._uch = None
+    _UC_LIFETIMES.pop(uc, None)
 
 
 class NativeCodePages:
@@ -188,20 +272,14 @@ class NativeCodePages:
                 hashlib.sha256(data[SHARED_BYTES:]).hexdigest() != self.tail_digest):
             raise ValueError('Original generated RX bytes or relocations differ')
         mapping = _Mapping(self._fd)
-        lifetime = _Lifetime(mapping)
-        original, close, handle = lifecycle
-        # Install one ordered cleanup owner before exposing the pointer to Uc.
-        # uc is strongly held locally; there is no weak-finalizer race here.
         try:
-            finalizer = weakref.finalize(uc, _close_then_release, close, handle, lifetime)
+            lifetime = _attach_mapping(uc, mapping)
+        except _LifetimeTransferError:
+            mapping.close()  # Preserve the prior RX pre-exposure False result.
+            return False
         except BaseException:
             mapping.close()  # No guest mapping refers to it yet.
             raise
-        if original.detach() is None:
-            finalizer.detach()
-            mapping.close()  # Still not exposed to the guest.
-            return False
-        uc._Uc__finalizer = finalizer
         try:
             self._leases[uc] = lifetime
             uc.mem_map_ptr(address, SHARED_BYTES, permissions, mapping.pointer)
@@ -212,8 +290,7 @@ class NativeCodePages:
         except BaseException:
             # A partial mapping is not a copy-mode fallback. The fresh Uc is
             # closed first, then backing is released by that same finalizer.
-            finalizer()
-            uc._uch = None
+            _abort_mapping(uc, lifetime)
             self._leases.pop(uc, None)
             raise
 
@@ -236,10 +313,61 @@ def create_code_pages(native_bytes, *, cache_dir=None):
     """Default None preserves copy mode. No source is admitted by this helper."""
     if not _supported():
         return None
-    if type(native_bytes) is not bytes or hashlib.sha256(native_bytes).hexdigest() != NATIVE_SHA256:
+    if type(native_bytes) is not bytes:
+        from source_immutable_inputs import require_native_program
+        require_native_program(native_bytes)
+    if hashlib.sha256(native_bytes).hexdigest() != NATIVE_SHA256:
         raise ValueError('Exact supported original native image required')
     data = memoryview(native_bytes)
     full_digest = hashlib.sha256(data[:SHARED_BYTES]).hexdigest()
     tail_digest = hashlib.sha256(data[SHARED_BYTES:RX_MEMORY_BYTES]).hexdigest()
     fd, path, inode = _open_backing(data, full_digest, cache_dir)
     return NativeCodePages(fd, path, inode, full_digest, tail_digest)
+
+
+def try_map_original_rx(uc, image, segment):
+    """Try existing codepages with a borrowed view; False means OLD copy path.
+
+    Existing map_segment alone owns support/hash/tail/permissions/lifecycle.
+    A failure after exposure is propagated, never treated as a copy fallback.
+    No mapped file, Uc, clock, RNG or relocations are created or changed here.
+    """
+    if getattr(image, 'native_image_views', False) is not True:
+        return False
+    pages = getattr(image, 'code_pages', None)
+    if pages is None:
+        return False
+    if (segment['p_type'] != 'PT_LOAD' or segment['p_flags'] != 5 or
+            segment['p_vaddr'] != RX_ADDRESS or segment['p_offset'] != 0 or
+            segment['p_memsz'] != RX_MEMORY_BYTES or
+            segment['p_filesz'] != segment['p_memsz']):
+        return False
+    raw = image.data
+    offset, size, start = segment['p_offset'], segment['p_filesz'], segment['p_vaddr']
+    if type(raw) is not bytes:
+        from source_immutable_inputs import require_native_program
+        require_native_program(raw)
+    if type(offset) is not int or offset < 0 or offset + size > len(raw):
+        return False
+    # Only original relative relocations are applied by the two constructors.
+    # Keep the full 8-byte write interval out of RX, including overlap at start.
+    for address, _ in image.iter_relative_relocations():
+        if address < start + size and address + 8 > start:
+            return False
+    view = memoryview(raw)[offset:offset + size]
+    try:
+        result = pages.map_segment(uc, start, size, view)
+        if result is not True and result is not False:
+            raise ValueError('Existing codepages must return its actual boolean result')
+        return result
+    finally:
+        view.release()
+
+
+def open_native_program_backing(source_fd, *, cache_dir=None):
+    """Same CAS publisher, whole verified original ELF; no Uc mapping here."""
+    info = os.fstat(source_fd)
+    if not stat.S_ISREG(info.st_mode) or info.st_size != NATIVE_FILE_BYTES or _digest_fd(source_fd, NATIVE_FILE_BYTES) != NATIVE_SHA256:
+        raise ValueError('Exact original native program fd required')
+    return _open_backing(None, NATIVE_SHA256, cache_dir, size=NATIVE_FILE_BYTES,
+                         filename=NATIVE_SHA256 + '.elf', source_fd=source_fd)

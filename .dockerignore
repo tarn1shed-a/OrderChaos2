@@ -364,4 +364,8 @@
 !tools/world_latest_delivery_v1/worker.py
 !tools/source_runtime_resources.py
 !tools/source_code_pages.py
+!tools/source_guest_pages.py
+!tools/source_server_body_data.py
+!tools/source_immutable_inputs.py
+!tools/source_uc_tcg.py
 # END REVIEWED SOURCE WORLD

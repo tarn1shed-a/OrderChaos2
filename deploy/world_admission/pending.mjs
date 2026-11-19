@@ -104,7 +104,13 @@ export function createSourceWorldPendingJoins({registry,contractSet=LEGACY_WORLD
     }
    }
   },
-  close(ws){const r=byPlayer.get(ws.player);if(!r)return;if(r.phase==='pending')forget(r);else remove(r);},
+  close(ws){
+   const r=byPlayer.get(ws.player);if(!r)return;
+   if(r.phase==='pending')forget(r);
+   // Active room membership must remain visible to the server's original
+   // close handler so it can save the final position before removing it.
+   else try{r.ws.motion?.forget?.(r.player);}catch(error){onFault(error);}finally{remove(r);}
+  },
   failUncommitted(ws,error){
    if(!ws.character?.sourceAvatar||runtime.active.get(ws.character.id)===ws)return false;
    const r=byPlayer.get(ws.player);if(r)try{forget(r);}catch(cleanup){onFault(cleanup);}

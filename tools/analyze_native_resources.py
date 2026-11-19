@@ -7,10 +7,12 @@ import argparse
 import bisect
 import hashlib
 import io
+import os
 import json
 import struct
 import zipfile
 from pathlib import Path
+from functools import cached_property
 
 from capstone import Cs, CS_ARCH_ARM64, CS_MODE_LITTLE_ENDIAN
 from elftools.elf.elffile import ELFFile
@@ -30,11 +32,18 @@ ANCHORS = {
 
 
 class NativeImage:
-    def __init__(self, data):
+    def __init__(self, data, *, elf_stream=None):
+        from source_immutable_inputs import native_elf_file_enabled, require_native_program
+        if elf_stream is not None:
+            if not native_elf_file_enabled():
+                raise ValueError('Explicit native program file mode required')
+            require_native_program(data, elf_stream)
+        elif native_elf_file_enabled():
+            raise ValueError('Native program file mode requires the pinned from_file loader')
         if hashlib.sha256(data).hexdigest() != NATIVE_SHA256:
             raise ValueError('Unsupported native build; recorded addresses apply only to the verified 3.1.3a ARM64 library')
         self.data = data
-        self.elf = ELFFile(io.BytesIO(data))
+        self.elf = ELFFile(io.BytesIO(data) if elf_stream is None else elf_stream)
         if self.elf['e_machine'] != 'EM_AARCH64':
             raise ValueError('Expected ARM64 ELF')
         header = self.elf.get_section_by_name('.eh_frame_hdr')
@@ -45,9 +54,15 @@ class NativeImage:
         if len(raw) != 12 + count * 8:
             raise ValueError('Invalid unwind table length')
         base = header['sh_addr']
-        self.functions = [(base + start, base + fde) for start, fde in struct.iter_unpack('<ii', raw[12:])]
-        self.starts = [start for start, _ in self.functions]
-        self.disassembler = Cs(CS_ARCH_ARM64, CS_MODE_LITTLE_ENDIAN)
+        self.native_image_views = os.environ.get('OC2_NATIVE_IMAGE_VIEWS') == '1'
+        if self.native_image_views:
+            self._unwind_header = raw
+            self._unwind_base = base
+            self._unwind_count = count
+        else:
+            self.functions = [(base + start, base + fde) for start, fde in struct.iter_unpack('<ii', raw[12:])]
+            self.starts = [start for start, _ in self.functions]
+            self.disassembler = Cs(CS_ARCH_ARM64, CS_MODE_LITTLE_ENDIAN)
         self.imports = {}
         symbols = self.elf.get_section_by_name('.dynsym')
         plt = self.elf.get_section_by_name('.plt')['sh_addr']
@@ -58,6 +73,75 @@ class NativeImage:
         from source_code_pages import create_code_pages
         self.code_pages = create_code_pages(data)
 
+    @classmethod
+    def from_file(cls, root, descriptor):
+        from source_immutable_inputs import native_elf_file_enabled, open_native_program, native_program_stream
+        if not native_elf_file_enabled():
+            return cls(Path(descriptor['path']).read_bytes())
+        _, data = open_native_program(root, descriptor)
+        stream = native_program_stream(data)
+        try:
+            return cls(data, elf_stream=stream)
+        except BaseException:
+            stream.close()
+            raise
+
+    def _unwind_entry(self, index):
+        start, fde = struct.unpack_from('<ii', self._unwind_header, 12 + index * 8)
+        return self._unwind_base + start, self._unwind_base + fde
+
+    def _unwind_index(self, address):
+        # Same bisect_right comparison and signed source entries, no full list.
+        low, high = 0, self._unwind_count
+        while low < high:
+            middle = (low + high) // 2
+            start, = struct.unpack_from('<i', self._unwind_header, 12 + middle * 8)
+            if address < self._unwind_base + start:
+                high = middle
+            else:
+                low = middle + 1
+        return low - 1
+
+    @cached_property
+    def functions(self):
+        return [self._unwind_entry(index) for index in range(self._unwind_count)]
+
+    @cached_property
+    def starts(self):
+        return [self._unwind_base + struct.unpack_from('<i', self._unwind_header, 12 + index * 8)[0]
+                for index in range(self._unwind_count)]
+
+    @cached_property
+    def disassembler(self):
+        return Cs(CS_ARCH_ARM64, CS_MODE_LITTLE_ENDIAN)
+
+    def iter_relative_relocations(self):
+        """Candidate body for NativeImage.iter_relative_relocations().
+
+        Match the original ELF64LE .rela.dyn reader's offset/addend and type1027
+        filtering. No Container list or table-byte copy. Caller already validates
+        original image provenance; unknown layouts are explicitly refused.
+        """
+        raw, elf = self.data, self.elf
+        if type(raw) is not bytes:
+            from source_immutable_inputs import require_native_program
+            require_native_program(raw)
+        if elf.elfclass != 64 or not elf.little_endian or elf['e_machine'] != 'EM_AARCH64':
+            raise ValueError('Original immutable AArch64 ELF64LE bytes required')
+        section = elf.get_section_by_name('.rela.dyn')
+        if section is None or section['sh_type'] != 'SHT_RELA' or section['sh_entsize'] != 24:
+            raise ValueError('Original ELF64 24-byte .rela.dyn table required')
+        offset, size = section['sh_offset'], section['sh_size']
+        if type(offset) is not int or type(size) is not int or offset < 0 or size < 0 or size % 24 or offset + size > len(raw):
+            raise ValueError('Complete bounded original relocation table required')
+        view = memoryview(raw)[offset:offset + size]
+        try:
+            for address, info, addend in struct.iter_unpack('<QQq', view):
+                if info & 0xffffffff == 1027:
+                    yield address, addend
+        finally:
+            view.release()
+
     def read(self, address, size):
         for segment in self.elf.iter_segments():
             begin = segment['p_vaddr']
@@ -67,10 +151,16 @@ class NativeImage:
         raise ValueError(f'Address outside file-backed ELF segments: {address:#x}')
 
     def routine(self, address):
-        index = bisect.bisect_right(self.starts, address) - 1
+        if self.native_image_views:
+            index = self._unwind_index(address)
+        else:
+            index = bisect.bisect_right(self.starts, address) - 1
         if index < 0:
             raise ValueError('No unwind entry for address')
-        start, fde = self.functions[index]
+        if self.native_image_views:
+            start, fde = self._unwind_entry(index)
+        else:
+            start, fde = self.functions[index]
         delta, size = struct.unpack_from('<iI', self.read(fde + 8, 8))
         if fde + 8 + delta != start or not start <= address < start + size:
             raise ValueError('Unwind FDE does not match the requested function')

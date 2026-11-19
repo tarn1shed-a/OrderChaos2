@@ -20,6 +20,11 @@ jobs:
       - run: python tools/source_runtime_resources_tests.py
       - run: python tools/player_world_static_body_tests.py
       - run: python tools/source_code_pages_tests.py
+      - run: python tools/source_native_image_views_tests.py
+      - run: python tools/source_immutable_inputs_tests.py --run-linux
+      - run: python tools/source_uc_tcg_tests.py
+      - run: python tools/source_guest_pages_tests.py
+      - run: python tools/source_server_body_data_tests.py
       - run: python tools/runtime_delta_tests.py
       - run: python tools/resource_tests.py
       - run: python tools/bdae_tests.py

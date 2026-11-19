@@ -153,7 +153,18 @@ def with_gather_frame_observer(base,*,read_native_facts,on_fault):
      raise
     finally:self.gather_operation=None
    result=super().request(operation,data)
-   if operation=='forget'and isinstance(data,dict)and data.get('bodyKey')in self.gather_hooks:self.gather_hooks[data['bodyKey']].forget(data['identity'])
+   if operation=='forget'and isinstance(data,dict)and data.get('bodyKey')in self.gather_hooks:
+    key=data['bodyKey'];hook=self.gather_hooks[key];hook.forget(data['identity'])
+   if operation=='withOwnSourceTimeval'and isinstance(data,dict)and data.get('operation')=='forget':
+    key=data['data']['bodyKey'];hook=self.gather_hooks[key]
+    e=self.engines[key]
+    if not e.humans and key not in self.owners.values() and not any(row['key']==key for row in self.read_entries.values()) and not hook.pending and not hook.latest:
+     # The original forget, global pull and read/frame lease invalidations
+     # have completed. Keep this exact VM, heap, clock, RNG and static owner;
+     # only its disk-backed pages may leave physical RAM at this boundary.
+     if self.operation_timeval is not None or self.gather_operation is not None or e.human_active:raise ValueError('Idle page reclaim requires a completed native operation')
+     from source_guest_pages import reclaim_guest_pages
+     for uc in (e.uc,e.human_pose[0].uc):reclaim_guest_pages(uc)
    return result
   def dispose(self):
    for h in self.gather_hooks.values():h.dispose()

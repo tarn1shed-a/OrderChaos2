@@ -36,14 +36,14 @@ def validate(cfg):
  return sp,reader
 
 def load(config,qa_evidence=False):
- from analyze_native_resources import NativeImage
+ from analyze_native_resources import NativeImage,NATIVE_SHA256
  from index_body_banks import bank_probe_type
  from character_human_queue_probe import profile_hash
  from player_choice_female_worker import load_female_pose
  path=Path(config).resolve()
  if not path.is_relative_to(ROOT/'analysis/raw'):raise ValueError('Private ignored own configuration required')
  started=time.perf_counter();cfg=json.loads(path.read_text());species,reader=validate(cfg)
- image=NativeImage(Path(cfg['library']).read_bytes());bank=bank_probe_type()(image);bank.build(reader)
+ image=NativeImage.from_file(ROOT,{'path':cfg['library'],'sha256':NATIVE_SHA256});bank=bank_probe_type()(image);bank.build(reader)
  p=copy.deepcopy(json.loads((ROOT/'analysis/raw/character-human-queue-20261115/profile-v2-private.json').read_text()))
  kind,format,methods=own_type();p.update(format=format,species=species);p['stop']['ranges']=species['ranges'];p['layer']['sourceClipNames']=species['sourceClipNames'];p['layer']['engineFlags']=species['engineFlags'];p['sha256']=profile_hash(p)
  context=json.loads((ROOT/'analysis/raw/player-choice-human-male-air-20261116/candidate-v4/native-physics.world.json').read_text())['sourceRuntimeInputs']

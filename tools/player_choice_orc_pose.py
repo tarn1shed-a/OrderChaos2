@@ -9,6 +9,7 @@ from character_human_queue_fast_probe import FastHumanCompositionProbe,DISPATCH
 from character_human_queue_composition_probe import HumanCompositionProbe
 from character_human_queue_bones_probe import mask_hash
 from bdae_character import aliases
+from source_server_body_data import body_data_canonical
 
 ROOT=Path(__file__).resolve().parents[1]
 RAW=ROOT/'analysis/raw/player-choice-orc-male-20261115'
@@ -22,7 +23,7 @@ def canonical(value):
 
 def bind_orc_mask(report,data):
     if report.get('format')!='oc2-source-orc-male-layer-mask-v1' or report.get('sha256')!=mask_hash(report) or \
-      report.get('nativeSHA256')!=NATIVE or report.get('bodyDataCanonicalSHA256')!=canonical(data) or \
+      report.get('nativeSHA256')!=NATIVE or report.get('bodyDataCanonicalSHA256')!=body_data_canonical(data) or \
       report.get('sourceModelId')!=28 or data.get('source')!=MODEL or report.get('compatible',{}).get('propertiesCompatible')is not True:
         raise ValueError('Exact original OrcMale28 property mask required')
     names=aliases(data['rig']['nodes']);order=report['sourcePropertyOrder'];weights=report['compatible']['sourcePropertyWeights']

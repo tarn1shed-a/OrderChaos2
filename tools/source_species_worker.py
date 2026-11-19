@@ -1,7 +1,8 @@
 """Versioned transport addition for each explicit actor's original model queue.
 
-The reviewed worker and its original physics are not edited. A SHA-guarded copy
-selects the already verified SourceSpeciesQueue only with a local pinned profile.
+The historical SHA keeps its exact projection. Current installed worker bytes
+are checked against the shared source declaration before an exact projection.
+Original physics and optional pinned model profiles are not replaced.
 """
 import hashlib
 import json
@@ -59,9 +60,26 @@ def forget_source_actor(engine, identity):
 
 
 def staged_worker_source():
-    raw = Path(__file__).with_name('source_physics_worker.py').read_bytes()
-    if hashlib.sha256(raw).hexdigest() != WORKER_SHA256:
-        raise ValueError('Reviewed physics worker identity differs')
+    path = Path(__file__).with_name('source_physics_worker.py')
+    raw = path.read_bytes()
+    legacy = hashlib.sha256(raw).hexdigest() == WORKER_SHA256
+    if not legacy:
+        # This is the same installed declaration verified by bootstrap. Never
+        # derive an expected identity from the worker bytes being admitted.
+        declaration = json.loads(path.with_name('source_world_python.json').read_text())
+        files = declaration.get('files') if isinstance(declaration, dict) else None
+        if (not isinstance(declaration, dict) or
+                declaration.get('format') != 'oc2-source-world-python-closure-v1' or
+                not isinstance(files, dict)):
+            raise ValueError('Reviewed source world declaration differs')
+        for target, actual in (
+                ('tools/source_physics_worker.py', raw),
+                ('tools/source_species_worker.py', Path(__file__).read_bytes())):
+            expected = files.get(target)
+            if (type(expected) is not str or len(expected) != 64 or
+                    any(c not in '0123456789abcdef' for c in expected) or
+                    hashlib.sha256(actual).hexdigest() != expected):
+                raise ValueError('Reviewed current worker identity differs: ' + target)
     source = raw.decode()
 
     def replace(before, after):
@@ -77,8 +95,16 @@ def staged_worker_source():
             "    summary.update(load_species_profiles(engine,cfg,root))\n    for line in sys.stdin:")
     replace("                identity=data['identity'];position=data['position']",
             "                bind_source_reset(engine,data)\n                identity=data['identity'];position=data['position']")
-    replace("            elif op=='forget':engine.actors.pop(data['identity'],None);result=True",
-            "            elif op=='forget':forget_source_actor(engine,data['identity']);result=True")
+    if legacy:
+        replace("            elif op=='forget':engine.actors.pop(data['identity'],None);result=True",
+                "            elif op=='forget':forget_source_actor(engine,data['identity']);result=True")
+    else:
+        replace("            elif op=='forget':\n"
+                "                engine.actors.pop(data['identity'],None);result=True\n"
+                "                if not engine.actors:reclaim_guest_pages(engine.uc)",
+                "            elif op=='forget':\n"
+                "                forget_source_actor(engine,data['identity']);result=True\n"
+                "                if not engine.actors:reclaim_guest_pages(engine.uc)")
     return source
 
 

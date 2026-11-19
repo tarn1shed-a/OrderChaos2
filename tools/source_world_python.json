@@ -132,7 +132,7 @@
     "tools/source_runtime_resources.py": "d03b7d59f5920ebca8d3061226cb542a7484f3708115f83104eadb447b4dddd6",
     "tools/source_shore.py": "50f36353a52f861a9b1a848bd57cb7b8c0a340fd3808ad3a8a68e62f1f996fec",
     "tools/source_species_queue.py": "8efdfb10c07ac9c06ef4cdb9d3ab6ced0facfd18809f657054da4e5ba7f94c34",
-    "tools/source_species_worker.py": "8889165e85b9def0deb4ce5fb6a445efab7e1fa3e63d88bde62d278fe676a27d",
+    "tools/source_species_worker.py": "3e6eb51239e2f5a959eb16bf6ffe699d7c19da16b3ff9c887b82e19f77e5b1d6",
     "tools/source_stop_queue.py": "62865b932afa03850f5b87f047647b31c5f9da9450db46cfab23ce35fb07c11f",
     "tools/source_swimming.py": "10dee1825f3450eec5f220544634615d0db07669c9f14e8aa326e111b6cb98af",
     "tools/species_world_profiles.py": "10a3a3517b5626704af202a52e1aa73b6632d29903187740ecfd5106d2ffede7",
@@ -194,8 +194,8 @@
   "plans": {
     "latestWorld": {
       "path": "native-inputs/world-latest-v1/append-plan.json",
-      "sha256": "7ffeda6ac5b26181554a444394b3ad217276d1465d7c3e0bfac164f53860c20d",
-      "bytes": 169258
+      "sha256": "d8b488ce3bfa3481b648749bf3390b94b6dcb038956c8f10574b0588dded167c",
+      "bytes": 171898
     },
     "serverBodyData": {
       "path": "native-inputs/server-body-data-v1/index.json",

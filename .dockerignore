@@ -16,6 +16,9 @@
 # Present only in the generated, ignored CLI context; never add it to Git.
 !deploy/private-runtime.tar.gz
 !deploy/private-runtime.sha256
+!deploy/runtime_transport.py
+!deploy/private-runtime.tar.xz
+!deploy/private-runtime.transport.json
 !tools/
 !tools/preview/
 !tools/preview/map-runtime-inside-overlay.mjs

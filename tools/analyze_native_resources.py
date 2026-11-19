@@ -86,6 +86,88 @@ class NativeImage:
             stream.close()
             raise
 
+    def _immutable_routine_row(self, address, index=None, file_offset=None):
+        if index is None:
+            index = self._unwind_index(address)
+        if not 0 <= index < self._unwind_count:
+            raise ValueError('Immutable routine index outside original table')
+        start, fde = self._unwind_entry(index)
+        if file_offset is None:
+            for segment in self.elf.iter_segments():
+                begin = segment['p_vaddr']
+                if (segment['p_type'] == 'PT_LOAD' and begin <= fde + 8 and
+                        fde + 16 <= begin + segment['p_filesz']):
+                    file_offset = segment['p_offset'] + fde + 8 - begin
+                    break
+            else:
+                raise ValueError('Original routine FDE is not file-backed')
+        delta, size = struct.unpack_from('<iI', self.data, file_offset)
+        if fde + 8 + delta != start or not start <= address < start + size:
+            raise ValueError('Immutable routine FDE differs')
+        return address, index, start, fde, file_offset, delta, size
+
+    def _immutable_routine_inputs(self, addresses):
+        if (type(self) is not NativeImage or not isinstance(addresses, tuple) or
+                not addresses or len(addresses) > 64 or
+                any(type(a) is not int or a < 0 for a in addresses) or
+                len(set(addresses)) != len(addresses)):
+            raise ValueError('Explicit unique immutable source routine addresses required')
+        from source_immutable_inputs import require_native_program
+        raw, elf, stream = self.data, self.elf, self.elf.stream
+        # Bytes mode keeps every historical per-frame SHA/routine check. Only
+        # the existing live authenticated whole-program map can gain a proof.
+        if type(raw) is bytes:
+            return None
+        program = require_native_program(raw, stream)
+        if program.sha256 != NATIVE_SHA256 or program.size != len(raw):
+            raise ValueError('Original immutable program identity differs')
+        if not self.native_image_views:
+            return None
+        if type(self._unwind_header) is not bytes:
+            raise ValueError('Immutable original unwind table bytes required')
+        import threading
+        return raw, elf, stream, program, threading.get_ident(), self._unwind_header, self._unwind_base, self._unwind_count
+
+    def prepare_immutable_routines(self, addresses):
+        inputs = self._immutable_routine_inputs(addresses)
+        cache = getattr(self, '_immutable_routine_proofs', None)
+        if cache is not None and addresses in cache:
+            return self.require_prepared_immutable_routines(addresses)
+        if inputs is None:
+            return False
+        # Publish atomically only after the original complete static checks.
+        rows = []
+        for address in addresses:
+            self.routine(address)
+            rows.append(self._immutable_routine_row(address))
+        if self._immutable_routine_inputs(addresses) != inputs:
+            raise ValueError('Immutable program changed during static preparation')
+        if cache is None:
+            cache = self._immutable_routine_proofs = {}
+        cache[addresses] = inputs, tuple(rows)
+        return True
+
+    def require_prepared_immutable_routines(self, addresses):
+        cache = getattr(self, '_immutable_routine_proofs', None)
+        prepared = cache.get(addresses) if cache is not None else None
+        inputs = self._immutable_routine_inputs(addresses)
+        if prepared is None:
+            if inputs is None:
+                return False
+            raise ValueError('Immutable routines must be prepared before actor frames')
+        if inputs is None:
+            raise ValueError('Prepared immutable program was replaced')
+        old, rows = prepared
+        # Compare object leases by identity: mmap equality/ELF equality is not
+        # a substitute for the same authenticated program and parser lifetime.
+        if (any(inputs[i] is not old[i] for i in (0, 1, 2, 3, 5)) or
+                any(inputs[i] != old[i] for i in (4, 6, 7))):
+            raise ValueError('Prepared immutable program/owner/index lease changed')
+        for row in rows:
+            if self._immutable_routine_row(row[0], row[1], row[4]) != row:
+                raise ValueError('Prepared immutable routine row changed in place')
+        return True
+
     def _unwind_entry(self, index):
         start, fde = struct.unpack_from('<ii', self._unwind_header, 12 + index * 8)
         return self._unwind_base + start, self._unwind_base + fde

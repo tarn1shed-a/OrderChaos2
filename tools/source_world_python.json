@@ -1,6 +1,6 @@
 {
   "files": {
-    "tools/analyze_native_resources.py": "275d16019621f649713456d06473f4ae9651736abd9ea732e1d4ad5ca99a8f60",
+    "tools/analyze_native_resources.py": "e95fde802ca7d58f976f94ec5966d4b940d06c2f38b64095850d98762b673e36",
     "tools/animation_blending.py": "168d90373c5fd91d6ea12d7f3e03e60ab229f05ecdd62c9366dc646a9d3b931e",
     "tools/bdae_animation.py": "01972bc7187ba1c70785a5348b79a0757e9de34119709381261641d672059246",
     "tools/bdae_attributes.py": "2a1f0e252e9ae197b5fecc4d2c7e76fd67a6a090e181976471bb92e03f41c3f5",
@@ -109,7 +109,7 @@
     "tools/source_diving.py": "be29cd1153a23fa23e9b3397ec1b489f07df43d1afe6ade26d623c817e253d68",
     "tools/source_gather_common_v1/marker_queue_reader.py": "a214f8c411b46981d001419d63f0667fa92eeaa546a015c1a85f48c6536fca85",
     "tools/source_gather_frame_v1/__init__.py": "5b366d4027d2f3f865f3dbad92db3b90e7e27af4defa2779102574be2ef6a9b4",
-    "tools/source_gather_frame_v1/hook.py": "43e2d92b6f8230878c1c8f9cfc12356277a81ee7d0a872e08ab2d9f89d07a299",
+    "tools/source_gather_frame_v1/hook.py": "0c523be10db82e5e006a3baae99e83c6f9ac99c86290fa57cfbd9d455a455f04",
     "tools/source_gather_seed_v1/context_base_v1.py": "9b632b72590fdf8776b820404e1631b43f2f66d5196b52816ff0272f717efefc",
     "tools/source_gather_seed_v1/context_posture_v1.py": "9be2d4cd2c07beb5a876122dbed6606e52389a9c11828d9d00e23db7cec622f6",
     "tools/source_gather_seed_v1/context_v2.py": "10fdaebf5d40d9c737a1f4f40cc838285db52d37f4adbea71acc7ab751db5690",
@@ -182,7 +182,7 @@
     "tools/world_latest_delivery_v1/__init__.py": "58ea0ac6c1956347b4db3b6aa7b186e3b54bc61765a21521c0d83805203e8711",
     "tools/world_latest_delivery_v1/materialize.py": "beec3538534a803ec79bcb41b0c8d29196ad41c06935266f4b3a59bb637f6e0a",
     "tools/world_latest_delivery_v1/portable.py": "bd286143b402e4724e2cfa11debaebfc92cd52247ecc7dfed08ecf737b6cee58",
-    "tools/world_latest_delivery_v1/runtime.py": "ddaa7426e270178df372c01b0691cee480d89f2c06de279081c965fc6d1d4893",
+    "tools/world_latest_delivery_v1/runtime.py": "5a704955ccd8a92a3585cd8a9ac1f07e4857bbf21e860e746082542fbd116566",
     "tools/world_latest_delivery_v1/worker.py": "e5db5910d90f5530ae973ba87b1c5ca607c0b13f0de9563f259f938420cbc3b8",
     "tools/source_code_pages.py": "0c4b3a348bf7edbcff4e5d6dea785f932e5bc104713d9a6733dfb03b564c5cb2",
     "tools/source_guest_pages.py": "f893d1b9cac3054329fa9f04ff2a6af2d71d1f50b42d5d4d880dc1c08cdb23b6",
@@ -194,8 +194,8 @@
   "plans": {
     "latestWorld": {
       "path": "native-inputs/world-latest-v1/append-plan.json",
-      "sha256": "d8b488ce3bfa3481b648749bf3390b94b6dcb038956c8f10574b0588dded167c",
-      "bytes": 171898
+      "sha256": "bb5b185acc2f9d2364895e01195a05ccd5f58fccfc4f7a3aeb60e097dcd1feaf",
+      "bytes": 174141
     },
     "serverBodyData": {
       "path": "native-inputs/server-body-data-v1/index.json",

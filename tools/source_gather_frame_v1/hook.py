@@ -5,7 +5,7 @@ loop is copied. The original bound state_frame return/exception is preserved.
 The owning normal runtime explicitly commits only after its whole tick succeeds.
 """
 import copy,hashlib,inspect
-FACTS_SHA='1e250d4fa1625faf33fd6d974d1acc2896b2a1899511fa633bd94ded2ffaa351'
+FACTS_SHA='a1ecff38225442615bfa85e301d8b0c93351af85985fc6d8c86be9e23193bf89'
 
 def _opaque(x):return not isinstance(x,(type(None),str,int,float,bool,bytes,list,dict,tuple))
 def _scope(read_owner,identity):
@@ -20,6 +20,8 @@ class GatherFrameHook:
   if not all(callable(x)for x in(read_owner,read_operation,snapshot,read_native_facts,on_fault)):raise ValueError('Private owner/operation/full snapshot/frozen facts ports required')
   path=inspect.getsourcefile(read_native_facts)
   if not path or hashlib.sha256(open(path,'rb').read()).hexdigest()!=FACTS_SHA:raise ValueError('Exact shared original readonly posture helper required')
+  # This pinned helper prepares only immutable source proof; no actor/frame.
+  read_native_facts.prepare_static(engine)
   if getattr(engine,'_gather_frame_hook_owner',None)is not None:raise ValueError('One observer per existing source engine')
   self.e=engine;self.owner=read_owner;self.operation=read_operation;self.snapshot=snapshot;self.facts=read_native_facts;self.fault=on_fault;self.closed=False;self.pending={};self.latest={};self.ordinals={};self.bad_tokens=set();self.original=engine.state_frame;self.token=object();self.current_wrapper=self._frame
   engine._gather_frame_hook_owner=self.token;engine.state_frame=self.current_wrapper

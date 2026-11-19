@@ -21,6 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / 'analysis/raw/portable/running-preview'
 FORMAT = 'oc2-private-runtime-v1'
 MAX_EXPANDED = 2 * 1024**3
+BUNDLE_CACHE = Path('/data/bundles')
+DELTA_V2 = 'oc2-private-runtime-delta-v2'
 WORLD_PATH_INDEX_SHA = '5adc87f4f9d95cce1a563cf5809cc48b3fff24c996826a390afe96c3cd23d3e8'
 WORLD_GATHER_PLAN_SHA = 'b5e0be53fcd9680e9c8b5eb672a0b66de6eb8440815c6390809050e0faf7eebe'
 
@@ -158,16 +160,158 @@ def members_checked(bundle):
     return members, names, manifest
 
 
-def write_checked(bundle, member, manifest, stage):
-    target = stage / member.name
+def write_source_checked(source, name, manifest, stage):
+    relative(name)
+    target = stage / name
     target.parent.mkdir(parents=True, exist_ok=True)
-    with bundle.extractfile(member) as source, target.open('xb') as output:
+    with target.open('xb') as output:
         shutil.copyfileobj(source, output)
     target.chmod(0o600)
-    if member.name != 'bundle-manifest.json':
-        expected = manifest['files'][member.name]
+    if name != 'bundle-manifest.json':
+        expected = manifest['files'][name]
         if target.stat().st_size != expected['bytes'] or sha(target) != expected['sha256']:
-            raise ValueError('Private runtime file identity differs: ' + member.name)
+            raise ValueError('Private runtime file identity differs: ' + name)
+
+
+def write_checked(bundle, member, manifest, stage):
+    with bundle.extractfile(member) as source:
+        write_source_checked(source, member.name, manifest, stage)
+
+
+def unique_json(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError('Duplicate private delta JSON key')
+        value[key] = item
+    return value
+
+
+def strict_manifest(bundle):
+    raw = bundle.extractfile('bundle-manifest.json').read()
+    return json.loads(raw, object_pairs_hook=unique_json), hashlib.sha256(raw).hexdigest()
+
+
+def checked_file_rows(manifest):
+    if (type(manifest) is not dict or manifest.get('format') != FORMAT or
+            manifest.get('localSavesImported') is not False or
+            type(manifest.get('files')) is not dict or not manifest['files'] or
+            type(manifest.get('pythonFiles')) is not dict):
+        raise ValueError('Invalid private delta manifest')
+    lengths = {}
+    for name, row in manifest['files'].items():
+        relative(name)
+        if (name in {'bundle-manifest.json', 'bundle-base.json'} or type(row) is not dict or
+                set(row) != {'bytes', 'sha256'} or type(row['bytes']) is not int or
+                not 0 <= row['bytes'] <= MAX_EXPANDED or type(row['sha256']) is not str or
+                not re.fullmatch('[0-9a-f]{64}', row['sha256'])):
+            raise ValueError('Invalid private delta payload identity')
+        if row['sha256'] in lengths and lengths[row['sha256']] != row['bytes']:
+            raise ValueError('Ambiguous private delta content identity')
+        lengths[row['sha256']] = row['bytes']
+    for name, digest in manifest['pythonFiles'].items():
+        relative(name)
+        if (not name.startswith('tools/') or not name.endswith('.py') or
+                type(digest) is not str or not re.fullmatch('[0-9a-f]{64}', digest)):
+            raise ValueError('Invalid private delta image Python identity')
+    if len(manifest['files']) + 1 > 20000 or sum(row['bytes'] for row in manifest['files'].values()) > MAX_EXPANDED:
+        raise ValueError('Logical private runtime exceeds limits')
+    return manifest['files']
+
+
+def derive_delta_v2(old_manifest, manifest):
+    old, new = checked_file_rows(old_manifest), checked_file_rows(manifest)
+    if old_manifest['runtimeIdentity'] != manifest['runtimeIdentity']:
+        raise ValueError('Private delta targets a different reviewed runtime')
+    if any(new.get(name) != row for name, row in old.items()):
+        raise ValueError('Private delta v2 cannot replace or remove existing files')
+    lengths = {row['sha256']: row['bytes'] for row in old.values()}
+    for row in new.values():
+        if row['sha256'] in lengths and lengths[row['sha256']] != row['bytes']:
+            raise ValueError('Ambiguous private delta content identity')
+        lengths[row['sha256']] = row['bytes']
+    added = sorted(set(new) - set(old))
+    if not added:
+        raise ValueError('No append-only runtime files to deliver')
+    def identity(row):
+        return row['sha256'], row['bytes']
+    base_content, payload_content, aliases, payload = {}, {}, {}, []
+    for name in sorted(old):
+        base_content.setdefault(identity(old[name]), name)
+    for name in added:
+        key = identity(new[name])
+        if key in base_content:
+            aliases[name] = {'source': 'base', 'path': base_content[key]}
+        elif key in payload_content:
+            aliases[name] = {'source': 'delta', 'path': payload_content[key]}
+        else:
+            payload.append(name)
+            payload_content[key] = name
+    return {'added': added, 'payload': payload, 'aliases': aliases}
+
+
+def delta_v2_reference_checked(reference):
+    keys = {'format', 'baseArchiveSHA256', 'baseManifestSHA256', 'targetManifestSHA256', 'aliases'}
+    if type(reference) is not dict or set(reference) != keys or reference['format'] != DELTA_V2:
+        raise ValueError('Invalid private delta v2 reference')
+    for key in ('baseArchiveSHA256', 'baseManifestSHA256', 'targetManifestSHA256'):
+        if type(reference[key]) is not str or not re.fullmatch('[0-9a-f]{64}', reference[key]):
+            raise ValueError('Invalid private delta v2 digest')
+    if type(reference['aliases']) is not dict:
+        raise ValueError('Invalid private delta v2 aliases')
+    for name, row in reference['aliases'].items():
+        relative(name)
+        if type(row) is not dict or set(row) != {'source', 'path'} or row['source'] not in ('base', 'delta'):
+            raise ValueError('Invalid private delta v2 alias')
+        relative(row['path'])
+    return reference
+
+
+def make_delta_v2_reference(old_manifest, manifest, base_digest, base_manifest_digest, target_manifest_digest):
+    layout = derive_delta_v2(old_manifest, manifest)
+    reference = {'format': DELTA_V2, 'baseArchiveSHA256': base_digest,
+                 'baseManifestSHA256': base_manifest_digest, 'targetManifestSHA256': target_manifest_digest,
+                 'aliases': layout['aliases']}
+    return delta_v2_reference_checked(reference)
+
+
+def extract_delta_v2(bundle, members, names, manifest, reference, stage):
+    reference = delta_v2_reference_checked(reference)
+    manifest, manifest_digest = strict_manifest(bundle)
+    if manifest_digest != reference['targetManifestSHA256']:
+        raise ValueError('Private delta v2 target manifest differs')
+    target_files = checked_file_rows(manifest)
+    if sum(row['bytes'] for row in target_files.values()) + bundle.getmember('bundle-manifest.json').size > MAX_EXPANDED:
+        raise ValueError('Logical private runtime exceeds limits')
+    base_archive = BUNDLE_CACHE / (reference['baseArchiveSHA256'] + '.tar.gz')
+    if not base_archive.is_file() or sha(base_archive) != reference['baseArchiveSHA256']:
+        raise ValueError('Verified private runtime base is unavailable')
+    with tarfile.open(base_archive, 'r:gz') as base:
+        old_members, old_names, old_manifest = members_checked(base)
+        if 'bundle-base.json' in old_names or set(old_manifest['files']) != old_names - {'bundle-manifest.json'}:
+            raise ValueError('Only one complete private base is accepted')
+        old_manifest, old_digest = strict_manifest(base)
+        if old_digest != reference['baseManifestSHA256']:
+            raise ValueError('Private delta v2 base manifest differs')
+        layout = derive_delta_v2(old_manifest, manifest)
+        if reference['aliases'] != layout['aliases']:
+            raise ValueError('Private delta v2 aliases differ from exact content identities')
+        if names != set(layout['payload']) | {'bundle-manifest.json', 'bundle-base.json'}:
+            raise ValueError('Private delta v2 member set differs')
+        if (len(old_members) + len(members) > 20000 or
+                sum(m.size for m in old_members) + sum(m.size for m in members) > MAX_EXPANDED):
+            raise ValueError('Combined private runtime exceeds limits')
+        for member in old_members:
+            if member.name != 'bundle-manifest.json':
+                write_checked(base, member, old_manifest, stage)
+    for member in members:
+        if member.name != 'bundle-base.json':
+            write_checked(bundle, member, manifest, stage)
+    for name, alias in layout['aliases'].items():
+        # Only non-alias base/payload source paths are accepted by derive_delta_v2.
+        with (stage / alias['path']).open('rb') as source:
+            write_source_checked(source, name, manifest, stage)
+    return manifest
 
 
 def extract_verified(archive, digest, destination):
@@ -179,37 +323,44 @@ def extract_verified(archive, digest, destination):
         stage = Path(temporary)
         with tarfile.open(archive, 'r:gz') as bundle:
             members, names, manifest = members_checked(bundle)
+            v2_complete = False
             if 'bundle-base.json' in names:
                 reference = json.load(bundle.extractfile('bundle-base.json'))
-                base_digest = reference.get('baseArchiveSHA256', '')
-                if (reference.get('format') != 'oc2-private-runtime-delta-v1' or
-                        not re.fullmatch('[0-9a-f]{64}', base_digest)):
-                    raise ValueError('Private runtime base reference differs')
-                base_archive = Path(archive).parent / (base_digest + '.tar.gz')
-                if not base_archive.is_file() or sha(base_archive) != base_digest:
-                    raise ValueError('Verified private runtime base is unavailable')
-                with tarfile.open(base_archive, 'r:gz') as base:
-                    old_members, old_names, old_manifest = members_checked(base)
-                    if 'bundle-base.json' in old_names or set(old_manifest['files']) != old_names - {'bundle-manifest.json'}:
-                        raise ValueError('Only one complete private base is accepted')
-                    old_files, new_files = old_manifest['files'], manifest['files']
-                    if (old_manifest['runtimeIdentity'] != manifest['runtimeIdentity'] or
-                            old_manifest['pythonFiles'] != manifest['pythonFiles'] or
-                            any(new_files.get(name) != meta for name, meta in old_files.items())):
-                        raise ValueError('Private delta cannot replace existing runtime files')
-                    if set(new_files) - set(old_files) != names - {'bundle-manifest.json', 'bundle-base.json'}:
-                        raise ValueError('Private delta member set differs')
-                    if (len(old_members) + len(members) > 20000 or
-                            sum(m.size for m in old_members) + sum(m.size for m in members) > MAX_EXPANDED):
-                        raise ValueError('Combined private runtime exceeds limits')
-                    for member in old_members:
-                        if member.name != 'bundle-manifest.json':
-                            write_checked(base, member, old_manifest, stage)
+                if reference.get('format') == DELTA_V2:
+                    reference = json.loads(bundle.extractfile('bundle-base.json').read(), object_pairs_hook=unique_json)
+                    manifest = extract_delta_v2(bundle, members, names, manifest, reference, stage)
+                    v2_complete = True
+                else:
+                    base_digest = reference.get('baseArchiveSHA256', '')
+                    if (reference.get('format') != 'oc2-private-runtime-delta-v1' or
+                            not re.fullmatch('[0-9a-f]{64}', base_digest)):
+                        raise ValueError('Private runtime base reference differs')
+                    base_archive = Path(archive).parent / (base_digest + '.tar.gz')
+                    if not base_archive.is_file() or sha(base_archive) != base_digest:
+                        raise ValueError('Verified private runtime base is unavailable')
+                    with tarfile.open(base_archive, 'r:gz') as base:
+                        old_members, old_names, old_manifest = members_checked(base)
+                        if 'bundle-base.json' in old_names or set(old_manifest['files']) != old_names - {'bundle-manifest.json'}:
+                            raise ValueError('Only one complete private base is accepted')
+                        old_files, new_files = old_manifest['files'], manifest['files']
+                        if (old_manifest['runtimeIdentity'] != manifest['runtimeIdentity'] or
+                                old_manifest['pythonFiles'] != manifest['pythonFiles'] or
+                                any(new_files.get(name) != meta for name, meta in old_files.items())):
+                            raise ValueError('Private delta cannot replace existing runtime files')
+                        if set(new_files) - set(old_files) != names - {'bundle-manifest.json', 'bundle-base.json'}:
+                            raise ValueError('Private delta member set differs')
+                        if (len(old_members) + len(members) > 20000 or
+                                sum(m.size for m in old_members) + sum(m.size for m in members) > MAX_EXPANDED):
+                            raise ValueError('Combined private runtime exceeds limits')
+                        for member in old_members:
+                            if member.name != 'bundle-manifest.json':
+                                write_checked(base, member, old_manifest, stage)
             elif set(manifest['files']) != names - {'bundle-manifest.json'}:
                 raise ValueError('Private runtime member set differs')
-            for member in members:
-                if member.name != 'bundle-base.json':
-                    write_checked(bundle, member, manifest, stage)
+            if not v2_complete:
+                for member in members:
+                    if member.name != 'bundle-base.json':
+                        write_checked(bundle, member, manifest, stage)
         pinned = json.loads((ROOT / 'tools/local_mvp_runtime.json').read_text())
         if manifest['runtimeIdentity'] != pinned:
             raise ValueError('Bundle targets a different reviewed runtime')
@@ -245,9 +396,15 @@ def archive_from_env():
         with tarfile.open(source, 'r:gz') as packed:
             _, names, _ = members_checked(packed)
             if 'bundle-base.json' in names:
-                raise ValueError('Uncached deployment requires a complete private archive')
+                reference = json.loads(packed.extractfile('bundle-base.json').read(), object_pairs_hook=unique_json)
+                if type(reference) is not dict or reference.get('format') != DELTA_V2:
+                    raise ValueError('Uncached deployment requires a complete private archive')
+                delta_v2_reference_checked(reference)
+                # Selection is not preparation. extract_verified must verify the
+                # one exact /data cached complete base before any runtime starts.
+
         return source, digest
-    cache = Path('/data/bundles')
+    cache = BUNDLE_CACHE
     cache.mkdir(parents=True, exist_ok=True, mode=0o700)
     archive = cache / (digest + '.tar.gz')
     if archive.exists() and sha(archive) == digest:

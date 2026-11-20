@@ -5,6 +5,7 @@ import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {installDelivery} from './static_delivery.mjs';
+import {sourceWorldBodies} from './source_world_bodies.mjs';
 import {writeFileSync} from 'node:fs';
 import {entryServer,trialRoleManager,installEntryManagement} from './entry_manage.mjs';
 import {installEntryRead} from './entry_read.mjs';
@@ -21,6 +22,8 @@ import {createQuestMotion} from './quest_motion.mjs';
 import {installQuestTransport} from './quest_transport.mjs';
 import {createQuestCollection} from './quest_collection.mjs';
 import {createQuestGatherServer} from './quest_gather_server.mjs';
+import {deferNativeMotion} from './deferred_native_motion.mjs';
+import {stageFixedStepServer} from './fixed_step_scheduler.mjs';
 
 const root=resolve(new URL('../',import.meta.url).pathname);
 const runtime=resolve(root,'analysis/raw/portable/running-preview');
@@ -43,36 +46,46 @@ if(existsSync(questProfileFile)!==existsSync(questConfigFile))throw Error('Incom
 const ordinaryQuestLayer=existsSync(questProfileFile)?new OrdinaryQuestLedger(JSON.parse(readFileSync(questProfileFile,'utf8')),{saveFile:'/data/saves/ordinary-quests.json'}):null;
 const collectionFile=resolve(runtime,'game-data/converted/source-quest461-channel-v1/execution.json');
 const collection=existsSync(collectionFile)?createQuestCollection({ledger:ordinaryQuestLayer,profile:JSON.parse(readFileSync(collectionFile,'utf8'))}):null;
-let serverSource=stageInspectorServer(stageSourceAvatarServer(entryServer(readFileSync(new URL('server.mjs',base),'utf8'),new URL('./movement_trace.mjs',import.meta.url).href)));
+const sourceBodies=sourceWorldBodies(process.env.OC2_HUMAN_FEMALE_WORLD==='1',process.env.OC2_SOURCE_WORLD_BODIES);
+const sourceWorld=sourceBodies.length?await(await import('./source_world_runtime.mjs')).loadSourceWorldRuntime({root,runtime,enabledBodyKeys:sourceBodies,gatherEnabled:process.env.OC2_SOURCE_GATHER==='1'}):null;
+if(sourceWorld&&!ordinaryQuestLayer)throw Error('Source body requires the reviewed ordinary world');
+let serverSource=entryServer(readFileSync(new URL('server.mjs',base),'utf8'),new URL('./movement_trace.mjs',import.meta.url).href);
+serverSource=stageInspectorServer(sourceWorld?sourceWorld.stagePlayerChoice(serverSource):stageSourceAvatarServer(serverSource));
 if(ordinaryQuestLayer)serverSource=stageOrdinaryQuestServer(serverSource);
+if(sourceWorld)serverSource=sourceWorld.stageServer(serverSource);
+serverSource=stageFixedStepServer(serverSource);
 writeFileSync(observed,serverSource);
 const {createGameServer}=await import(observed);
-const motion=configureTrialEntry(loadNativeWindowCollision(new URL('native-physics.json',base)));
-if(!motion?.sourceNative)throw Error('Original collision inputs are unavailable; no fallback');
+const loadTutorialMotion=()=>configureTrialEntry(loadNativeWindowCollision(new URL('native-physics.json',base)));
+const motion=sourceWorld?deferNativeMotion(loadTutorialMotion):loadTutorialMotion();
+if(!sourceWorld&&!motion?.sourceNative)throw Error('Original collision inputs are unavailable; no fallback');
 const gameplay=loadGameplay();
 if(!gameplay)throw Error('Reviewed gameplay data unavailable');
-let game;
-const gather=collection?await createQuestGatherServer({runtime,collection,readGame:()=>game,
- onFault:fault=>console.error('Compatible gather presentation:',JSON.stringify(fault))}):null;
+let game,gather=null;
 const inspector=createMapInspector({identityFile:'/data/map-inspector.json',entryPosition:()=>trialEntryPosition(motion)});
 const recovery=createRuntimeRecovery({close:()=>game.close(),exit:code=>process.exit(code)});
 // The second original scene's CPU worker is started only when a player enters
 // that map. It does not replace or reload the tutorial's worker or positions.
 let questMotion;
 const loadQuestMotion=()=>questMotion||=createQuestMotion(JSON.parse(readFileSync(questConfigFile,'utf8')),new URL('game/native-physics-thread.mjs',base),ordinaryQuestLayer.profile.entryPosition||ordinaryQuestLayer.profile.actors[0].position);
-const ordinaryQuestMotion=ordinaryQuestLayer?{get world(){return loadQuestMotion().world;},fork:()=>loadQuestMotion().fork(),close:()=>questMotion?.close()}:null;
+let ordinaryQuestMotion=ordinaryQuestLayer?{get world(){return loadQuestMotion().world;},fork:()=>loadQuestMotion().fork(),close:()=>questMotion?.close()}:null;
+let sourceRoute=null;
+const runtimeClock=Date.now;
 try {
-  game=createGameServer({inspector,maxPlayersPerRoom:maxPlayers,saveFile:'/data/saves/characters.json',gameplay,motion:null,mapWindowMotion:motion,navigation:null,onRuntimeFailure:error=>recovery.fail(error),...(ordinaryQuestLayer?{ordinaryQuestLayer,ordinaryQuestMotion,ordinaryGatherEvents:gather?.tape}:{})});
+  if(sourceWorld){sourceRoute=sourceWorld.createRoute({legacyMotion:loadQuestMotion(),clock:runtimeClock,entryPosition:ordinaryQuestLayer.profile.entryPosition||ordinaryQuestLayer.profile.actors[0].position,onFault:error=>console.error('Source body:',error.message)});ordinaryQuestMotion=sourceRoute.motion;}
+  if(collection){const ports={runtime,collection,readGame:()=>game,onFault:fault=>console.error('Compatible gather presentation:',JSON.stringify(fault))};gather=await sourceWorld?.createGather(ports)||await createQuestGatherServer(ports);}
+  game=createGameServer({clock:runtimeClock,inspector,maxPlayersPerRoom:maxPlayers,saveFile:'/data/saves/characters.json',gameplay,motion:null,mapWindowMotion:motion,navigation:null,onRuntimeFailure:error=>recovery.fail(error),...(ordinaryQuestLayer?{ordinaryQuestLayer,ordinaryQuestMotion,ordinaryGatherEvents:gather?.tape}:{}),...(sourceRoute?{sourceWorldGate:sourceRoute.gate,pendingSourceJoins:sourceRoute.pending}:{})});
   try{const repaired=applyPositionRepair(game.entryStore,'/data/role-position-repair.json',()=>trialEntryPosition(motion));if(repaired)console.log(JSON.stringify({positionRepair:repaired}));}
   catch(error){console.error('Position repair refused: '+error.message);}
   await installDelivery(game.server,root);
-  installEntryRead(game.server,'/data/saves/characters.json');
+  if(sourceWorld)await sourceWorld.installRead(game.server,'/data/saves/characters.json');else installEntryRead(game.server,'/data/saves/characters.json');
   installNameDraw(game.server,createNameDrawer(root));
-  installEntryManagement(game.server,trialRoleManager(game.entryStore,game.entryActive,{entryPosition:()=>trialEntryPosition(motion)}));
-  if(ordinaryQuestLayer)installQuestTransport(game.server,{ledger:ordinaryQuestLayer,store:game.entryStore,active:game.entryActive,collection:gather?.collection||collection});
+  const managerOptions={entryPosition:()=>trialEntryPosition(motion)};
+  installEntryManagement(game.server,sourceWorld?sourceWorld.manager(game.entryStore,game.entryActive,managerOptions):trialRoleManager(game.entryStore,game.entryActive,managerOptions));
+  if(ordinaryQuestLayer){const ports={ledger:ordinaryQuestLayer,store:game.entryStore,active:game.entryActive,collection:gather?.collection||collection};installQuestTransport(game.server,sourceWorld?{...ports,...sourceWorld.questPorts(ports)}:ports);}
   installAdmin(game.server,{inspector,store:game.entryStore,active:game.entryActive,passwordHash:process.env.OC2_ADMIN_PASSWORD_HASH,secureCookies:process.env.OC2_ADMIN_LOCAL_HTTP!=='1'});
   await new Promise((ok,fail)=>{game.server.once('error',fail);game.server.listen(port,'0.0.0.0',()=>{game.server.off('error',fail);ok();});});
-} catch(error) { try{if(game)await game.close();else await motion.close();}finally{gather?.dispose();}throw error; }
+} catch(error) { try{if(game)await game.close();else{await sourceWorld?.close();await questMotion?.close();await motion.close();}}finally{gather?.dispose();}throw error; }
 console.log(JSON.stringify({listening:port,host:'0.0.0.0',saveFile:'/data/saves/characters.json',maxPlayers,sourceNative:true}));
 let closing=false;
 async function stop(){if(closing)return;closing=true;try{await game.close();gather?.dispose();process.exit(0);}catch(error){console.error(error.message);process.exit(1);}}

@@ -17,6 +17,16 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r tools/requirements-resources.txt -r tools/requirements-native.txt
       - run: python tools/deployment_tests.py
+      - run: python deploy/test_runtime_transport.py
+      - run: python tools/runtime_transport_context_tests.py
+      - run: python tools/source_runtime_resources_tests.py
+      - run: python tools/player_world_static_body_tests.py
+      - run: python tools/source_code_pages_tests.py
+      - run: python tools/source_native_image_views_tests.py
+      - run: python tools/source_immutable_inputs_tests.py --run-linux
+      - run: python tools/source_uc_tcg_tests.py
+      - run: python tools/source_guest_pages_tests.py
+      - run: python tools/source_server_body_data_tests.py
       - run: python tools/runtime_delta_tests.py
       - run: python tools/resource_tests.py
       - run: python tools/bdae_tests.py
@@ -266,6 +276,9 @@ jobs:
       - run: node --test tools/species_world_motion_tests.mjs
       - run: python tools/source_species_worker_tests.py
       - run: node --test tools/source_avatar_state_tests.mjs tools/source_avatar_transport_tests.mjs
+      - run: node --experimental-vm-modules --test deploy/quest_source_players_tests.mjs deploy/source_world_pending_tests.mjs deploy/source_world_entry_tests.mjs deploy/source_gather_intent_tests.mjs deploy/quest_world_gather_tests.mjs deploy/deferred_native_motion_tests.mjs deploy/source_world_bodies_tests.mjs
+      - run: node --test deploy/source_resource_reader_tests.mjs
+      - run: python deploy/test_bootstrap_image_bundle.py
       - run: node --test tools/tutorial_terrain_groups_delivery_tests.mjs
       - run: python tools/source_human_pose_worker_tests.py
       - run: node --test tools/source_human_pose_transport_tests.mjs
@@ -279,6 +292,7 @@ jobs:
       - run: python tools/selection_scene_water_surface_tests.py
       - run: python tools/selection_scene_water_floor_tests.py
       - run: node --test tools/runtime_recovery_tests.mjs
+      - run: node --test tools/fixed_step_scheduler_tests.mjs
       - run: node --test tools/admin_tests.mjs
       - run: node --test tools/map_inspector_tests.mjs
       - name: Private source hotbar integration (run locally with reviewed runtime)

@@ -16,21 +16,35 @@ class NativeBresWorldBoundsProbe:
 
     def __init__(self, im):
         from bres_world_bounds_evidence import verify_native
+        from source_guest_pages import map_native_region
+        from source_code_pages import try_map_original_rx
+        image_views=getattr(im,'native_image_views',False) is True
         verify_native(im)
         self.im = im
         self.uc = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
+        from source_uc_tcg import configure_uc_tcg_before_init
+        configure_uc_tcg_before_init(self.uc)
+        code_pages = getattr(im, 'code_pages', None)
         for s in im.elf.iter_segments():
             if s['p_type'] != 'PT_LOAD':
                 continue
             start = s['p_vaddr'] & ~0xfff
             end = (s['p_vaddr'] + s['p_memsz'] + 0xfff) & ~0xfff
-            self.uc.mem_map(start, end - start)
-            self.uc.mem_write(s['p_vaddr'], s.data())
-        for rel in im.elf.get_section_by_name('.rela.dyn').iter_relocations():
-            if rel['r_info_type'] == 0x403:
-                self.w(rel['r_offset'], 'Q', rel['r_addend'])
+            if image_views and try_map_original_rx(self.uc, im, s):
+                continue
+            raw = s.data()
+            if code_pages is None or not code_pages.map_segment(self.uc, s['p_vaddr'], s['p_memsz'], raw):
+                map_native_region(self.uc, start, end - start)
+                self.uc.mem_write(s['p_vaddr'], raw)
+        if image_views:
+            for offset, addend in im.iter_relative_relocations():
+                self.w(offset, 'Q', addend)
+        else:
+            for rel in im.elf.get_section_by_name('.rela.dyn').iter_relocations():
+                if rel['r_info_type'] == 0x403:
+                    self.w(rel['r_offset'], 'Q', rel['r_addend'])
         for a, n in [(self.BASE, 0x2000000), (0x20000000, 0x10000), (0x30000000, 0x1000)]:
-            self.uc.mem_map(a, n)
+            map_native_region(self.uc, a, n)
         for a in [0x29f0f0, 0x29fbb0, 0x3c0fbc, 0x11dcc20, 0x2a1030, 0x29f220, 0x2a0180, 0x30da84, 0x2a1e50, 0x29f5b0, 0x30000100, 0x30000104, 0x30000108, self.EXIT, 0x29e010, 0x29e3c0, 0x2a2120, 0x29eaf0, 0x1de8970, 0x1de9b88, 0x1502ff4, 0x1503330, 0x1502cf0, 0x1502fc0, 0x1561f2c, 0x1561f34, 0x14f40b4, 0x14f3e5c, 0x111b8c4, 0x11ddd2c, 0x138aaa8, 0x11dcc44]:
             self.uc.hook_add(UC_HOOK_CODE, self.hook, begin=a, end=a)
         self.uc.hook_add(UC_HOOK_MEM_INVALID, self.bad)
@@ -173,7 +187,11 @@ class NativeBresWorldBoundsProbe:
 
     def load(self, raw, string_pool=False):
         """Original stream reader/fixups; supplied stream bytes and pool mode."""
-        if (not isinstance(raw, bytes) or len(raw) < 64 or raw[:8] != b'BRES\xfe\xff\0\0'
+        source_ok = isinstance(raw, bytes)
+        if not source_ok:
+            from source_immutable_inputs import is_verified_source
+            source_ok = is_verified_source(raw)
+        if (not source_ok or len(raw) < 64 or raw[:8] != b'BRES\xfe\xff\0\0'
                 or struct.unpack_from('<I', raw, 8)[0] != 64
                 or struct.unpack_from('<I', raw, 12)[0] != len(raw)):
             raise ValueError('Expected a complete scoped inner BRES image')

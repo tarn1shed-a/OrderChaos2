@@ -1,6 +1,7 @@
 // Original drawings; centered entry sizing is the user's explicit web layout preference.
 // Existing web identities are a separate adapter.
 import {createCreationMotionHistory} from './creation_motion_history.mjs';
+import {sourceWorldEntryURL,rememberSourceWorldEntry,takeSourceWorldEntry} from './source_world_entry.mjs';
 import {entryNameError} from './entry_name.mjs';
 const NS='http://www.w3.org/2000/svg';
 export function savedEntryIdentities(storage){
@@ -13,7 +14,7 @@ export function savedEntryIdentities(storage){
 export function createSourceEntry({connect,previewURL=null}){
   const css=document.createElement('link');css.rel='stylesheet';css.href='/__delivery/entry_ui.css';document.head.append(css);
   const root=document.createElement('section');root.className='source-entry';root.hidden=true;root.setAttribute('aria-label','登录与角色选择');document.body.append(root);
-  let manifest=null,screen=null,selected=null,roles=[],identities=[],isReady=false,busy=false,pendingError=null,listOffset=0;
+  let manifest=null,screen=null,selected=null,roles=[],identities=[],isReady=false,busy=false,pendingError=null,listOffset=0,pendingStart=null;
   let draft={race:0,gender:0,cls:0,name:''};
   let racePreview=null,previewPromise=null,previewGeneration=0;
   const motionHistory=createCreationMotionHistory({counter:0,selected:0}); // Explicit fresh web-session carrier of original cold BSS.
@@ -180,6 +181,8 @@ export function createSourceEntry({connect,previewURL=null}){
   async function startSelected(role,credentials){
     if(busy)return;busy=true;
     try{
+      const target=sourceWorldEntryURL(role,location.href,(document.documentElement.dataset.sourcePlayerWorldBodies||'').split(',').filter(Boolean));
+      if(target){rememberSourceWorldEntry(sessionStorage,role.id,target);location.assign(target);return;}
       const url=new URL(location.href);
       if(url.searchParams.get('trialEntry')==='cinematic7'){
         await api('return',{...credentials,anchor:'cinematic7'});
@@ -292,10 +295,24 @@ export function createSourceEntry({connect,previewURL=null}){
     field('._MsgText',{name:'提示',value:message});label('.cnt._OkBtn.mc_label.txt_label',word('GENERAL_OK'));button(q('.cnt._OkBtn'),word('GENERAL_OK'),back);
     fitArtwork([screen.querySelector('[data-entry-window]')]);
   }
+  function startTransferred(){
+    if(!isReady||!pendingStart)return;
+    const {role,credentials}=pendingStart;pendingStart=null;
+    startSelected(role,credentials).catch(error=>connectionError(error.message));
+  }
+  async function resumeTransferred(characterId){
+    identities=savedEntryIdentities(localStorage);
+    const credentials=identities.find(value=>value.characterId===characterId);
+    if(!credentials)return login();
+    const listed=(await api('characters',{identities})).characters;
+    const role=listed.find(value=>value.id===characterId);
+    if(!role||(document.documentElement.dataset.sourcePlayerWorldBodies||'').split(',').includes(role.sourceAvatar?.key)!==true)return login();
+    pendingStart={role,credentials};startTransferred();
+  }
   return {
-    open(){const message=pendingError;pendingError=null;(message?connectionError(message):login()).catch(error=>{root.dataset.entryError=error.message;root.hidden=false;root.textContent='原界面资源加载失败，请刷新重试。';root.setAttribute('role','alert');});},
+    open(){const message=pendingError;pendingError=null;const transfer=takeSourceWorldEntry(sessionStorage,location.href);(message?connectionError(message):transfer?resumeTransferred(transfer):login()).catch(error=>{root.dataset.entryError=error.message;root.hidden=false;root.textContent='原界面资源加载失败，请刷新重试。';root.setAttribute('role','alert');});},
     error(message){pendingError=String(message);},
     hide:hideRoot,
-    ready(){isReady=true;const play=q('._CharacterMC._StartBtn');if(play&&selected){play.setAttribute('aria-disabled','false');play.setAttribute('tabindex','0');}}
+    ready(){isReady=true;startTransferred();const play=q('._CharacterMC._StartBtn');if(play&&selected){play.setAttribute('aria-disabled','false');play.setAttribute('tabindex','0');}}
   };
 }

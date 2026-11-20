@@ -7,6 +7,7 @@ import {createHash} from 'node:crypto';
 import {resolve,dirname,extname,posix} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {stageEntry} from './stage_runtime.mjs';
+import {sourceWorldBodies} from './source_world_bodies.mjs';
 import {stagePlan} from './stage_plan.mjs';
 import {stageTrialWorld} from './tutorial_entry.mjs';
 import {stageInsideEntry,stageInsidePlan,INSIDE_MANIFEST} from '../tools/preview/map-runtime-inside-overlay.mjs';
@@ -42,6 +43,7 @@ export function selectCreationProfile(files){
 }
 
 export async function prepare(root,{stage=false}={}){
+  const sourceBodies=sourceWorldBodies(process.env.OC2_HUMAN_FEMALE_WORLD==='1',process.env.OC2_SOURCE_WORLD_BODIES);
   const runtime=resolve(root,'analysis/raw/portable/running-preview');
   const bundle=JSON.parse(await readFile(resolve(runtime,'bundle-manifest.json'),'utf8'));
   const destination=resolve(root,'analysis/raw/delivery');await mkdir(destination,{recursive:true});
@@ -89,13 +91,17 @@ export async function prepare(root,{stage=false}={}){
     await writeFile(path,raw);files['/explore-map.js']={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.js']};
     for(const name of ['staged_scene.mjs','streaming_window.mjs','click_input.mjs','browser_timing.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES['.mjs']};}
-    if(entryUI)for(const name of ['entry_ui.mjs','entry_ui.css','entry_name.mjs','creation_motion_history.mjs','attribute_ui.mjs','attribute_state.mjs','attribute_ui.css','attribute_preview.mjs','self_name.mjs','character_hotbar.mjs','map_inspector_ui.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
+    if(entryUI)for(const name of ['entry_ui.mjs','entry_ui.css','entry_name.mjs','creation_motion_history.mjs','source_world_entry.mjs','attribute_ui.mjs','attribute_state.mjs','attribute_ui.css','attribute_preview.mjs','self_name.mjs','character_hotbar.mjs','map_inspector_ui.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES[extname(name)]};}
     if(creationPreview){const path=resolve(root,'deploy/creation_preview.mjs'),raw=await readFile(path);files['/__delivery/creation_preview.mjs']={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.mjs']};}
     if(files['/assets/source-unstuck/unstuck.json'])for(const name of ['unstuck_ui.mjs','unstuck_ui.css','unstuck_state.mjs','unstuck_return.mjs']){const helper=resolve(root,'deploy',name),bytes=await readFile(helper);
       files['/__delivery/'+name]={path:helper,bytes:bytes.length,sha256:sha(bytes),type:TYPES[extname(name)]};}
   }
-  await prepareQuestDelivery(root,destination,files,{creationProfile:files['/assets/source-creation-stage/manifest.json']?selectCreationProfile(files):null});
+  if(process.env.OC2_HUMAN_FEMALE_WORLD==='1'){
+    const path=resolve(destination,'source-world-explore-entry.html'),raw=Buffer.from((await readFile(files['/explore-map.html'].path,'utf8')).replace('<html ','<html data-source-player-world-bodies="'+sourceBodies.join(',')+'" '));
+    await writeFile(path,raw);files['/explore-map.html']={path,bytes:raw.length,sha256:sha(raw),type:TYPES['.html']};
+  }
+  await prepareQuestDelivery(root,destination,files,{creationProfile:files['/assets/source-creation-stage/manifest.json']?selectCreationProfile(files):null,sourceHumanFemaleWorld:process.env.OC2_HUMAN_FEMALE_WORLD==='1',sourceNativeGather:process.env.OC2_SOURCE_GATHER==='1'});
   const urls=Object.keys(files).sort(),sidecars=new Map();let cursor=0;
   async function worker(){while(cursor<urls.length){
     const url=urls[cursor++],meta=files[url];

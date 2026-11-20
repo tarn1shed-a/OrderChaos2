@@ -3,12 +3,56 @@ import argparse
 import gzip
 import hashlib
 import io
+import importlib.util
 import json
 import tarfile
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
 FORMAT = 'oc2-private-runtime-delta-v1'
+
+
+def protocol():
+    spec = importlib.util.spec_from_file_location('oc2_delta_protocol', ROOT / 'deploy/bootstrap.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def manifest_raw(path):
+    with tarfile.open(path, 'r:gz') as archive:
+        return archive.extractfile('bundle-manifest.json').read()
+
+
+def write_delta_tar(complete, payload_names, target_manifest_raw, reference_raw, output):
+    """The v2 TAR writer, shared with measurement/encoding; no codec here.
+
+    Metadata is first, then selected members in the complete archive's actual
+    order. All output members are regular mode0600/mtime0, using Python's PAX
+    default for the same long-path support as the original delta writer.
+    """
+    remaining = set(payload_names)
+    if len(remaining) != len(payload_names):
+        raise ValueError('Duplicate private delta payload selection')
+    with tarfile.open(complete, 'r:gz') as source, tarfile.open(fileobj=output, mode='w|') as target:
+        members, names, manifest = protocol().members_checked(source)
+        if ('bundle-base.json' in names or set(manifest['files']) != names - {'bundle-manifest.json'} or
+                not remaining <= set(manifest['files'])):
+            raise ValueError('Complete private delta source required')
+        actual_manifest = source.extractfile('bundle-manifest.json').read()
+        if actual_manifest != target_manifest_raw:
+            raise ValueError('Target manifest bytes changed before delta writing')
+        for name, raw in [('bundle-base.json', reference_raw), ('bundle-manifest.json', target_manifest_raw)]:
+            member = tarfile.TarInfo(name); member.size = len(raw); member.mode = 0o600; member.mtime = 0
+            target.addfile(member, io.BytesIO(raw))
+        for old in members:
+            if old.name in remaining:
+                member = tarfile.TarInfo(old.name); member.size = old.size; member.mode = 0o600; member.mtime = 0
+                with source.extractfile(old) as stream:
+                    target.addfile(member, stream)
+                remaining.remove(old.name)
+        if remaining:
+            raise ValueError('Missing actual private delta payload')
 
 
 def sha(path):
@@ -47,15 +91,37 @@ def inspect(path, keep=()):
     return manifest, payload
 
 
-def package(base, complete, output):
+def package(base, complete, output, version=1):
     base, complete, output = map(lambda p:Path(p).resolve(), (base,complete,output))
     if not any(output.is_relative_to(ROOT/p) for p in ['analysis/raw','backups/deployment']):
         raise ValueError('Private runtime deltas must remain in ignored directories')
     proof = output.with_suffix(output.suffix+'.receipt.json')
     if output.exists() or proof.exists():
         raise ValueError('Existing private packages are preserved')
+    if type(version) is not int or version not in (1, 2):
+        raise ValueError('Unsupported private delta version')
     old, _ = inspect(base)
     new, _ = inspect(complete)
+    if version == 2:
+        loader = protocol()
+        old_raw, new_raw = manifest_raw(base), manifest_raw(complete)
+        reference = loader.make_delta_v2_reference(old, new, sha(base),
+            hashlib.sha256(old_raw).hexdigest(), hashlib.sha256(new_raw).hexdigest())
+        layout = loader.derive_delta_v2(old, new)
+        raw_reference = (json.dumps(reference, sort_keys=True, indent=2) + '\n').encode()
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with output.open('xb') as stream, gzip.GzipFile(filename='', mode='wb', fileobj=stream, mtime=0) as compressed:
+            write_delta_tar(complete, layout['payload'], new_raw, raw_reference, compressed)
+        output.chmod(0o600)
+        result = {'format': loader.DELTA_V2, 'archive': str(output), 'sha256': sha(output),
+                  'bytes': output.stat().st_size, 'baseArchiveSHA256': reference['baseArchiveSHA256'],
+                  'baseManifestSHA256': reference['baseManifestSHA256'],
+                  'targetManifestSHA256': reference['targetManifestSHA256'],
+                  'completeArchiveSHA256': sha(complete), 'newFiles': len(layout['added']),
+                  'payloadFiles': len(layout['payload']), 'aliases': len(layout['aliases']),
+                  'files': len(new['files']), 'baseFilesReplaced': 0, 'localSavesImported': False}
+        proof.write_text(json.dumps(result, indent=2) + '\n'); proof.chmod(0o600)
+        return result
     if (old['runtimeIdentity'] != new['runtimeIdentity'] or old['pythonFiles'] != new['pythonFiles'] or
             any(new['files'].get(name) != meta for name,meta in old['files'].items())):
         raise ValueError('Delta cannot replace existing runtime files')
@@ -82,4 +148,5 @@ def package(base, complete, output):
 if __name__ == '__main__':
     cli=argparse.ArgumentParser(description=__doc__)
     for name in ('base','complete','output'):cli.add_argument('--'+name,type=Path,required=True)
-    args=cli.parse_args();print(json.dumps(package(args.base,args.complete,args.output)))
+    cli.add_argument('--version', type=int, choices=(1, 2), default=1)
+    args=cli.parse_args();print(json.dumps(package(args.base,args.complete,args.output,args.version)))

@@ -10,7 +10,7 @@ import {COLLECTION_PROFILE,checkCollectionProfile} from './quest_collection.mjs'
 import {createSource461GatherProgress} from '../tools/preview/ordinary-quest461-gather.mjs';
 import {GATHER_BROWSER_SOURCE_SHA256,GATHER_BROWSER_BINDING_SHA256} from '../tools/preview/ordinary-quest461-gather-browser.mjs';
 
-export async function prepareQuestDelivery(root,destination,files,{creationProfile=null}={}){
+export async function prepareQuestDelivery(root,destination,files,{creationProfile=null,sourceHumanFemaleWorld=false,sourceNativeGather=false}={}){
   if(!files['/assets/ordinary-quests/profile.json'])return false;
   for(const url of ['/assets/source-ordinary-quest-map1/manifest.json','/assets/source-ordinary-quest-actors/profile.json',
     '/assets/source-quest/quest-ui.json','/assets/source-mission-optional/optional-assets.json',
@@ -19,6 +19,24 @@ export async function prepareQuestDelivery(root,destination,files,{creationProfi
     if(!files[url])throw Error('Ordinary quest delivery is incomplete: '+url);
   async function add(url,path,type,body=null){
     const raw=body||await readFile(path);files[url]={path,bytes:raw.length,sha256:createHash('sha256').update(raw).digest('hex'),type};
+  }
+  if(sourceHumanFemaleWorld){
+    for(const url of ['/world-character-common-v1/inputs.mjs','/world-character-peer-v1/material_host.mjs',
+      '/world-own-air-actors-v3/inputs.mjs','/world-own-air-actors-v3/entry.mjs','/world-character-actors-v1/actor_factory.mjs',
+      '/world-character-actors-v1/geometry_pool.mjs','/world-character-actors-v1/contract.mjs',
+      '/assets/player-human-female-actions-v1/delivery.json'])if(!files[url])throw Error('Source world delivery incomplete: '+url);
+    for(const name of ['quest_source_players.mjs','source_world_bodies.mjs','player_choice_scene.mjs','player_choice_registry.mjs'])
+      await add('/__delivery/'+name,resolve(root,'deploy',name),'text/javascript; charset=utf-8');
+  }
+  if(sourceNativeGather){
+    if(!sourceHumanFemaleWorld)throw Error('Native Gather requires the current source world');
+    for(const url of ['/world-latest-v1/transport_contracts.mjs',
+      '/assets/quest461-world-gather-v2/modules/presenter-v2.mjs',
+      '/assets/quest461-world-gather-v2/modules/common-gather-library-run-v3.mjs',
+      '/assets/quest461-world-gather-v2/modules/world-gather-library-core-v4.mjs',
+      '/assets/quest461-world-gather-v2/modules/source-world-gather-library-v4.mjs',
+      '/assets/quest461-world-gather-v2/data/human-female-seeded-source-v1.json'])if(!files[url])throw Error('Native Gather delivery incomplete');
+    await add('/__delivery/source_gather_intent.mjs',resolve(root,'deploy/source_gather_intent.mjs'),'text/javascript; charset=utf-8');
   }
   const skills=Boolean(files['/assets/character-source/panels.json']);
   const npcMarker=await prepareNPCMarkerDelivery(root,files,add);
@@ -60,7 +78,7 @@ export async function prepareQuestDelivery(root,destination,files,{creationProfi
   files['/__delivery/mission_program.mjs']=files['/mission_program.mjs'];
   // Start from the same original entry page, without restoring the old camp UI.
   const path=resolve(destination,'quests.html');
-  const tracking=(files['/assets/source-quest-tracking/tracking.json']?' data-source-quest-tracking="1"':'')+(skills?' data-source-character-skills="1"':'')+(npcMarker?' data-source-npc-quest-marker="1"':'')+(journal?' data-source-quest-journal="1"':'')+(channel?' data-source-quest-channel="1"':'');
+  const tracking=(files['/assets/source-quest-tracking/tracking.json']?' data-source-quest-tracking="1"':'')+(skills?' data-source-character-skills="1"':'')+(npcMarker?' data-source-npc-quest-marker="1"':'')+(journal?' data-source-quest-journal="1"':'')+(channel?' data-source-quest-channel="1"':'')+(sourceHumanFemaleWorld?' data-source-human-female-world="1"':'')+(sourceNativeGather?' data-source-native-gather="1"':'');
   const raw=Buffer.from((await readFile(files['/explore-map.html'].path,'utf8')).replace('<html ',`<html${tracking} `)
     .replace(/<script type="module" src="[^"]*explore-map\.js[^"]*"><\/script>/,'<script type="module" src="/__delivery/quest_world.mjs"></script>')
     .replace('</head>',(channel?'<link rel="stylesheet" href="/__delivery/quest_channel_ui.css">':'')+'</head>'));

@@ -16,7 +16,7 @@ def start(config):
     if not p.is_relative_to(root/'analysis/raw'):raise ValueError('Native physics configuration must stay in the ignored inspection runtime')
     cfg=json.loads(p.read_text())
     if cfg['nativeSHA256']!=NATIVE_SHA256:raise ValueError('Physics configuration identifies another original build')
-    image=NativeImage(Path(cfg['library']).read_bytes())
+    image=NativeImage.from_file(root,{'path':cfg['library'],'sha256':NATIVE_SHA256})
     if cfg.get('layerQueue'):
         if not all(cfg.get(k)for k in ['stopQueue','animationBlending','diving','shoreTransitions']):raise ValueError('Layer queue requires verified stop/blend/shore/diving inputs')
         from source_layer_queue import SourceLayerQueue
@@ -59,6 +59,8 @@ def start(config):
     if cfg.get('animationBlending'):summary.update(engine.load_animation_blending(json.loads(Path(cfg['animationBlending']).read_text())))
     if cfg.get('stopQueue'):summary.update(engine.load_stop_queue(json.loads(Path(cfg['stopQueue']).read_text())))
     if cfg.get('layerQueue'):summary.update(engine.load_layer_queue(json.loads(Path(cfg['layerQueue']).read_text())))
+    from source_guest_pages import reclaim_guest_pages
+    if not engine.actors:reclaim_guest_pages(engine.uc)
     for line in sys.stdin:
         try:
             q=json.loads(line);op=q['operation'];data=q.get('data',{})
@@ -74,7 +76,9 @@ def start(config):
                 result=engine.actor_tick(*args,control=data.get('control'))if cfg.get('diving')else engine.actor_tick(*args)
             elif op=='restore-height'and cfg.get('diving'):result=engine.restore_height(data['point'])
             elif op=='ray':result=engine.ray(data['from'],data['to'],data.get('capsule',False))
-            elif op=='forget':engine.actors.pop(data['identity'],None);result=True
+            elif op=='forget':
+                engine.actors.pop(data['identity'],None);result=True
+                if not engine.actors:reclaim_guest_pages(engine.uc)
             else:raise ValueError('Unsupported physics bridge operation')
             print(json.dumps({'result':result},allow_nan=False,separators=(',',':')),flush=True)
         except Exception as e:

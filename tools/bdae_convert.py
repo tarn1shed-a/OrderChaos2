@@ -22,12 +22,18 @@ from bdae_attributes import select_attributes, FORMAT as ATTRIBUTE_FORMAT
 
 
 class BDAE:
-    def __init__(self, path):
+    def __init__(self, path, *, source_buffer=None):
         self.path = Path(path)
-        raw = self.path.read_bytes()
-        if raw[:4] == b'PK\x03\x04':
-            with zipfile.ZipFile(self.path) as archive:
-                raw = archive.read('little_endian_not_quantized.bdae')
+        if source_buffer is None:
+            raw = self.path.read_bytes()
+            if raw[:4] == b'PK\x03\x04':
+                with zipfile.ZipFile(self.path) as archive:
+                    raw = archive.read('little_endian_not_quantized.bdae')
+        else:
+            from source_immutable_inputs import require_source
+            raw = require_source(source_buffer, self.path)
+            if raw[:4] == b'PK\x03\x04':
+                raise ValueError('Private source buffer requires an unwrapped original BRES')
         self.b = raw
         if raw[:8] != b'BRES\xfe\xff\x00\x00' or self.u(8) != 64 or self.u(12) != len(raw):
             raise ValueError('Unsupported BRES header')

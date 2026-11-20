@@ -103,10 +103,11 @@ def mask_hash(report):
 
 
 def bind_original_mask(report,data):
+    from source_server_body_data import body_data_canonical
     from bdae_character import aliases
     from analyze_native_resources import NATIVE_SHA256
     if not isinstance(report,dict)or report.get('format')!='oc2-human-original-layer-property-mask-v1'or report.get('sha256')!=mask_hash(report)or report.get('nativeSHA256')!=NATIVE_SHA256 or report.get('originalGPUOrCompleteBlendClaimed')is not False or report.get('compatible',{}).get('distinctBonePoseApplied')is not False:raise ValueError('Verified original property mask required')
-    if report.get('bodyDataCanonicalSHA256')!=hashlib.sha256(json.dumps(data,sort_keys=True,separators=(',',':')).encode()).hexdigest():raise ValueError('Original human body data differs')
+    if report.get('bodyDataCanonicalSHA256')!=body_data_canonical(data):raise ValueError('Original human body data differs')
     by_name=aliases(data['rig']['nodes']);order=report['sourcePropertyOrder'];weights=report['compatible']['sourcePropertyWeights']
     if len(order)!=135 or len(weights)!=len(order)or not report['compatible']['propertiesCompatible']:raise ValueError('Complete original compatible human property order required')
     result=[]

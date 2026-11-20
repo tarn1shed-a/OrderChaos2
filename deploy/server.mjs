@@ -23,6 +23,7 @@ import {installQuestTransport} from './quest_transport.mjs';
 import {createQuestCollection} from './quest_collection.mjs';
 import {createQuestGatherServer} from './quest_gather_server.mjs';
 import {deferNativeMotion} from './deferred_native_motion.mjs';
+import {stageFixedStepServer} from './fixed_step_scheduler.mjs';
 
 const root=resolve(new URL('../',import.meta.url).pathname);
 const runtime=resolve(root,'analysis/raw/portable/running-preview');
@@ -52,6 +53,7 @@ let serverSource=entryServer(readFileSync(new URL('server.mjs',base),'utf8'),new
 serverSource=stageInspectorServer(sourceWorld?sourceWorld.stagePlayerChoice(serverSource):stageSourceAvatarServer(serverSource));
 if(ordinaryQuestLayer)serverSource=stageOrdinaryQuestServer(serverSource);
 if(sourceWorld)serverSource=sourceWorld.stageServer(serverSource);
+serverSource=stageFixedStepServer(serverSource);
 writeFileSync(observed,serverSource);
 const {createGameServer}=await import(observed);
 const loadTutorialMotion=()=>configureTrialEntry(loadNativeWindowCollision(new URL('native-physics.json',base)));

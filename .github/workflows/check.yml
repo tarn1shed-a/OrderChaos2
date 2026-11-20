@@ -292,6 +292,7 @@ jobs:
       - run: python tools/selection_scene_water_surface_tests.py
       - run: python tools/selection_scene_water_floor_tests.py
       - run: node --test tools/runtime_recovery_tests.mjs
+      - run: node --test tools/fixed_step_scheduler_tests.mjs
       - run: node --test tools/admin_tests.mjs
       - run: node --test tools/map_inspector_tests.mjs
       - name: Private source hotbar integration (run locally with reviewed runtime)

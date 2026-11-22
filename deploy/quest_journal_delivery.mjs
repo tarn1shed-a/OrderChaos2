@@ -12,7 +12,8 @@ export function stageQuestJournalWorld(source){
   replace('let npcProjection,','let journal;\nlet npcProjection,');
   replace('const blocked=()=>!connected||skills?.isOpen','const blocked=()=>!connected||journal?.isOpen||skills?.isOpen');
   replace('function openEntry(){skills?.disconnect();entry?.open();}','function openEntry(){journal?.invalidate();skills?.disconnect();entry?.open();}');
-  replace("$('field-quests').disabled=!connected||profile.quests.every(q=>completed.has(q.id));","$('field-quests').disabled=!connected||(!journal&&profile.quests.every(q=>completed.has(q.id)));");
+  replace("$('field-quests').disabled=!playerPlayable||profile.quests.every(q=>completed.has(q.id));","$('field-quests').disabled=!playerPlayable||(!journal&&profile.quests.every(q=>completed.has(q.id)));");
+  replace("$('field-quests').disabled=!next||profile.quests.every(q=>questState?.completedQuestIds?.includes(q.id));","$('field-quests').disabled=!next||(!journal&&profile.quests.every(q=>questState?.completedQuestIds?.includes(q.id)));");
   replace('  questTracking?.update(state);','  questTracking?.update(state);journal?.update(state);');
   replace('return;skills?.close();stop();','return;skills?.close();journal?.close();stop();');
   replace('questState=null;skills?.disconnect();stop();questUI?.invalidate();','questState=null;journal?.invalidate();skills?.disconnect();stop();questUI?.invalidate();');
@@ -22,7 +23,7 @@ export function stageQuestJournalWorld(source){
   replace(anchor,anchor+`
   if(document.documentElement.dataset.sourceQuestJournal==='1')journal=await createQuestJournal({
     profile:await json('/assets/source-quest-journal/profile.json'),
-    readSession:()=>({connected,characterId:identity?.characterId,epoch:generation}),
+    readSession:()=>({connected:connected&&playerPlayable,characterId:identity?.characterId,epoch:generation}),
     readState:async()=>(await api('state')).state,query:async id=>compatibleInfo((await api('query',{questId:id})).info),
     action:command=>api('action',{command}),readTrackedQuest:()=>questTracking?.currentQuestId??null,
     beforeOpen:()=>{pointer=null;skills?.close();stop();void questUI?.close().catch(()=>{});},

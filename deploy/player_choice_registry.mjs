@@ -4,6 +4,10 @@ const FORMAT='oc2-web-source-avatar-v1';
 const MODELS=[[0,0,0,1,'human-male'],[0,1,0,32,'human-female'],[1,0,5,34,'mendel-male'],[1,1,5,31,'mendel-female'],
  [2,0,1,33,'elf-male'],[2,1,1,2,'elf-female'],[3,0,2,28,'orc-male'],[3,1,2,30,'orc-female'],[4,0,4,29,'kartan']];
 const PROFESSIONS=[1,3,2,5,4],appearanceKeys=['face','hair','beard','skinColor','hairColor'];
+// One original layout authority for creation validation and content discovery.
+// These describe source data only; they never grant runtime/native readiness.
+export const PLAYER_CHOICE_BODY_DEFINITIONS=Object.freeze(MODELS.map(([uiRace,gender,race,sourceModelId,key])=>Object.freeze({uiRace,gender,race,sourceModelId,key})));
+export const PLAYER_CHOICE_PROFESSION_ORDER=Object.freeze([...PROFESSIONS]);
 const exact=(value,keys)=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).sort().join(',')===[...keys].sort().join(',');
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const digest=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);

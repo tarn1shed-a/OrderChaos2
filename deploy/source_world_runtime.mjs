@@ -4,7 +4,6 @@ import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash,webcrypto,randomUUID,randomBytes} from 'node:crypto';
-import {createPlayerChoiceRegistry} from './player_choice_registry.mjs';
 import {stagePlayerChoiceServer,stagePlayerChoiceStoreSource,stagePlayerChoiceRead,createPlayerChoiceManager} from './player_choice_server.mjs';
 import {stageSourceWorldCommandGate} from './source_world_command_stage.mjs';
 import {stageHumanFemalePendingServer} from './source_world_pending_stage.mjs';
@@ -12,12 +11,19 @@ import {verifyHumanFemaleWorldAssets} from './source_world_assets.mjs';
 import {SOURCE_WORLD_BODY_KEYS} from './source_world_bodies.mjs';
 import {createPinnedResourceReader} from './source_resource_reader.mjs';
 
-const WORLD_PLAN='4e6e660a8ea3b94c5ca28c940e14261d1a6a6fb1013d31b1a5241c1c780a3823';
-const ACTOR_PLAN='fe46b8b06b4bd65bb242f46be7123f8f7331961bba1d658f4f7fd8cd81fcb433';
-const REGISTRY='dbcf8a00bc3c67b03c2449ae0ca549e7bee95c9838fa6fb75367ee14230ff615';
-const GATHER_PLAN='1fa54692c65662fbe755ba9cc84c124f4ec32ba8a08981e52cfafc0422f5ad1d';
-const NATIVE_INIT_PLAN='3e963547241980c799c26c5712d1b2dfae8fcde05f0c6ae1556b1cb448b38363';
+import {loadSourceContentCatalog} from './source_content_runtime.mjs';
+
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
+
+export function sourceWorldActorResource(catalog,row,expectedPlanRef,expectedPlan='actors'){
+  const actual=catalog.resources['public:'+row.url];
+  if(!actual)throw Error('Actor dependency missing from the common directory');
+  if(actual.sha256!==row.sha256||actual.bytes!==row.bytes){
+    const prior=actual.superseded?.find(p=>p.plan===expectedPlan&&p.planRef===expectedPlanRef&&p.sha256===row.sha256&&p.bytes===row.bytes);
+    if(!prior)throw Error('Actor host migration is not declared');
+  }
+  return {url:row.url,sha256:actual.sha256,bytes:actual.bytes};
+}
 
 export async function loadSourceWorldRuntime({root,runtime,enabledBodyKeys=['human-female'],gatherEnabled=false}){
   if(!Array.isArray(enabledBodyKeys)||!enabledBodyKeys.length||new Set(enabledBodyKeys).size!==enabledBodyKeys.length||enabledBodyKeys.some(k=>!SOURCE_WORLD_BODY_KEYS.includes(k)))throw Error('Explicit supported source-world bodies required');
@@ -32,16 +38,16 @@ export async function loadSourceWorldRuntime({root,runtime,enabledBodyKeys=['hum
   }
   function verifyURL(row){return resourceReader.verify(pinURL(row));}
   function readURL(row){return resourceReader.readBytes(pinURL(row));}
-  const planBytes=new Uint8Array(readFileSync(resolve(runtime,'native-inputs/player-human-female-world-v1/asset-plan.json')));
-  const assets=await verifyHumanFemaleWorldAssets({planBytes,expectedSHA256:WORLD_PLAN,loadBytes:readURL,crypto:webcrypto});
-  const actorPlan=readFileSync(resolve(runtime,'native-inputs/player-human-female-world-v1/actor-plan.json'));
-  if(digest(actorPlan)!==ACTOR_PLAN)throw Error('Reviewed shared actor closure differs');
-  const actorFiles=JSON.parse(actorPlan).files;
+  const content=await loadSourceContentCatalog({root,runtime,delivery,files:index.files,reader:resourceReader});
+  const {catalog,declaration:sourceCode,latestPlan,plans}=content;
+  readURL(content.projectionPin);
+  const planPin=sourceCode.content.plans.assets;
+  const planBytes=new Uint8Array(resourceReader.readBytes({...planPin,path:resolve(runtime,planPin.path)}));
+  const assets=await verifyHumanFemaleWorldAssets({planBytes,expectedSHA256:planPin.sha256,loadBytes:readURL,crypto:webcrypto});
+  const actorFiles=plans.actors.files;
   if(!Array.isArray(actorFiles)||actorFiles.length!==202)throw Error('Shared actor closure incomplete');
-  for(const file of actorFiles)verifyURL(file);
-  const registryURL='/assets/player-human-female-actions-v1/'+REGISTRY+'.json',row=index.files[registryURL];
-  if(!row||row.sha256!==REGISTRY)throw Error('Reviewed source registry unavailable');
-  const registry=createPlayerChoiceRegistry(JSON.parse(new TextDecoder().decode(readURL({...row,url:registryURL}))));
+  for(const file of actorFiles)verifyURL(sourceWorldActorResource(catalog,file,'runtime:'+sourceCode.content.plans.actors.path));
+  const registryURL=sourceCode.content.registry.url,registry=catalog.registry;
   const generated=resolve(delivery,'source-world-registry.mjs');
   mkdirSync(delivery,{recursive:true});
   writeFileSync(generated,'import {readFileSync} from "node:fs";\nimport {createPlayerChoiceRegistry} from '+JSON.stringify(new URL('./player_choice_registry.mjs',import.meta.url).href)+';\nexport const registry=createPlayerChoiceRegistry(JSON.parse(readFileSync('+JSON.stringify(index.files[registryURL].path)+',"utf8")));\n');
@@ -50,9 +56,7 @@ export async function loadSourceWorldRuntime({root,runtime,enabledBodyKeys=['hum
   const entry=await import(new URL('entry.mjs',ownBase));
   const config=JSON.parse(readFileSync(resolve(runtime,'native-inputs/player-human-female-actions-v1/native-physics.json'),'utf8'));
   const ownProfile=JSON.parse(readFileSync(config.sourceSpeciesProfiles.path,'utf8'))['human-female'];
-  const nativeInitBytes=readFileSync(resolve(runtime,'native-inputs/player-human-female-world-v1/native-init-plan.json'));
-  if(digest(nativeInitBytes)!==NATIVE_INIT_PLAN)throw Error('Reviewed native initialization closure differs');
-  const nativeInitPlan=JSON.parse(nativeInitBytes);
+  const nativeInitPlan=plans.nativeInitialization;
   if(nativeInitPlan.format!=='oc2-source-native-init-closure-v1'||nativeInitPlan.files.length!==2)throw Error('Incomplete native initialization closure');
   for(const row of nativeInitPlan.files){
     const path=resolve(runtime,row.path);
@@ -71,15 +75,11 @@ export async function loadSourceWorldRuntime({root,runtime,enabledBodyKeys=['hum
   function verifyPrivateFile(path,row){const file=resolve(runtime,path);if(!file.startsWith(runtime+'/'))throw Error('Source-world private path escapes runtime');resourceReader.verify({path:file,bytes:row.bytes,sha256:row.sha256});}
   // One verified index supplies identities, code paths and bindings to both
   // operator modes. Gather adds presentation ports to the same normal core.
-  const sourceCode=JSON.parse(readFileSync(resolve(root,'tools/source_world_python.json'),'utf8'));
-  const latestPin=sourceCode.plans?.latestWorld;
-  if(sourceCode.format!=='oc2-source-world-python-closure-v1'||!latestPin||Object.keys(latestPin).sort().join(',')!=='bytes,path,sha256'||latestPin.path!=='native-inputs/world-latest-v1/append-plan.json'||!/^[a-f0-9]{64}$/.test(latestPin.sha256)||!Number.isSafeInteger(latestPin.bytes)||latestPin.bytes<=0)throw Error('Reviewed common world plan declaration required');
-  const latestPlan=privatePlan(latestPin.path,latestPin.sha256,latestPin.bytes);
   if(latestPlan.actualFactsHostCompiled!==true||latestPlan.normalRepairIndependentOfGatherFlag!==true)throw Error('Complete common world source required');
   for(const [path,row]of Object.entries({...latestPlan.newPayloadFiles,...latestPlan.reusedBasePayloadFiles}))verifyPrivateFile(path,row);
   const ownActorPlan=privatePlan('native-inputs/world-latest-v1/browser-import-plan.json',latestPlan.browserImportPlanSHA256);
   if(!Array.isArray(ownActorPlan.files)||!ownActorPlan.files.length)throw Error('Incomplete own-body actor source closure');
-  for(const row of ownActorPlan.files)verifyURL(row);
+  for(const row of ownActorPlan.files)verifyURL(sourceWorldActorResource(catalog,row,'sha256:'+latestPlan.browserImportPlanSHA256,'ownActors'));
   const latest=await import(pathToFileURL(resolve(runtime,latestPlan.latestEntry)));
   const admission=latest.COMMON_WORLD_ADMISSION;
   const contractSet=gatherEnabled?latest.GATHER_WORLD_CONTRACT_SET:latest.SOURCE_WORLD_CONTRACT_SET;
@@ -90,9 +90,7 @@ export async function loadSourceWorldRuntime({root,runtime,enabledBodyKeys=['hum
   let gather=null,route=null;
   const gatherRows=new Map();
   if(gatherEnabled){
-    const bytes=readFileSync(resolve(runtime,'native-inputs/player-human-female-world-v1/gather-plan.json'));
-    if(digest(bytes)!==GATHER_PLAN)throw Error('Reviewed Gather source closure differs');
-    const plan=JSON.parse(bytes);
+    const plan=plans.gather;
     if(plan.format!=='oc2-source-gather-runtime-closure-v1'||plan.files.length!==32)throw Error('Incomplete Gather source closure');
     for(const row of plan.files){
       const path=resolve(runtime,row.path);
@@ -102,7 +100,7 @@ export async function loadSourceWorldRuntime({root,runtime,enabledBodyKeys=['hum
     }
   }
   return Object.freeze({
-    registry,
+    registry,catalog,
     stagePlayerChoice:source=>stagePlayerChoiceServer(source,registryModule),
     stageServer(source){
       const storePath=resolve(runtime,'prototype/game/character-store-source-world.mjs');

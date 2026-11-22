@@ -202,5 +202,77 @@
       "sha256": "8d642e587f73125d41423c71eb64a0309a4aa31a467e447cd3dfb106858a3caa",
       "bytes": 5918
     }
+  },
+  "content": {
+    "format": "oc2-source-world-content-v1",
+    "registry": {
+      "url": "/assets/player-human-female-actions-v1/dbcf8a00bc3c67b03c2449ae0ca549e7bee95c9838fa6fb75367ee14230ff615.json",
+      "sha256": "dbcf8a00bc3c67b03c2449ae0ca549e7bee95c9838fa6fb75367ee14230ff615",
+      "bytes": 15729
+    },
+    "plans": {
+      "assets": {
+        "path": "native-inputs/player-human-female-world-v1/asset-plan.json",
+        "sha256": "4e6e660a8ea3b94c5ca28c940e14261d1a6a6fb1013d31b1a5241c1c780a3823",
+        "bytes": 14254
+      },
+      "actors": {
+        "path": "native-inputs/player-human-female-world-v1/actor-plan.json",
+        "sha256": "fe46b8b06b4bd65bb242f46be7123f8f7331961bba1d658f4f7fd8cd81fcb433",
+        "bytes": 71252
+      },
+      "gather": {
+        "path": "native-inputs/player-human-female-world-v1/gather-plan.json",
+        "sha256": "1fa54692c65662fbe755ba9cc84c124f4ec32ba8a08981e52cfafc0422f5ad1d",
+        "bytes": 7312
+      },
+      "nativeInitialization": {
+        "path": "native-inputs/player-human-female-world-v1/native-init-plan.json",
+        "sha256": "3e963547241980c799c26c5712d1b2dfae8fcde05f0c6ae1556b1cb448b38363",
+        "bytes": 485
+      }
+    },
+    "browserModules": [
+      {
+        "url": "/__delivery/quest_source_players.mjs",
+        "path": "deploy/quest_source_players.mjs",
+        "bytes": 7652,
+        "sha256": "9710b89ee10615d86542ba02fbf5fa530d6ce3d51bf12ea767fa7cf0646986cc"
+      },
+      {
+        "url": "/__delivery/source_world_bodies.mjs",
+        "path": "deploy/source_world_bodies.mjs",
+        "bytes": 663,
+        "sha256": "1d225920cf07f3831bcf2bc10b22872fcb36b1cb4343e603cdd484af740d6f0f"
+      },
+      {
+        "url": "/__delivery/player_choice_scene.mjs",
+        "path": "deploy/player_choice_scene.mjs",
+        "bytes": 1283,
+        "sha256": "d9cf7a557dc96ec758ed9ff4e1a7f5360aee9492dab58b035f2244be1be7f3a7",
+        "replaces": {
+          "sha256": "05ce8549ea110001439878fd19e7566b528c14d7ab3673007e1b56b05b8b3930",
+          "bytes": 2676
+        }
+      },
+      {
+        "url": "/__delivery/player_choice_registry.mjs",
+        "path": "deploy/player_choice_registry.mjs",
+        "bytes": 6097,
+        "sha256": "8b90a3fe226ae43307d28f6cad631d277ae0295d6ee1df998d32bce6ae0a64dd"
+      },
+      {
+        "url": "/__delivery/source_actor_lifecycle.mjs",
+        "path": "deploy/source_actor_lifecycle.mjs",
+        "bytes": 11766,
+        "sha256": "c6a32cecea4cfa3019edd69ac1ea550ebf8b52bdff4470c9c3c3696e92d47022"
+      },
+      {
+        "url": "/__delivery/source_content_catalog.mjs",
+        "path": "deploy/source_content_catalog.mjs",
+        "bytes": 17886,
+        "sha256": "072cc8959b1a5b2ec17c75d48f3aefb20f7018cdb44e561bd27c8b71f56c2ce9"
+      }
+    ]
   }
 }

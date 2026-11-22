@@ -15,6 +15,7 @@ COPY tools/ ./tools/
 COPY deploy/ ./deploy/
 RUN if [ -f deploy/private-runtime.transport.json ]; then python3 deploy/runtime_transport.py && test ! -e deploy/private-runtime.tar.xz; fi
 RUN python3 -c "from deploy.bootstrap import verify_source_world_code; verify_source_world_code()"
+RUN node deploy/source_content_build.mjs --check --modules-only
 RUN if [ -f deploy/private-runtime.tar.gz ]; then cd deploy && sha256sum -c private-runtime.sha256; fi
 
 FROM dependencies AS final

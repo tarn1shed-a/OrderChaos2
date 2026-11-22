@@ -28,13 +28,13 @@ const focus=new THREE.Vector3(),avatars=new Map(),actors=new Map(),objects=new M
 const raycaster=new THREE.Raycaster(),pointerNDC=new THREE.Vector2();let pointer=null,destination=null,interactionBusy=false;
 let joystick,joystickInput={active:false,x:0,y:0},jumpControl,mobileHUD,healthProgress,retryTimer=null;
 let gatherUI=null,gatherPresenter=null,gatherIntent=null,gatherRoomKey=null,playerDataText=null,actorEpoch=0,collectionAttempt=null,interactionEpoch=0;
-let sourcePlayers=null,sourcePlayerRegistry=null,sourceWorldContext=0,sourceWorldFailed=false;
+let sourcePlayers=null,sourcePlayerRegistry=null,sourceWorldContext=0,sourceWorldFailed=false,playerPlayable=false;
 const sourceWorldOwner={};
 const room=new URLSearchParams(location.search).get('room')?.slice(0,16)||'QUEST-01';
 const note=message=>{if($('load-note')){$('load-note').textContent=String(message||'');$('load-note').hidden=!message;}};
 const send=data=>{if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(data));};
 const me=()=>players.find(p=>p.id===selfId);
-const blocked=()=>!connected||skills?.isOpen||!!document.querySelector('.source-entry:not([hidden]),.compatible-source-mission:not([hidden])')||
+const blocked=()=>!connected||skills?.isOpen||!playerPlayable||!!document.querySelector('.source-entry:not([hidden]),.compatible-source-mission:not([hidden])')||
   ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);
 function stop(){keys.clear();destination=null;joystick?.reset();jumpControl?.reset();joystickInput={active:false,x:0,y:0};if(connected)send({type:'input',x:0,y:0});}
 function openEntry(){skills?.disconnect();entry?.open();}
@@ -83,7 +83,7 @@ function applyQuestState(state){
   for(const [id,view]of objects){const quest=profile.quests.find(q=>q.collect.objectIds.includes(id)),progress=state.quests?.find(q=>q.id===quest?.id);
     view.instance.root.visible=!!quest&&active.has(quest.id)&&progress?.status===4&&!collected.has(id);}
   for(const view of actors.values())view.target.disabled=completed.has(view.target.questId);
-  $('field-quests').disabled=!connected||profile.quests.every(q=>completed.has(q.id));
+  $('field-quests').disabled=!playerPlayable||profile.quests.every(q=>completed.has(q.id));
   questTracking?.update(state);
   if(npcMarkerSession)npcProjection?.receiveState(npcMarkerSession,state);refreshNPCMarker();
 }
@@ -93,11 +93,11 @@ function compatibleInfo(info){
     returnItems:info.returnItems.map(v=>({...v,hasPromo:false,restricted:false}))};
 }
 async function openQuest(id=profile?.quests[0]?.id){
-  if(!connected||!id||questState?.completedQuestIds?.includes(id))return;skills?.close();stop();
+  if(!playerPlayable||!id||questState?.completedQuestIds?.includes(id))return;skills?.close();stop();
   try{await questUI.open(id);}catch(error){note(error.message);}
 }
 async function interact(target){
-  if(interactionBusy||!connected)return;interactionBusy=true;const own=++interactionEpoch;stop();
+  if(interactionBusy||!playerPlayable)return;interactionBusy=true;const own=++interactionEpoch;stop();
   try{
     if(target.kind==='npc')await openQuest(target.questId);
     else{
@@ -150,7 +150,7 @@ function updateHUD(p){
 function syncPlayers(at){
   const ids=new Set(players.map(p=>p.id));
   for(const [id,a]of avatars)if(!a.source&&!ids.has(id)){gatherPresenter?.remove(id);disposeCharacterAnimation(a.body);a.root.removeFromParent();avatars.delete(id);}
-  if(sourcePlayers){const connection=generation;void sourcePlayers.sync(players.filter(p=>p.sourceAvatar),at,{current:()=>connected&&connection===generation&&npcPageLive});}
+  if(sourcePlayers){const connection=socket,epoch=generation;void sourcePlayers.sync(players.filter(p=>p.sourceAvatar),at,{connection,current:()=>connected&&socket===connection&&epoch===generation&&npcPageLive});}
   for(const p of players){
     if(p.sourceAvatar)continue;
     const point=localPosition(p);if(!point)continue;
@@ -164,9 +164,15 @@ function syncPlayers(at){
     a.previous={x:motionPoint.x,y:motionPoint.y};a.lastAt=at;a.latest=p;setCharacterEquipment(a.body,p.equipment);setCharacterLook(a.body,p.look);
     syncCharacterCombat(a.body,p,at,.7);
   }
-  updateHUD(me());gatherIntent?.changed();
+  updateHUD(me());syncPlayerReadiness();gatherIntent?.changed();
 }
-function clearConnection(){invalidateCollection();gatherPresenter?.invalidate();gatherRoomKey=null;interactionEpoch++;interactionBusy=false;npcProjection?.invalidate();npcMarkerSession=null;npcMarkerAttempt=-1;npcMarkerPending=null;connected=false;selfId=null;players=[];questState=null;skills?.disconnect();stop();questUI?.invalidate();
+function syncPlayerReadiness(){
+  const next=connected&&(character?.sourceAvatar?sourcePlayers?.isPlayable(selfId)===true:avatars.has(selfId));
+  if(next===playerPlayable)return;playerPlayable=next;
+  $('field-actions').hidden=!next;$('touch-controls').hidden=!next;$('field-interaction').disabled=!next;$('field-quests').disabled=!next||profile.quests.every(q=>questState?.completedQuestIds?.includes(q.id));
+  if(next){note('');skills?.sync();}else stop();
+}
+function clearConnection(){playerPlayable=false;invalidateCollection();gatherPresenter?.invalidate();gatherRoomKey=null;interactionEpoch++;interactionBusy=false;npcProjection?.invalidate();npcMarkerSession=null;npcMarkerAttempt=-1;npcMarkerPending=null;connected=false;selfId=null;players=[];questState=null;skills?.disconnect();stop();questUI?.invalidate();
   questTracking?.clear();
   sourcePlayers?.clear();
   for(const a of avatars.values()){disposeCharacterAnimation(a.body);a.root.removeFromParent();}avatars.clear();
@@ -179,14 +185,14 @@ function connect(name,credentials,profession){
   const ws=new WebSocket(new URL('/ws',location.href).href.replace(/^http/,'ws'));socket=ws;let denied=false;
   ws.addEventListener('open',()=>{if(token===generation)send({type:'join',scene:'resources',mapWindow:'heaven-landing',room,name,profession,...identity});});
   ws.addEventListener('message',async event=>{
-    if(token!==generation)return;let msg;try{msg=JSON.parse(event.data);}catch{return;}
+    if(token!==generation||socket!==ws)return;let msg;try{msg=JSON.parse(event.data);}catch{return;}
     if(msg.type==='welcome'){
       if(msg.character?.sourceAvatar?sourceWorldFailed||!sourcePlayers?.accepts(msg.character):msg.character?.appearance&&(msg.character.appearance.race!==2||msg.character.appearance.gender!==1)){
         denied=true;ws.close();entry.error('这个角色的原模型尚未接入当前地图，请选择已支持的角色。');openEntry();return;
       }
       selfId=msg.id;world=msg.world;character=msg.character;identity={characterId:msg.character.id,resumeToken:msg.resumeToken};gatherRoomKey='resources:ordinary-map:'+msg.room;connected=true;if(npcProjection){npcMarkerSession=npcProjection.beginSession();npcMarkerAttempt=-1;}entry.hide();skills?.sync();
-      $('session-open').hidden=true;$('field-actions').hidden=false;$('touch-controls').hidden=false;$('field-interaction').disabled=false;$('field-quests').disabled=false;
-      note('');canvas.focus({preventScroll:true});try{await api('state');}catch(error){note(error.message);}
+      $('session-open').hidden=true;syncPlayerReadiness();
+      note('正在加载角色…');canvas.focus({preventScroll:true});try{await api('state');}catch(error){if(token===generation&&socket===ws)note(error.message);}
     }else if(msg.type==='state'){
       players=msg.players||[];if(msg.serverTime)serverOffset=msg.serverTime-Date.now();syncPlayers(msg.serverTime||Date.now());
       gatherPresenter?.receive(msg.questGather);
@@ -204,14 +210,21 @@ function connect(name,credentials,profession){
 async function loadSourcePlayers(){
   if(document.documentElement.dataset.sourceHumanFemaleWorld!=='1')return;
   const readScope=()=>({owner:sourceWorldOwner,active:npcPageLive,mapGeneration:npcPageEpoch,contextGeneration:sourceWorldContext,scene,renderer,sourceMap});
-  const loadBytes=async url=>{const r=await fetch(url);if(!r.ok)throw Error('角色资源未就绪');return new Uint8Array(await r.arrayBuffer());};
-  const registryBytes=await loadBytes('/assets/player-human-female-actions-v1/dbcf8a00bc3c67b03c2449ae0ca549e7bee95c9838fa6fb75367ee14230ff615.json');
-  const digest=[...new Uint8Array(await crypto.subtle.digest('SHA-256',registryBytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
-  if(digest!=='dbcf8a00bc3c67b03c2449ae0ca549e7bee95c9838fa6fb75367ee14230ff615')throw Error('角色资料未就绪');
-  const [{createQuestSourcePlayers},{createPlayerChoiceRegistry}]=await Promise.all([import('/__delivery/quest_source_players.mjs'),import('/__delivery/player_choice_registry.mjs')]);
-  sourcePlayerRegistry=createPlayerChoiceRegistry(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(registryBytes)));
+  const loadBytes=async(url,{signal}={})=>{
+    try{const r=await fetch(url,{signal});if(!r.ok)throw Object.assign(Error('角色资源未就绪'),{retryable:r.status===408||r.status===429||r.status>=500});return new Uint8Array(await r.arrayBuffer());}
+    catch(error){if(error.name==='AbortError'||Object.hasOwn(error,'retryable'))throw error;throw Object.assign(Error('角色资源连接中断',{cause:error}),{retryable:true});}
+  };
+  const data=document.documentElement.dataset,url=data.sourceContentCatalog,expected=data.sourceContentSha256,expectedBytes=Number(data.sourceContentBytes);
+  if(!url?.startsWith('/__delivery/')||!/^[a-f0-9]{64}$/.test(expected)||!Number.isSafeInteger(expectedBytes)||expectedBytes<=0)throw Error('角色资源目录未就绪');
+  const bytes=await loadBytes(url),digest=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
+  if(bytes.length!==expectedBytes||digest!==expected)throw Error('角色资源目录不匹配');
+  const [{createQuestSourcePlayers},{createPlayerChoiceRegistry},{readSourceContentCatalogProjection}]=await Promise.all([import('/__delivery/quest_source_players.mjs'),import('/__delivery/player_choice_registry.mjs'),import('/__delivery/source_content_catalog.mjs')]);
+  const parsed=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+  sourcePlayerRegistry=createPlayerChoiceRegistry(parsed.registry);
+  const catalog=readSourceContentCatalogProjection(parsed,{registry:sourcePlayerRegistry});
+  if(!data.sourcePlayerWorldBodies)throw Error('当前地图角色目录未就绪');
   const made=await createQuestSourcePlayers({THREE,renderer,scene,camera,sourceMap,origin,readScope,loadBytes,
-    registry:sourcePlayerRegistry,enabledBodyKeys:(document.documentElement.dataset.sourcePlayerWorldBodies||'human-female').split(',').filter(Boolean),
+    registry:sourcePlayerRegistry,catalog,enabledBodyKeys:data.sourcePlayerWorldBodies.split(',').filter(Boolean),
     decodeTexture:async({bytes})=>{const bitmap=await createImageBitmap(new Blob([bytes],{type:'image/png'}),{imageOrientation:'none',premultiplyAlpha:'none',colorSpaceConversion:'none'});
       const t=new THREE.Texture(bitmap),dispose=t.dispose.bind(t);let released=false;t.dispose=()=>{if(released)return;released=true;dispose();bitmap.close();};return t;},
     createCharacterFactory,characterAnimationState,disposeCharacterAnimation,
@@ -225,7 +238,7 @@ async function loadSourcePlayers(){
       if(a.previous){const dx=point.x-a.previous.x,dz=point.z-a.previous.z;if(Math.hypot(dx,dz)>.0001)a.body.rotation.y=Math.atan2(dx,dz);}
       a.previous={x:point.x,z:point.z};a.lastAt=at;a.latest=p;},
     remove(a){gatherPresenter?.remove(a.latest.id);a.root.removeFromParent();if(avatars.get(a.latest.id)===a)avatars.delete(a.latest.id);},
-    onError(error){sourceWorldFailed=true;console.error('Source character world unavailable:',error);if(character?.sourceAvatar){socket?.close();entry.error('角色画面加载失败，请刷新后重试。');openEntry();}},
+    onError(error,{retryable=false}={}){if(retryable){if(character?.sourceAvatar&&!playerPlayable)note('角色资源加载失败，正在重试…');return;}sourceWorldFailed=true;console.error('Source character world unavailable:',error);if(character?.sourceAvatar){socket?.close();entry.error('角色画面加载失败，请刷新后重试。');openEntry();}},
   });
   if(!npcPageLive){made.dispose();return;}sourcePlayers=made;
 }
@@ -252,7 +265,7 @@ async function init(){
   for(const id of ['field-inventory','hotbar-settings','field-attack']){$(id).hidden=true;$(id).style.display='none';}
   $('field-skills').hidden=true;$('field-skills').style.display='none';
   if(document.documentElement.dataset.sourceCharacterSkills==='1')skills=createCharacterChoiceSkills({
-    readSession:()=>({connected,character,epoch:generation}),button:$('field-skills'),stop,
+    readSession:()=>({connected:connected&&playerPlayable,character,epoch:generation}),button:$('field-skills'),stop,
     beforeOpen:()=>{pointer=null;questUI?.close().catch(error=>note(error.message));},
     focusGame:()=>canvas.focus({preventScroll:true}),onError:error=>note(error.message),
   });
@@ -346,7 +359,7 @@ function draw(now){
   camera.position.copy(focus).add(new THREE.Vector3(Math.sin(cameraYaw)*Math.cos(cameraPitch)*cameraDistance,Math.sin(cameraPitch)*cameraDistance,Math.cos(cameraYaw)*Math.cos(cameraPitch)*cameraDistance));camera.lookAt(focus);
   sourceMap?.update();npcProjection?.update();
   const renderToken={};const sourcePrepared=sourcePlayers?.beforeRender(renderToken);
-  renderer.render(scene,camera);if(sourcePrepared)sourcePlayers.afterRender(renderToken);requestAnimationFrame(draw);
+  renderer.render(scene,camera);if(sourcePrepared)sourcePlayers.afterRender(renderToken);syncPlayerReadiness();requestAnimationFrame(draw);
 }
 function pick(event){
   if(blocked())return;const r=canvas.getBoundingClientRect();pointerNDC.set((event.clientX-r.left)/r.width*2-1,1-(event.clientY-r.top)/r.height*2);raycaster.setFromCamera(pointerNDC,camera);

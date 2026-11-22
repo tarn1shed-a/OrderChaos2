@@ -9,7 +9,7 @@ const source=readFileSync(new URL('../deploy/quest_world.mjs',import.meta.url),'
 function fragment(from,to){const a=source.indexOf(from),b=source.indexOf(to,a);assert.ok(a>=0&&b>a);return source.slice(a,b);}
 const coordinates=fragment('function sourcePosition(', '\nasync function api(');
 const timer=fragment('setInterval(()=>{\n  if(!connected', '\nsetInterval(()=>{if(connected');
-const sync=fragment('function syncPlayers(', '\nfunction clearConnection(');
+const sync=fragment('function syncPlayers(', '\nfunction syncPlayerReadiness(');
 class Vector3{
  constructor(x=0,y=0,z=0){Object.assign(this,{x,y,z});}
  sub(v){this.x-=v.x;this.y-=v.y;this.z-=v.z;return this;}
@@ -37,15 +37,18 @@ test('click input follows physical ground direction across square and rectangula
 test('animation distance and heading use rendered source units, not unequal logical axes',()=>{
  const f=frame(),old={x:-250,y:20},p={id:'one',...logical(f,-249,21),worldY:2,hp:100};
  const actor={target:new Vector3(),body:{rotation:{}},previous:old,lastAt:0},calls=[],sourceCalls=[];
- const sourcePlayer={id:'source-fixture',sourceAvatar:{key:'host-boundary-fixture'}};let gatherChanged=0;
+ const sourcePlayer={id:'source-fixture',sourceAvatar:{key:'host-boundary-fixture'}};let gatherChanged=0,readinessChecks=0;
+ class Connection{}const connection=new Connection();
  const ctx={...f,THREE:{Vector3},players:[p,sourcePlayer],avatars:new Map([['one',actor]]),
-  connected:true,generation:3,npcPageLive:true,sourcePlayers:{sync:(...args)=>sourceCalls.push(args)},gatherIntent:{changed(){gatherChanged++;}},
+  connected:true,socket:connection,generation:3,npcPageLive:true,sourcePlayers:{sync:(...args)=>sourceCalls.push(args)},gatherIntent:{changed(){gatherChanged++;}},syncPlayerReadiness(){readinessChecks++;},
   snapshotMotion:(...args)=>{calls.push(args);return {};},setCharacterEquipment(){},setCharacterLook(){},syncCharacterCombat(){},updateHUD(){},me:()=>p};
  vm.runInNewContext(coordinates+'\n'+sync,ctx);vm.runInNewContext('syncPlayers(1000)',ctx);
  close(calls[0][1].x,-249);close(calls[0][1].y,21);assert.equal(calls[0][3],1);
  close(actor.body.rotation.y,Math.PI/4);close(actor.previous.x,-249);close(actor.previous.y,21);
  assert.equal(calls.length,1,'Source actors delegate to their own host, not the legacy coordinate path');
  assert.equal(sourceCalls.length,1);assert.deepEqual(Array.from(sourceCalls[0][0]),[sourcePlayer]);assert.equal(sourceCalls[0][1],1000);
- assert.equal(sourceCalls[0][2].current(),true);ctx.generation++;assert.equal(sourceCalls[0][2].current(),false);
- assert.equal(gatherChanged,1);
+ assert.equal(sourceCalls[0][2].connection,connection);assert.equal(sourceCalls[0][2].current(),true);
+ ctx.socket=new Connection();assert.equal(sourceCalls[0][2].current(),false);ctx.socket=connection;assert.equal(sourceCalls[0][2].current(),true);
+ ctx.generation++;assert.equal(sourceCalls[0][2].current(),false);
+ assert.equal(gatherChanged,1);assert.equal(readinessChecks,1);
 });
